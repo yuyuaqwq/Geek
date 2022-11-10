@@ -2,6 +2,8 @@
 #define GEEK_PROCESS_H_
 
 #include <exception>
+#include <string>
+#include <vector>
 
 #include <Handle/handle.h>
 
@@ -16,6 +18,7 @@ public:
 	enum class Type {
 		kProcessInvalid,
 		kOpenProcessError,
+		kCreateProcessError,
 		kIsWow64ProcessError,
 	};
 
@@ -40,12 +43,24 @@ public:
 		if (hProcess == NULL) {
 			throw ProcessException(ProcessException::Type::kOpenProcessError);
 		}
+		m_handle = UniqueHandle(hProcess);
+	}
 
+	Process(const std::wstring& command, DWORD creationFlags = 0) {
+		std::vector<wchar_t> buf(command.size() + 1);
+		memcpy(buf.data(), command.c_str(), command.size() + 1);
+		STARTUPINFOW startupInfo { sizeof(startupInfo) };
+		PROCESS_INFORMATION processInformation { 0 };
+		if (!CreateProcessW(NULL, buf.data(), NULL, NULL, NULL, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
+			throw ProcessException(ProcessException::Type::kOpenProcessError);
+		}
+		m_handle = UniqueHandle(processInformation.hProcess);
+		CloseHandle(processInformation.hThread);
 	}
 
 public:
 	bool IsX86() const {
-		if (!m_handle.Valid()) {
+		if (m_handle.Get() == NULL) {
 			throw ProcessException(ProcessException::Type::kProcessInvalid);
 		}
 
