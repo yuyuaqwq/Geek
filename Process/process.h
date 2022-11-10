@@ -49,28 +49,28 @@ public:
 			throw ProcessException(ProcessException::Type::kProcessInvalid);
 		}
 
-		BOOL IsWow64;
-		if (!IsWow64Process(m_handle.Get(), &IsWow64))
+		::BOOL IsWow64;
+		if (!::IsWow64Process(m_handle.Get(), &IsWow64))
 		{
 			throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
 		}
+
 		if (IsWow64)
 		{
 			return true;
 		}
-		else {
-			SYSTEM_INFO SystemInfo = { 0 };
-			GetNativeSystemInfo(&SystemInfo);  //获得系统信息
-			if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) { //得到系统位数64
-				return false;
-			}
-			else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {//得到系统位数32
-				return true;
-			}
-			else {
-				throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
-			}
+
+		::SYSTEM_INFO SystemInfo = { 0 };
+		::GetNativeSystemInfo(&SystemInfo);		//获得系统信息
+		if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {		//得到系统位数64
+			return false;
 		}
+		else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {		// 得到系统位数32
+			return true;
+		}
+
+		throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
+
 	}
 
 private:
