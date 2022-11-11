@@ -7,11 +7,27 @@
 
 #include <Handle/handle.h>
 
+
+#ifdef _WIN64
+#ifdef _DEBUG
+#pragma comment(lib, "Process/Process_x64d_s")
+#else
+#pragma comment(lib, "Process/Process_x64_s")
+#endif
+#else
+#ifdef _DEBUG
+#pragma comment(lib, "Process/Process_x86d_s")
+#else
+#pragma comment(lib, "Process/Process_x86_s")
+#endif
+#endif
+
+
 namespace geek {
 	
-class ProcessExceptionType {
 
-};
+const HANDLE kCurrentProcess = (HANDLE)-1;
+
 
 class ProcessException : public std::exception {
 public:
@@ -38,6 +54,14 @@ private:
 
 class Process {
 public:
+	Process(HANDLE hProcess) {
+		m_handle = UniqueHandle(hProcess);
+	}
+
+	Process(UniqueHandle hProcess) {
+		m_handle = std::move(hProcess);
+	}
+
 	Process(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
 		auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
 		if (hProcess == NULL) {
@@ -59,6 +83,10 @@ public:
 	}
 
 public:
+	HANDLE Get() {
+		return m_handle.Get();
+	}
+
 	bool IsX86() const {
 		if (m_handle.Get() == NULL) {
 			throw ProcessException(ProcessException::Type::kProcessInvalid);

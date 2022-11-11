@@ -5,6 +5,22 @@
 
 #include <type_traits>
 
+
+#ifdef _WIN64
+#ifdef _DEBUG
+#pragma comment(lib, "Handle/Handle_x64d_s")
+#else
+#pragma comment(lib, "Handle/Handle_x64_s")
+#endif
+#else
+#ifdef _DEBUG
+#pragma comment(lib, "Handle/Handle_x86d_s")
+#else
+#pragma comment(lib, "Handle/Handle_x86_s")
+#endif
+#endif
+
+
 namespace geek {
 
 class UniqueHandle {
