@@ -10,7 +10,7 @@
 
 namespace geek {
 
-class MemoryException {
+class MemoryException : public std::exception {
 public:
 	enum class Type {
 		kReadProcessMemoryError,

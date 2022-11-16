@@ -114,10 +114,6 @@
     <ClInclude Include="inline_hook.h" />
     <ClInclude Include="page_hook.h" />
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="inline_hook.cpp" />
-    <ClCompile Include="page_hook.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

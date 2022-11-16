@@ -22,12 +22,4 @@
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="inline_hook.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="page_hook.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-  </ItemGroup>
 </Project>

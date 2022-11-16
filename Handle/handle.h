@@ -6,47 +6,53 @@
 #include <type_traits>
 
 
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib, "Handle/Handle_x64d_s")
-#else
-#pragma comment(lib, "Handle/Handle_x64_s")
-#endif
-#else
-#ifdef _DEBUG
-#pragma comment(lib, "Handle/Handle_x86d_s")
-#else
-#pragma comment(lib, "Handle/Handle_x86_s")
-#endif
-#endif
-
-
 namespace geek {
 
 class UniqueHandle {
 public:
-	UniqueHandle() noexcept;
-	explicit UniqueHandle(HANDLE t_handle) noexcept;
-	~UniqueHandle() noexcept;
+	UniqueHandle() noexcept {
+
+	}
+	explicit UniqueHandle(HANDLE tHandle) noexcept : mHanlde{ tHandle } {
+
+	}
+	~UniqueHandle() noexcept {
+
+	}
 
 public:
 	UniqueHandle(const UniqueHandle&) = delete;
 	void operator=(const UniqueHandle&) = delete;
 
 public:
-	UniqueHandle(UniqueHandle&& t_uniqueHandle) noexcept;
-	void operator=(UniqueHandle&& t_uniqueHandle) noexcept;
+	UniqueHandle(UniqueHandle&& tUniqueHandle) noexcept {
+		*this = std::move(tUniqueHandle);
+	}
+	void operator=(UniqueHandle&& tUniqueHandle) noexcept {
+		Close();
+		mHanlde = tUniqueHandle.mHanlde;
+		tUniqueHandle.mHanlde = NULL;
+	}
 
 public:
-	inline HANDLE Get() const noexcept;
+	inline HANDLE Get() const noexcept {
+		return mHanlde;
+	}
 
-	inline bool Valid() const noexcept;
+	inline bool Valid() const noexcept {
+		return mHanlde != NULL && mHanlde != INVALID_HANDLE_VALUE;
+	}
+
 
 private:
-	inline void Close() noexcept;
+	inline void Close() noexcept {
+		if (Valid()) {
+			::CloseHandle(mHanlde);
+		}
+	}
 
 private:
-	HANDLE m_hanlde;
+	HANDLE mHanlde;
 };
 
 } // namespace geek

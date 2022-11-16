@@ -13,11 +13,13 @@ namespace geek {
 class InlineHook {
 public:
 	InlineHook(void* address, size_t instrLen, Process* t_process) {
+		
+	}
+	~InlineHook() noexcept {
 
 	}
-	~InlineHook() {
 
-	}
+
 
 
 private:
