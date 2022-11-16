@@ -6,21 +6,8 @@
 #include <vector>
 
 #include <Handle/handle.h>
+#include <Memory/memory.hpp>
 
-
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib, "Process/Process_x64d_s")
-#else
-#pragma comment(lib, "Process/Process_x64_s")
-#endif
-#else
-#ifdef _DEBUG
-#pragma comment(lib, "Process/Process_x86d_s")
-#else
-#pragma comment(lib, "Process/Process_x86_s")
-#endif
-#endif
 
 
 namespace geek {
@@ -36,6 +23,9 @@ public:
 		kOpenProcessError,
 		kCreateProcessError,
 		kIsWow64ProcessError,
+		kReadProcessMemoryError,
+		kWriteProcessMemoryError,
+		kVirtualProtectError,
 	};
 
 public:
@@ -54,15 +44,15 @@ private:
 
 class Process {
 public:
-	Process(HANDLE hProcess) {
+	explicit Process(HANDLE hProcess) {
 		m_handle = UniqueHandle(hProcess);
 	}
 
-	Process(UniqueHandle hProcess) {
+	explicit Process(UniqueHandle hProcess) {
 		m_handle = std::move(hProcess);
 	}
 
-	Process(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+	explicit Process(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
 		auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
 		if (hProcess == NULL) {
 			throw ProcessException(ProcessException::Type::kOpenProcessError);
@@ -70,7 +60,7 @@ public:
 		m_handle = UniqueHandle(hProcess);
 	}
 
-	Process(const std::wstring& command, DWORD creationFlags = 0) {
+	explicit Process(const std::wstring& command, DWORD creationFlags = 0) {
 		std::vector<wchar_t> buf(command.size() + 1);
 		memcpy(buf.data(), command.c_str(), command.size() + 1);
 		STARTUPINFOW startupInfo { sizeof(startupInfo) };
@@ -84,6 +74,9 @@ public:
 
 public:
 	HANDLE Get() {
+		if (this == nullptr) {
+			return (HANDLE)-1;
+		}
 		return m_handle.Get();
 	}
 
@@ -98,8 +91,7 @@ public:
 			throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
 		}
 
-		if (IsWow64)
-		{
+		if (IsWow64) {
 			return true;
 		}
 
@@ -116,6 +108,46 @@ public:
 
 	}
 
+
+	// VirtualMemory
+	std::vector<char> ReadMemory(void* addr, size_t len) {
+		std::vector<char> buf(len);
+		if (this == nullptr) {
+			memcpy(buf.data(), addr, len);
+			return buf;
+		}
+		SIZE_T readByte;
+		if (!ReadProcessMemory(Get(), addr, buf.data(), len, &readByte)) {
+			throw ProcessException(ProcessException::Type::kReadProcessMemoryError);
+		}
+		return buf;
+	}
+
+	void WriteMemory(void* addr, const void* buf, size_t len) {
+		if (this == nullptr) {
+			memcpy(addr, buf, len);
+			return;
+		}
+		SIZE_T readByte;
+		if (!WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
+			throw ProcessException(ProcessException::Type::kWriteProcessMemoryError);
+		}
+	}
+
+	DWORD SetProtect(void* addr, size_t len, DWORD newProtect) {
+		DWORD oldProtect;
+		bool success = false;
+		if (this == nullptr) {
+			success = VirtualProtect(addr, len, newProtect, &oldProtect);
+		}
+		else {
+			success = VirtualProtectEx(Get(), addr, len, newProtect, &oldProtect);
+		}
+		if (success) {
+			throw ProcessException(ProcessException::Type::kVirtualProtectError);
+		}
+		return oldProtect;
+	}
 private:
 	UniqueHandle m_handle;
 };
