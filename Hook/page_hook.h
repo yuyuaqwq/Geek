@@ -48,8 +48,8 @@ public:
 
 
 public:
-	// 安装Hook
-	void Install(LPVOID hookAddr, HookCallBack callback) {
+	// 安装Hook，access为true时可以在地址被访问(读写)时触发hook
+	void Install(LPVOID hookAddr, HookCallBack callback, bool access = false) {
 		if (mStatus == Status::kValid) {
 			throw Error::kRepeatInstall;
 		}
@@ -74,6 +74,10 @@ public:
 			pageRecord.protect = 0;
 			msPageHook_base.insert(std::pair<LPVOID, PageRecord>(pageBase, pageRecord));
 			it_base = msPageHook_base.find(pageBase);
+			DWORD protect = PAGE_READONLY;
+			if (access) {
+				protect = PAGE_NOACCESS;
+			}
 			if (!VirtualProtect(pageBase, 0x1000, PAGE_READONLY, &it_base->second.protect)) {
 				Uninstall();
 				throw Error::kSetProtectFailed;
@@ -137,10 +141,12 @@ private:
 		// 判断异常类型
 		if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
-			LPVOID pageBase = PageAlignment(ExceptionInfo->ExceptionRecord->ExceptionAddress);
+
+			LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+			LPVOID pageBase = PageAlignment(address);
 			auto it_base = msPageHook_base.find(pageBase);
 			if (it_base == msPageHook_base.end()) {
-				// 不是咱们设置的页面属性产生的异常，忽略
+				// 不是我们设置的页面属性产生的异常，忽略
 				return EXCEPTION_CONTINUE_SEARCH;
 			}
 
@@ -153,7 +159,7 @@ private:
 			LPCONTEXT context = ExceptionInfo->ContextRecord;
 
 
-			auto it_addr = msPageHook_addr.find(ExceptionInfo->ExceptionRecord->ExceptionAddress);
+			auto it_addr = msPageHook_addr.find(address);
 			if (it_addr != msPageHook_addr.end()) {
 				// 是被hook的地址
 
