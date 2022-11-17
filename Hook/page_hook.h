@@ -10,6 +10,7 @@
 namespace geek {
 
 // 启用增量链接会导致实际函数地址与通过函数名获取的地址不一致
+// 对数据进行读写hook时，保证类中的内联静态成员与外部变量不在同一页面
 class PageHook {
 public:
 	typedef void (*HookCallBack)(LPCONTEXT context);
@@ -48,8 +49,8 @@ public:
 
 
 public:
-	// 安装Hook，access为true时可以在地址被访问(读写)时触发hook
-	void Install(LPVOID hookAddr, HookCallBack callback, bool access = false) {
+	// 安装Hook，protect用于控制被hook页面的保护属性以触发hook
+	void Install(LPVOID hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
 		if (mStatus == Status::kValid) {
 			throw Error::kRepeatInstall;
 		}
@@ -74,11 +75,7 @@ public:
 			pageRecord.protect = 0;
 			msPageHook_base.insert(std::pair<LPVOID, PageRecord>(pageBase, pageRecord));
 			it_base = msPageHook_base.find(pageBase);
-			DWORD protect = PAGE_READONLY;
-			if (access) {
-				protect = PAGE_NOACCESS;
-			}
-			if (!VirtualProtect(pageBase, 0x1000, PAGE_READONLY, &it_base->second.protect)) {
+			if (!VirtualProtect(pageBase, 0x1000, protect, &it_base->second.protect)) {
 				Uninstall();
 				throw Error::kSetProtectFailed;
 			}
@@ -141,7 +138,6 @@ private:
 		// 判断异常类型
 		if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
-
 			LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
 			LPVOID pageBase = PageAlignment(address);
 			auto it_base = msPageHook_base.find(pageBase);
@@ -151,9 +147,7 @@ private:
 			}
 
 			// 执行的指令与我们的Hook位于同一页面，恢复原有属性
-			DWORD uselessProtect;
-			VirtualProtect(pageBase, 0x1000, it_base->second.protect, &uselessProtect);
-
+			VirtualProtect(pageBase, 0x1000, it_base->second.protect, &it_base->second.protect);
 
 			// 获取发生异常的线程的上下文
 			LPCONTEXT context = ExceptionInfo->ContextRecord;
@@ -173,8 +167,7 @@ private:
 			// 用于识别是否咱们设置的单步
 			msPageHook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
 
-
-			//异常处理完成 让程序继续执行
+			// 异常处理完成 让程序继续执行
 			return EXCEPTION_CONTINUE_EXECUTION;
 
 
@@ -199,7 +192,7 @@ private:
 
 				DWORD uselessProtect;
 				// 恢复Hook
-				VirtualProtect(it->second.pageBase, 0x1000, PAGE_READWRITE, &uselessProtect);
+				VirtualProtect(it->second.pageBase, 0x1000, it->second.protect, &it->second.protect);
 
 				msPageHook_step.erase(GetCurrentThreadId());
 
