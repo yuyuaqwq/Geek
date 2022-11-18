@@ -6,13 +6,16 @@
 #include <Windows.h>
 
 #include <Process/process.h>
-#include <Memory/memory.hpp>
+
 
 namespace geek {
 
 class InlineHook {
 public:
+
 	struct Context {
+#ifdef _WIN64
+		uint64_t rflags;
 		uint64_t rax;
 		uint64_t rcx;
 		uint64_t rdx;
@@ -29,15 +32,23 @@ public:
 		uint64_t r13;
 		uint64_t r14;
 		uint64_t r15;
-		size_t* stack;
+#else
+		uint32_t eflags;
+		uint32_t edi;
+		uint32_t esi;
+		uint32_t ebp;
+		uint32_t esp;
+		uint32_t ebx;
+		uint32_t edx;
+		uint32_t ecx;
+		uint32_t eax;
+#endif
+		size_t stack[];
 	};
 	typedef void (*HookCallBack)(Context* context);
 
 public:
-	InlineHook() {
-
-	}
-	explicit InlineHook(Process* tProcess = nullptr) : mProcess{ tProcess } {
+	explicit InlineHook(Process* tProcess = nullptr) : mProcess{ tProcess }, mHookAddr{ nullptr }, mJmpAddr{ nullptr }, mforwardPage{ nullptr }{
 		
 	}
 	~InlineHook() noexcept {
@@ -45,25 +56,73 @@ public:
 	}
 
 public:
+
 	// 安装Hook
-	void Install(LPVOID address, size_t instrLen, HookCallBack callback) {
-		auto oldProtect = mProcess->SetProtect(address, instrLen, PAGE_EXECUTE_READWRITE);
+	// 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
+	bool Install(void* hookAddr, size_t instrLen, HookCallBack callback) {
+		mforwardPage = VirtualAlloc(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		if (!mforwardPage) {
+			return false;
+		}
+		
+		// 保存原指令
+		mOldInstr.resize(instrLen);
+		memcpy(mOldInstr.data(), hookAddr, instrLen);
+
+		auto oldProtect = mProcess->SetProtect(hookAddr, instrLen, PAGE_EXECUTE_READWRITE);
 		std::vector<char> jmpInstr(instrLen);
 		if (mProcess->IsX86()) {
-			jmpInstr[0] = 0xe9;
-			*(DWORD*)jmpInstr.data() = GetJmpOffset(address, 5, callback);
+			if (instrLen < 5) {
+				return false;
+			}
+
+			// 处理转发页面指令
+			auto forwardPage = (char*)mforwardPage;
+			int i = 0;
+
+			forwardPage[i++] = 0x60;		// pushad
+			forwardPage[i++] = 0x9c;		// pushfd
+
+			forwardPage[i++] = 0x54;		// push esp
+
+			forwardPage[i++] = 0xe8;		// call
+			*(DWORD*)&forwardPage[i] = GetJmpOffset(forwardPage + i - 1, 5, callback);
+			i += 4;
+
+			forwardPage[i++] = 0x5c;		// pop esp
+
+			forwardPage[i++] = 0x9d;		// popfd
+			forwardPage[i++] = 0x61;		// popad
+
+			memcpy(&forwardPage[i], mOldInstr.data(), mOldInstr.size());
+			i += mOldInstr.size();
+
+			forwardPage[i++] = 0xe9;		// jmp 
+			*(DWORD*)&forwardPage[i] = GetJmpOffset(forwardPage + i - 1, 5, (char*)hookAddr + instrLen);
+
+
+			// 为目标地址挂hook
+			jmpInstr[0] = 0xe9;		// jmp
+			*(DWORD*)&jmpInstr[1] = GetJmpOffset(hookAddr, 5, mforwardPage);
+
+			for (int i = 5; i < instrLen; i++) {
+				jmpInstr[i] = 0x90;		// nop
+			}
 		}
 		else {
 
 		}
-		mProcess->WriteMemory(address, jmpInstr.data(), instrLen);
-		mProcess->SetProtect(address, instrLen, oldProtect);
 
+		mProcess->WriteMemory(hookAddr, jmpInstr.data(), instrLen);
+		mProcess->SetProtect(hookAddr, instrLen, oldProtect);
 	}
 
 	// 卸载Hook
 	void Uninstall() {
-
+		auto oldProtect = mProcess->SetProtect(mHookAddr, mOldInstr.size(), PAGE_EXECUTE_READWRITE);
+		mProcess->WriteMemory(mOldInstr.data(), mOldInstr.data(), mOldInstr.size());
+		mProcess->SetProtect(mHookAddr, mOldInstr.size(), oldProtect);
+		VirtualFree(mforwardPage, 0, MEM_RELEASE);
 	}
 
 
@@ -76,6 +135,10 @@ private:
 
 private:
 	Process* mProcess;
+	void* mHookAddr;
+	void* mJmpAddr;
+	void* mforwardPage;
+	std::vector<char> mOldInstr;
 };
 
 } // namespace geek

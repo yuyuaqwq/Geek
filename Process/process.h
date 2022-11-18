@@ -6,7 +6,7 @@
 #include <vector>
 
 #include <Handle/handle.h>
-#include <Memory/memory.hpp>
+
 
 
 
@@ -73,7 +73,7 @@ public:
 	}
 
 public:
-	HANDLE Get() {
+	HANDLE Get() const noexcept {
 		if (this == nullptr) {
 			return (HANDLE)-1;
 		}
@@ -81,12 +81,13 @@ public:
 	}
 
 	bool IsX86() const {
-		if (m_handle.Get() == NULL) {
+		auto handle = Get();
+		if (handle == NULL) {
 			throw ProcessException(ProcessException::Type::kProcessInvalid);
 		}
 
 		::BOOL IsWow64;
-		if (!::IsWow64Process(m_handle.Get(), &IsWow64))
+		if (!::IsWow64Process(handle, &IsWow64))
 		{
 			throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
 		}
@@ -143,7 +144,7 @@ public:
 		else {
 			success = VirtualProtectEx(Get(), addr, len, newProtect, &oldProtect);
 		}
-		if (success) {
+		if (!success) {
 			throw ProcessException(ProcessException::Type::kVirtualProtectError);
 		}
 		return oldProtect;
