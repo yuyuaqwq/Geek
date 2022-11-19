@@ -59,6 +59,7 @@ public:
 
 	// 安装Hook
 	// 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
+	// x86要求instrLen>=5，x64要求instrLen>=14
 	bool Install(void* hookAddr, size_t instrLen, HookCallBack callback) {
 		mforwardPage = VirtualAlloc(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (!mforwardPage) {
@@ -68,7 +69,6 @@ public:
 		// 保存原指令
 		mOldInstr.resize(instrLen);
 		memcpy(mOldInstr.data(), hookAddr, instrLen);
-
 		
 		std::vector<char> jmpInstr(instrLen);
 		if (mProcess->IsX86()) {
@@ -148,6 +148,12 @@ public:
 			forwardPage[i++] = 0x9c;		// pushfq
 
 
+			// 为当前函数的使用提前分配栈空间
+			forwardPage[i++] = 0x48;		// sub rsp, 20
+			forwardPage[i++] = 0x83;
+			forwardPage[i++] = 0xec;
+			forwardPage[i++] = 0x20;
+
 			// 传递参数
 			forwardPage[i++] = 0x48;		// mov rcx, rsp
 			forwardPage[i++] = 0x89;
@@ -161,6 +167,12 @@ public:
 
 			forwardPage[i++] = 0xff;		// call rax
 			forwardPage[i++] = 0xd0;
+
+			// 回收栈空间
+			forwardPage[i++] = 0x48;		// add rsp, 20
+			forwardPage[i++] = 0x83;
+			forwardPage[i++] = 0xc4;
+			forwardPage[i++] = 0x20;
 
 
 			forwardPage[i++] = 0x9d;		// popfq
