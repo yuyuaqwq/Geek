@@ -122,14 +122,88 @@ public:
 		return pe.Write(buf);
 	}
 
-	uint64_t GetExportAddress(const std::string exportName) {
+	uint32_t GetExportRVAFromName(const std::string& findName) {
+		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+		if (exportDirectory == nullptr) {
+			return 0;
+		}
+		auto numberOfNames = exportDirectory->NumberOfNames;
+		auto addressOfNames = (DWORD*)RVAToPoint(exportDirectory->AddressOfNames);
+		auto addressOfNameOrdinals = (WORD*)RVAToPoint(exportDirectory->AddressOfNameOrdinals);
+		auto addressOfFunctions = (DWORD*)RVAToPoint(exportDirectory->AddressOfFunctions);
+		int funcIdx = -1;
+		for (int i = 0; i < numberOfNames; i++) {
+			auto exportName = (char*)RVAToPoint(addressOfNames[i]);
+			if (findName == exportName) {
+				// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
+				funcIdx = addressOfNameOrdinals[i];
+			}
+		}
+		if (funcIdx == -1) {
+			return 0;
+		}
+		return addressOfFunctions[funcIdx];
+	}
 
+	uint32_t GetExportRVAFromOrdinal(uint16_t ordinal) {
+		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+		if (exportDirectory == nullptr) {
+			return 0;
+		}
+		auto addressOfFunctions = (DWORD*)RVAToPoint(exportDirectory->AddressOfFunctions);
+		// 外部提供的ordinal需要减去base
+		auto funcIdx = ordinal - exportDirectory->Base;
+		return addressOfFunctions[funcIdx];
+	}
+
+	bool RepairRepositionTable(uint64_t newImageBase) {
+		auto relocationTable = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+		if (relocationTable == nullptr) {
+			return false;
+		}
+		auto imageBase = GetImageBase();
+		do {
+			auto blockRVA = relocationTable->VirtualAddress;
+			auto blockSize = relocationTable->SizeOfBlock;
+			if (blockRVA == 0 && blockSize == 0) {
+				break;
+			}
+			WORD* fieldTable = (WORD*)((char*)relocationTable + sizeof(*relocationTable));
+			relocationTable  = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
+			auto fieldCount = blockSize / sizeof(*fieldTable);
+			for (int i = 0; i < fieldCount; i++) {
+				auto offsetType = fieldTable[i] >> 12;
+
+				if (offsetType == IMAGE_REL_BASED_ABSOLUTE) {
+					continue;
+				}
+				auto RVA = blockRVA + (fieldTable[i] & 0xfff);
+
+				if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
+					auto addr = (uint32_t*)RVAToPoint(RVA);
+					*addr = *addr - imageBase + newImageBase;
+				}
+
+				if (offsetType == IMAGE_REL_BASED_DIR64) {
+					auto addr = (uint64_t*)RVAToPoint(RVA);
+					*addr = *addr - imageBase + newImageBase;
+				}
+
+			}
+		} while (true);
+		
+		SetImageBase(newImageBase);
+		return true;
 	}
 
 private:
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) var = mNtHeader->OptionalHeader.##field; \
 	else if (mNtHeader->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)mNtHeader)->OptionalHeader.##field; \
+	else var = 0; } 
+#define SET_OPTIONAL_HEADER_FIELD(field, var) \
+	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) mNtHeader->OptionalHeader.##field = var; \
+	else if (mNtHeader->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)mNtHeader)->OptionalHeader.##field = var; \
 	else var = 0; } 
 
 	inline uint32_t NarrowAlignment(uint32_t val, uint32_t alignval) noexcept {
@@ -174,13 +248,27 @@ private:
 		return i;
 	}
 
+	void* RVAToPoint(uint32_t rva) {
+		auto i = GetSectionIndexFromRVA(rva);
+		if (i == -1) {
+			return nullptr;
+		}
+		return &mSectionList[i][rva - mSectionHeaderTable[i].VirtualAddress];
+	}
+
 	uint32_t RVAToRAW(uint32_t rva) {
 		auto i = GetSectionIndexFromRVA(rva);
+		if (i == -1) {
+			return 0;
+		}
 		return rva - mSectionHeaderTable[i].VirtualAddress + mSectionHeaderTable[i].PointerToRawData;
 	}
 
 	uint32_t RAWToRVA(uint32_t raw) {
 		auto i = GetSectionIndexFromRAW(raw);
+		if (i == -1) {
+			return 0;
+		}
 		return raw - mSectionHeaderTable[i].PointerToRawData + mSectionHeaderTable[i].VirtualAddress;
 	}
 
@@ -197,6 +285,23 @@ private:
 		GET_OPTIONAL_HEADER_FIELD(SizeOfHeaders, headerSize);
 		return headerSize;
 	}
+
+	uint64_t GetImageBase() {
+		uint64_t imageBase;
+		GET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
+		return imageBase;
+	}
+
+	void SetImageBase(uint64_t imageBase) {
+		SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
+	}
+
+	IMAGE_DATA_DIRECTORY* GetDataDirectory() {
+		IMAGE_DATA_DIRECTORY* dataDirectory;
+		GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory);
+		return dataDirectory;
+	}
+
 
 private:
 	IMAGE_DOS_HEADER mDosHeader;
