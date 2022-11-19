@@ -155,9 +155,12 @@ public:
 			forwardPage[i++] = 0x20;
 
 			// ´«µÝ²ÎÊý
-			forwardPage[i++] = 0x48;		// mov rcx, rsp
-			forwardPage[i++] = 0x89;
-			forwardPage[i++] = 0xe1;
+			forwardPage[i++] = 0x48;		// lea rcx, [rsp+20]
+			forwardPage[i++] = 0x8d;
+			forwardPage[i++] = 0x4c;
+			forwardPage[i++] = 0x24;
+			forwardPage[i++] = 0x20;
+
 
 
 			forwardPage[i++] = 0x48;		// mov rax, addr
