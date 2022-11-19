@@ -170,7 +170,7 @@ public:
 			}
 			WORD* fieldTable = (WORD*)((char*)relocationTable + sizeof(*relocationTable));
 			relocationTable  = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
-			auto fieldCount = blockSize / sizeof(*fieldTable);
+			auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
 			for (int i = 0; i < fieldCount; i++) {
 				auto offsetType = fieldTable[i] >> 12;
 
