@@ -248,9 +248,8 @@ public:
 		VirtualFree(mforwardPage, 0, MEM_RELEASE);
 	}
 
-
 private:
-	int64_t GetJmpOffset(void* curAddr, size_t instrLen, void* desAddr) {
+	size_t GetJmpOffset(void* curAddr, size_t instrLen, void* desAddr) {
 		size_t curAddr_ = (size_t)curAddr;;
 		size_t desAddr_ = (size_t)desAddr;
 		return desAddr_ - curAddr_ - instrLen;
