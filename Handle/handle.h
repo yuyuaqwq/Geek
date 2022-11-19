@@ -10,7 +10,7 @@ namespace geek {
 
 class UniqueHandle {
 public:
-	UniqueHandle() noexcept {
+	UniqueHandle() noexcept : mHanlde { (HANDLE)-1 } {
 
 	}
 	explicit UniqueHandle(HANDLE tHandle) noexcept : mHanlde{ tHandle } {

@@ -10,12 +10,9 @@
 
 namespace geek {
 
-	
-
-
 class Module {
 public:
-	Module() :mNtHeader{ nullptr }, mFileHeader{ nullptr } {
+	Module() : mDosHeader{ 0 }, mNtHeader { nullptr }, mFileHeader{ nullptr } {
 
 	}
 
@@ -125,7 +122,9 @@ public:
 		return pe.Write(buf);
 	}
 
+	uint64_t GetExportAddress(const std::string exportName) {
 
+	}
 
 private:
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
@@ -202,10 +201,8 @@ private:
 private:
 	IMAGE_DOS_HEADER mDosHeader;
 	std::vector<char> mDosStub;
-
 	IMAGE_NT_HEADERS32* mNtHeader;
 	IMAGE_FILE_HEADER* mFileHeader;
-
 	std::vector<IMAGE_SECTION_HEADER> mSectionHeaderTable;
 	std::vector<std::vector<char>> mSectionList;
 };
