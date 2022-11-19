@@ -1,5 +1,5 @@
-#ifndef GEEK_HANDLE_H_
-#define GEEK_HANDLE_H_
+#ifndef GEEK_HANDLE_HANDLE_H_
+#define GEEK_HANDLE_HANDLE_H_
 
 #include <Windows.h>
 
@@ -57,4 +57,4 @@ private:
 
 } // namespace geek
 
-#endif // GEEK_HANDLE_H_
+#endif // GEEK_HANDLE_HANDLE_H_

@@ -1,5 +1,5 @@
-#ifndef GEEK_INLINE_HOOK_H_
-#define GEEK_INLINE_HOOK_H_
+#ifndef GEEK_HOOK_INLINE_HOOK_H_
+#define GEEK_HOOK_INLINE_HOOK_H_
 
 #include <type_traits>
 
@@ -238,6 +238,7 @@ public:
 		auto oldProtect = mProcess->SetProtect(hookAddr, instrLen, PAGE_EXECUTE_READWRITE);
 		mProcess->WriteMemory((char*)hookAddr, &jmpInstr[0], instrLen);
 		mProcess->SetProtect((char*)hookAddr, instrLen, oldProtect);
+		return true;
 	}
 
 	// Ð¶ÔØHook
@@ -265,4 +266,4 @@ private:
 
 } // namespace geek
 
-#endif // GEEK_INLINE_HOOK_H_
+#endif // GEEK_HOOK_INLINE_HOOK_H_
