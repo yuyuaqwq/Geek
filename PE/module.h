@@ -96,7 +96,7 @@ public:
 		int offset = 0;
 
 		memcpy(&buf[offset], &mDosHeader, sizeof(mDosHeader));
-		offset += sizeof(mDosHeader);
+		offset = mDosHeader.e_lfanew;
 
 		memcpy(&buf[offset], mDosStub.data(), mDosStub.size());
 		offset += mDosStub.size();
