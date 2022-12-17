@@ -17,6 +17,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PE", "PE\PE.vcxproj", "{B5E
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "File", "File\File.vcxproj", "{D82283CB-8068-473B-94A1-CECE3F5C9F56}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SignatureCode", "SignatureCode\SignatureCode.vcxproj", "{EDCF8734-FBA1-4381-ADD0-0369716F252B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -81,6 +83,14 @@ Global
 		{D82283CB-8068-473B-94A1-CECE3F5C9F56}.Release|x64.Build.0 = Release|x64
 		{D82283CB-8068-473B-94A1-CECE3F5C9F56}.Release|x86.ActiveCfg = Release|Win32
 		{D82283CB-8068-473B-94A1-CECE3F5C9F56}.Release|x86.Build.0 = Release|Win32
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Debug|x64.ActiveCfg = Debug|x64
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Debug|x64.Build.0 = Debug|x64
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Debug|x86.ActiveCfg = Debug|Win32
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Debug|x86.Build.0 = Debug|Win32
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Release|x64.ActiveCfg = Release|x64
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Release|x64.Build.0 = Release|x64
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Release|x86.ActiveCfg = Release|Win32
+		{EDCF8734-FBA1-4381-ADD0-0369716F252B}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

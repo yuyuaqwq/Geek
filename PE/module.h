@@ -196,6 +196,11 @@ public:
 		return true;
 	}
 
+	bool CheckDigitalSignature() {
+
+	}
+
+
 private:
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) var = mNtHeader->OptionalHeader.##field; \
@@ -302,14 +307,18 @@ private:
 		return dataDirectory;
 	}
 
+	std::vector<uint8_t> CalculationAuthHashCalc() {
+
+	}
+
 
 private:
 	IMAGE_DOS_HEADER mDosHeader;
-	std::vector<char> mDosStub;
+	std::vector<uint8_t> mDosStub;
 	IMAGE_NT_HEADERS32* mNtHeader;
 	IMAGE_FILE_HEADER* mFileHeader;
 	std::vector<IMAGE_SECTION_HEADER> mSectionHeaderTable;
-	std::vector<std::vector<char>> mSectionList;
+	std::vector<std::vector<uint8_t>> mSectionList;
 };
 
 } // namespace geek

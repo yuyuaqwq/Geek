@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{d82283cb-8068-473b-94a1-cece3f5c9f56}</ProjectGuid>
-    <RootNamespace>File</RootNamespace>
+    <ProjectGuid>{edcf8734-fba1-4381-add0-0369716f252b}</ProjectGuid>
+    <RootNamespace>SignatureCode</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -139,7 +139,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="file.hpp" />
+    <ClInclude Include="SignatureCode.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -111,8 +111,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="inline_hook.h" />
-    <ClInclude Include="page_hook.h" />
+    <ClInclude Include="inline_hook.hpp" />
+    <ClInclude Include="page_hook.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

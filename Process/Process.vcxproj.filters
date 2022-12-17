@@ -18,7 +18,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="process.h">
+    <ClInclude Include="process.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
