@@ -39,7 +39,7 @@ public:
 		++msVEHCount;
 	}
 
-	~PageHook() noexcept {
+	~PageHook() {
 		--msVEHCount;
 		if (msVEHCount == 0) {
 			// ÒÆ³ýVEH

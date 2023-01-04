@@ -52,7 +52,7 @@ public:
 	explicit InlineHook(Process* tProcess = nullptr) : mProcess{ tProcess }, mHookAddr{ nullptr }, mJmpAddr{ nullptr }, mforwardPage{ nullptr }{
 		
 	}
-	~InlineHook() noexcept {
+	~InlineHook() {
 
 	}
 
