@@ -6,7 +6,7 @@
 
 #include <Windows.h>
 
-#include <Process\Process.h>
+#include <Process\Process.hpp>
 
 namespace geek {
 
@@ -99,4 +99,4 @@ private:
 
 } // namespace geek
 
-#endif // GEEK_HANDLE_H_
+#endif // GEEK_MEMORY_H_

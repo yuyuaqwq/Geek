@@ -13,12 +13,11 @@
 namespace geek {
 	
 
-const HANDLE kCurrentProcess = (HANDLE)-1;
 
-
-class ProcessException : public std::exception {
+class Process {
 public:
-	enum class Type {
+	enum class Status {
+		kOk,
 		kProcessInvalid,
 		kOpenProcessError,
 		kCreateProcessError,
@@ -29,50 +28,37 @@ public:
 	};
 
 public:
-	ProcessException(Type t_type, const char* t_msg = "") noexcept :  m_type{ m_type }, std::exception{ t_msg } {
-		m_type = t_type;
-	}
-
-public:
-	Type GetType() const noexcept {
-		return m_type;
-	}
-
-private:
-	Type m_type;
-};
-
-class Process {
-public:
-	explicit Process(HANDLE hProcess) {
+	void Open(HANDLE hProcess) {
 		m_handle = UniqueHandle(hProcess);
 	}
 
-	explicit Process(UniqueHandle hProcess) {
+	void Open(UniqueHandle hProcess) {
 		m_handle = std::move(hProcess);
 	}
 
-	explicit Process(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+	Status Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
 		auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
 		if (hProcess == NULL) {
-			throw ProcessException(ProcessException::Type::kOpenProcessError);
+			return Status::kOpenProcessError;
 		}
 		m_handle = UniqueHandle(hProcess);
+		return Status::kOk;
 	}
 
-	explicit Process(const std::wstring& command, DWORD creationFlags = 0) {
+	Status Open(const std::wstring& command, DWORD creationFlags = 0) {
 		std::vector<wchar_t> buf(command.size() + 1);
 		memcpy(buf.data(), command.c_str(), command.size() + 1);
-		STARTUPINFOW startupInfo { sizeof(startupInfo) };
-		PROCESS_INFORMATION processInformation { 0 };
+		STARTUPINFOW startupInfo{ sizeof(startupInfo) };
+		PROCESS_INFORMATION processInformation{ 0 };
 		if (!CreateProcessW(NULL, buf.data(), NULL, NULL, NULL, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
-			throw ProcessException(ProcessException::Type::kOpenProcessError);
+			return Status::kOpenProcessError;
 		}
 		m_handle = UniqueHandle(processInformation.hProcess);
 		CloseHandle(processInformation.hThread);
+		return Status::kOk;
 	}
 
-public:
+
 	HANDLE Get() const noexcept {
 		if (this == nullptr) {
 			return (HANDLE)-1;
@@ -80,75 +66,92 @@ public:
 		return m_handle.Get();
 	}
 
-	bool IsX86() const {
+	Status IsX86(bool* res) const {
 		auto handle = Get();
 		if (handle == NULL) {
-			throw ProcessException(ProcessException::Type::kProcessInvalid);
+			return Status::kProcessInvalid;
 		}
 
 		::BOOL IsWow64;
-		if (!::IsWow64Process(handle, &IsWow64))
-		{
-			throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
+		if (!::IsWow64Process(handle, &IsWow64)) {
+			return Status::kIsWow64ProcessError;
 		}
 
 		if (IsWow64) {
-			return true;
+			*res = true;
+			return Status::kOk;
 		}
 
 		::SYSTEM_INFO SystemInfo = { 0 };
 		::GetNativeSystemInfo(&SystemInfo);		//获得系统信息
 		if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {		//得到系统位数64
-			return false;
+			*res = false;
+			return Status::kOk;
 		}
 		else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {		// 得到系统位数32
-			return true;
+			*res = true;
+			return Status::kOk;
 		}
 
-		throw ProcessException(ProcessException::Type::kIsWow64ProcessError);
+		return Status::kIsWow64ProcessError;
 
 	}
 
 
 	// VirtualMemory
-	std::vector<char> ReadMemory(void* addr, size_t len) {
-		std::vector<char> buf(len);
-		if (this == nullptr) {
-			memcpy(buf.data(), addr, len);
-			return buf;
-		}
-		SIZE_T readByte;
-		if (!ReadProcessMemory(Get(), addr, buf.data(), len, &readByte)) {
-			throw ProcessException(ProcessException::Type::kReadProcessMemoryError);
-		}
-		return buf;
+	void* AllocMemory(void* addr, size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+		return VirtualAllocEx(Get(), addr, len, type, protect);
 	}
 
-	void WriteMemory(void* addr, const void* buf, size_t len) {
+	void* AllocMemory(size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+		return AllocMemory(len, type, protect);
+	}
+
+	Status ReadMemory(void* addr, size_t len, std::vector<char>* buf) {
+		buf->resize(len);
+		std::vector<char> buf(len);
+		if (this == nullptr) {
+			memcpy(buf->data(), addr, len);
+			return Status::kOk;
+		}
+		SIZE_T readByte;
+		if (!ReadProcessMemory(Get(), addr, buf->data(), len, &readByte)) {
+			// throw ProcessException(ProcessException::Type::kReadProcessMemoryError);
+			return Status::kReadProcessMemoryError;
+		}
+		return Status::kOk;
+	}
+
+	Status WriteMemory(void* addr, const void* buf, size_t len) {
 		if (this == nullptr) {
 			memcpy(addr, buf, len);
 			return;
 		}
 		SIZE_T readByte;
 		if (!WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
-			throw ProcessException(ProcessException::Type::kWriteProcessMemoryError);
+			// throw ProcessException(ProcessException::Type::kWriteProcessMemoryError);
+			return Status::kWriteProcessMemoryError;
 		}
 	}
 
-	DWORD SetProtect(void* addr, size_t len, DWORD newProtect) {
-		DWORD oldProtect;
+	Status SetProtect(void* addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
 		bool success = false;
 		if (this == nullptr) {
-			success = VirtualProtect(addr, len, newProtect, &oldProtect);
+			success = VirtualProtect(addr, len, newProtect, oldProtect);
 		}
 		else {
-			success = VirtualProtectEx(Get(), addr, len, newProtect, &oldProtect);
+			success = VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
 		}
 		if (!success) {
-			throw ProcessException(ProcessException::Type::kVirtualProtectError);
+			return Status::kVirtualProtectError;
 		}
-		return oldProtect;
+		return Status::kOk;
 	}
+
+
+public:
+	inline static const HANDLE kCurrentProcess = (HANDLE)-1;
+
 private:
 	UniqueHandle m_handle;
 };

@@ -2,10 +2,11 @@
 #define GEEK_HOOK_INLINE_HOOK_H_
 
 #include <type_traits>
+#include <vector>
 
 #include <Windows.h>
 
-#include <Process/process.h>
+#include <Process/process.hpp>
 
 
 namespace geek {
@@ -71,7 +72,8 @@ public:
 		memcpy(mOldInstr.data(), hookAddr, instrLen);
 		
 		std::vector<char> jmpInstr(instrLen);
-		if (mProcess->IsX86()) {
+		bool res;
+		if (mProcess->IsX86(&res) == Process::Status::kOk && res) {
 			if (instrLen < 5) {
 				return false;
 			}
@@ -235,17 +237,19 @@ public:
 				jmpInstr[i] = 0x90;		// nop
 			}
 		}
-		auto oldProtect = mProcess->SetProtect(hookAddr, instrLen, PAGE_EXECUTE_READWRITE);
+		DWORD oldProtect;
+		mProcess->SetProtect(hookAddr, instrLen, PAGE_EXECUTE_READWRITE, &oldProtect);
 		mProcess->WriteMemory((char*)hookAddr, &jmpInstr[0], instrLen);
-		mProcess->SetProtect((char*)hookAddr, instrLen, oldProtect);
+		mProcess->SetProtect((char*)hookAddr, instrLen, oldProtect, &oldProtect);
 		return true;
 	}
 
 	// Ð¶ÔØHook
 	void Uninstall() {
-		auto oldProtect = mProcess->SetProtect(mHookAddr, mOldInstr.size(), PAGE_EXECUTE_READWRITE);
+		DWORD oldProtect;
+		mProcess->SetProtect(mHookAddr, mOldInstr.size(), PAGE_EXECUTE_READWRITE, &oldProtect);
 		mProcess->WriteMemory(mOldInstr.data(), mOldInstr.data(), mOldInstr.size());
-		mProcess->SetProtect(mHookAddr, mOldInstr.size(), oldProtect);
+		mProcess->SetProtect(mHookAddr, mOldInstr.size(), oldProtect, &oldProtect);
 		VirtualFree(mforwardPage, 0, MEM_RELEASE);
 	}
 

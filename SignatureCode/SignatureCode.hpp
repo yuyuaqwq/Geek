@@ -112,6 +112,22 @@ private:
 		return sum;
 	}
 
+	static int __cdecl memcmp_ex(void const* _Buf1, void const* _Buf2, size_t _Size) {
+		__try {
+			if (memcmp(_Buf1, _Buf2, _Size)) {
+				return 1;
+			}
+			else {
+				return 0;
+			}
+
+		}
+		__except (1) {
+			return 2;
+		}
+	}
+
+
 	/*
 	* 将特征码字符串转换为Element
 	* 标准格式示例： "48 &?? ?? 65*20 88"
@@ -243,21 +259,7 @@ private:
 		return totalLength;
 	}
 
-	static int __cdecl memcmp_ex(void const* _Buf1, void const* _Buf2, size_t _Size) {
-		__try {
-			if (memcmp(_Buf1, _Buf2, _Size)) {
-				return 1;
-			}
-			else {
-				return 0;
-			}
-
-		}
-		__except (1) {
-			return 2;
-		}
-	}
-
+	
 
 
 private:
