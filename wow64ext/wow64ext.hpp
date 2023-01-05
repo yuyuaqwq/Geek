@@ -1,5 +1,5 @@
-#ifndef GEEK_WOW64EXT_WOW64_H_
-#define GEEK_WOW64EXT_WOW64_H_
+#ifndef GEEK_WOW64EXT_WOW64EXT_H_
+#define GEEK_WOW64EXT_WOW64EXT_H_
 
 #include <Windows.h>
 
@@ -581,4 +581,4 @@ private:
 
 }
 
-#endif // GEEK_WOW64EXT_WOW64_H_
+#endif // GEEK_WOW64EXT_WOW64EXT_H_
