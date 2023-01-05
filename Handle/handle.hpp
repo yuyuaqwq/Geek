@@ -17,7 +17,7 @@ public:
 
 	}
 	~UniqueHandle() noexcept {
-
+		Close();
 	}
 
 public:
