@@ -4,9 +4,10 @@
 #include <wow64ext/wow64ext.hpp>
 
 namespace geek {
-	class RemoteThreadInjection {
 
-	};
+class RemoteThreadInjection {
+
+};
 
 } // namespace geek
 

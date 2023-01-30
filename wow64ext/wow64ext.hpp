@@ -3,9 +3,9 @@
 
 #include <Windows.h>
 
-#include <wow64ext/internal.h>
-#include <wow64ext/wow64ext.h>
-#include <wow64ext/CMemPtr.h>
+#include <Geek/wow64ext/internal.h>
+#include <Geek/wow64ext/wow64ext.h>
+#include <Geek/wow64ext/CMemPtr.h>
 
 /*
 * https://github.com/rwfpl/rewolf-wow64ext
@@ -22,7 +22,7 @@ public:
 
 		SYSTEM_INFO si;
 		GetSystemInfo(&si);
-		if (target == false && source == true) {
+		if (target == FALSE && source == TRUE) {
 			return true;
 		}
 		else if (target == TRUE && source == TRUE || si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64 ||
@@ -39,12 +39,10 @@ public:
     }
 
     static VOID __cdecl Wow64ExtInit() {
-#ifndef _WIN64
         if (msHeap == NULL) {
             IsWow64Process(GetCurrentProcess(), &msIsWow64);
             msHeap = GetProcessHeap();
         }
-#endif // _WIN64
     }
 
     static DWORD64 __cdecl X64Call(DWORD64 func, int argC, ...) {
@@ -154,9 +152,6 @@ public:
     }
 
     static DWORD64 __cdecl GetModuleHandle64(const wchar_t* lpModuleName) {
-#ifdef _WIN64
-        return 0;
-#else
         if (!msIsWow64)
             return 0;
 
@@ -186,7 +181,6 @@ public:
         } while (head.InLoadOrderLinks.Flink != LastEntry);
 
         return 0;
-#endif // _WIN64
     }
 
     static VOID __cdecl SetLastErrorFromX64Call(DWORD64 status) {

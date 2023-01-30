@@ -6,7 +6,7 @@
 
 #include <Windows.h>
 
-#include <File/file.hpp>
+#include <Geek/File/file.hpp>
 
 namespace geek {
 
@@ -122,7 +122,7 @@ public:
 		return pe.Write(buf);
 	}
 
-	uint32_t GetExportRVAFromName(const std::string& findName) {
+	uint32_t GetExportRVAByName(const std::string& funcName) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 		if (exportDirectory == nullptr) {
 			return 0;
@@ -134,7 +134,7 @@ public:
 		int funcIdx = -1;
 		for (int i = 0; i < numberOfNames; i++) {
 			auto exportName = (char*)RVAToPoint(addressOfNames[i]);
-			if (findName == exportName) {
+			if (funcName == exportName) {
 				// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
 				funcIdx = addressOfNameOrdinals[i];
 			}
@@ -145,7 +145,7 @@ public:
 		return addressOfFunctions[funcIdx];
 	}
 
-	uint32_t GetExportRVAFromOrdinal(uint16_t ordinal) {
+	uint32_t GetExportRVAByOrdinal(uint16_t ordinal) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 		if (exportDirectory == nullptr) {
 			return 0;
@@ -219,7 +219,7 @@ private:
 		return val - val % alignval + alignval;
 	}
 
-	int GetSectionIndexFromRVA(uint32_t rva) {
+	int GetSectionIndexByRVA(uint32_t rva) {
 		int i = 0;
 		for (; i < mFileHeader->NumberOfSections; i++) {
 			if (rva < mSectionHeaderTable[i].VirtualAddress) {
@@ -236,7 +236,7 @@ private:
 		return i;
 	}
 
-	int GetSectionIndexFromRAW(uint32_t raw) {
+	int GetSectionIndexByRAW(uint32_t raw) {
 		int i = 0;
 		for (; i < mFileHeader->NumberOfSections; i++) {
 			if (raw < mSectionHeaderTable[i].PointerToRawData) {
@@ -254,7 +254,7 @@ private:
 	}
 
 	void* RVAToPoint(uint32_t rva) {
-		auto i = GetSectionIndexFromRVA(rva);
+		auto i = GetSectionIndexByRVA(rva);
 		if (i == -1) {
 			return nullptr;
 		}
@@ -262,7 +262,7 @@ private:
 	}
 
 	uint32_t RVAToRAW(uint32_t rva) {
-		auto i = GetSectionIndexFromRVA(rva);
+		auto i = GetSectionIndexByRVA(rva);
 		if (i == -1) {
 			return 0;
 		}
@@ -270,7 +270,7 @@ private:
 	}
 
 	uint32_t RAWToRVA(uint32_t raw) {
-		auto i = GetSectionIndexFromRAW(raw);
+		auto i = GetSectionIndexByRAW(raw);
 		if (i == -1) {
 			return 0;
 		}
