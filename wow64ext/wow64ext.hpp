@@ -5,7 +5,6 @@
 
 #include <Geek/wow64ext/internal.h>
 #include <Geek/wow64ext/wow64ext.h>
-#include <Geek/wow64ext/CMemPtr.h>
 
 /*
 * https://github.com/rwfpl/rewolf-wow64ext
@@ -15,22 +14,22 @@ namespace geek {
 
 class WOW64 {
 public:
-	static bool WOW64Operation(HANDLE hProcess) {
-		BOOL source, target;
-		IsWow64Process(GetCurrentProcess(), &source);
-		IsWow64Process(hProcess, &target);
+    static bool WOW64Operation(HANDLE hProcess) {
+        BOOL source, target;
+        IsWow64Process(GetCurrentProcess(), &source);
+        IsWow64Process(hProcess, &target);
 
-		SYSTEM_INFO si;
-		GetSystemInfo(&si);
-		if (target == FALSE && source == TRUE) {
-			return true;
-		}
-		else if (target == TRUE && source == TRUE || si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64 ||
-			si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_IA64) {
-			return false;
-		}
-		return false;
-	}
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        if (target == FALSE && source == TRUE) {
+            return true;
+        }
+        else if (target == TRUE && source == TRUE || si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64 ||
+            si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_IA64) {
+            return false;
+        }
+        return false;
+    }
 
 public:
 
@@ -38,9 +37,18 @@ public:
         Wow64ExtInit();
     }
 
+    static void* Wow64Malloc(size_t size) {
+        return HeapAlloc(msHeap, 0, size);
+    }
+
+    static void Wow64Free(void* ptr) {
+        if (nullptr != ptr)
+            HeapFree(msHeap, 0, ptr);
+    }
+
     static VOID __cdecl Wow64ExtInit() {
         if (msHeap == NULL) {
-            IsWow64Process(GetCurrentProcess(), &msIsWow64);
+            ::IsWow64Process(GetCurrentProcess(), &msIsWow64);
             msHeap = GetProcessHeap();
         }
     }
@@ -61,91 +69,91 @@ public:
         reg64 _rax = { 0 };
 
         reg64 restArgs = { (DWORD64)&va_arg(args, DWORD64) };
-    
+
         // conversion to QWORD for easier use in inline assembly
         reg64 _argC = { (DWORD64)argC };
         DWORD back_esp = 0;
-	    WORD back_fs = 0;
+        WORD back_fs = 0;
 
         __asm
         {
             ;// reset FS segment, to properly handle RFG
             mov    back_fs, fs
-            mov    eax, 0x2B
-            mov    fs, ax
+                mov    eax, 0x2B
+                mov    fs, ax
 
-            ;// keep original esp in back_esp variable
+                ;// keep original esp in back_esp variable
             mov    back_esp, esp
-        
-            ;// align esp to 0x10, without aligned stack some syscalls may return errors !
+
+                ;// align esp to 0x10, without aligned stack some syscalls may return errors !
             ;// (actually, for syscalls it is sufficient to align to 8, but SSE opcodes 
             ;// requires 0x10 alignment), it will be further adjusted according to the
             ;// number of arguments above 4
-            and    esp, 0xFFFFFFF0
+            and esp, 0xFFFFFFF0
 
-            X64_Start();
+                X64_Start();
 
             ;// below code is compiled as x86 inline asm, but it is executed as x64 code
             ;// that's why it need sometimes REX_W() macro, right column contains detailed
             ;// transcription how it will be interpreted by CPU
 
             ;// fill first four arguments
-      REX_W mov    ecx, _rcx.dw[0]                          ;// mov     rcx, qword ptr [_rcx]
-      REX_W mov    edx, _rdx.dw[0]                          ;// mov     rdx, qword ptr [_rdx]
-            push   _r8.v                                    ;// push    qword ptr [_r8]
-            X64_Pop(_R8);                                   ;// pop     r8
-            push   _r9.v                                    ;// push    qword ptr [_r9]
-            X64_Pop(_R9);                                   ;// pop     r9
-                                                            ;//
-      REX_W mov    eax, _argC.dw[0]                         ;// mov     rax, qword ptr [_argC]
-                                                            ;// 
+            REX_W mov    ecx, _rcx.dw[0];// mov     rcx, qword ptr [_rcx]
+            REX_W mov    edx, _rdx.dw[0];// mov     rdx, qword ptr [_rdx]
+            push   _r8.v;// push    qword ptr [_r8]
+            X64_Pop(_R8); ;// pop     r8
+            push   _r9.v;// push    qword ptr [_r9]
+            X64_Pop(_R9); ;// pop     r9
+            ;//
+            REX_W mov    eax, _argC.dw[0];// mov     rax, qword ptr [_argC]
+            ;// 
             ;// final stack adjustment, according to the    ;//
             ;// number of arguments above 4                 ;// 
-            test   al, 1                                    ;// test    al, 1
-            jnz    _no_adjust                               ;// jnz     _no_adjust
-            sub    esp, 8                                   ;// sub     rsp, 8
-    _no_adjust:                                             ;//
-                                                            ;// 
-            push   edi                                      ;// push    rdi
-      REX_W mov    edi, restArgs.dw[0]                      ;// mov     rdi, qword ptr [restArgs]
-                                                            ;// 
+            test   al, 1;// test    al, 1
+            jnz    _no_adjust;// jnz     _no_adjust
+            sub    esp, 8;// sub     rsp, 8
+        _no_adjust:;//
+            ;// 
+            push   edi;// push    rdi
+            REX_W mov    edi, restArgs.dw[0];// mov     rdi, qword ptr [restArgs]
+            ;// 
             ;// put rest of arguments on the stack          ;// 
-      REX_W test   eax, eax                                 ;// test    rax, rax
-            jz     _ls_e                                    ;// je      _ls_e
-      REX_W lea    edi, dword ptr [edi + 8*eax - 8]         ;// lea     rdi, [rdi + rax*8 - 8]
-                                                            ;// 
-    _ls:                                                    ;// 
-      REX_W test   eax, eax                                 ;// test    rax, rax
-            jz     _ls_e                                    ;// je      _ls_e
-            push   dword ptr [edi]                          ;// push    qword ptr [rdi]
-      REX_W sub    edi, 8                                   ;// sub     rdi, 8
-      REX_W sub    eax, 1                                   ;// sub     rax, 1
-            jmp    _ls                                      ;// jmp     _ls
-    _ls_e:                                                  ;// 
-                                                            ;// 
+            REX_W test   eax, eax;// test    rax, rax
+            jz     _ls_e;// je      _ls_e
+            REX_W lea    edi, dword ptr[edi + 8 * eax - 8];// lea     rdi, [rdi + rax*8 - 8]
+            ;// 
+        _ls:;// 
+            REX_W test   eax, eax;// test    rax, rax
+            jz     _ls_e;// je      _ls_e
+            push   dword ptr[edi];// push    qword ptr [rdi]
+            REX_W sub    edi, 8;// sub     rdi, 8
+            REX_W sub    eax, 1;// sub     rax, 1
+            jmp    _ls;// jmp     _ls
+        _ls_e:;// 
+            ;// 
             ;// create stack space for spilling registers   ;// 
-      REX_W sub    esp, 0x20                                ;// sub     rsp, 20h
-                                                            ;// 
-            call   func                                     ;// call    qword ptr [func]
-                                                            ;// 
+            REX_W sub    esp, 0x20;// sub     rsp, 20h
+            ;// 
+            call   func;// call    qword ptr [func]
+            ;// 
             ;// cleanup stack                               ;// 
-      REX_W mov    ecx, _argC.dw[0]                         ;// mov     rcx, qword ptr [_argC]
-      REX_W lea    esp, dword ptr [esp + 8*ecx + 0x20]      ;// lea     rsp, [rsp + rcx*8 + 20h]
-                                                            ;// 
-            pop    edi                                      ;// pop     rdi
-                                                            ;// 
-            // set return value                             ;// 
-      REX_W mov    _rax.dw[0], eax                          ;// mov     qword ptr [_rax], rax
+            REX_W mov    ecx, _argC.dw[0];// mov     rcx, qword ptr [_argC]
+            REX_W lea    esp, dword ptr[esp + 8 * ecx + 0x20];// lea     rsp, [rsp + rcx*8 + 20h]
+            ;// 
+            pop    edi;// pop     rdi
+            ;// 
+// set return value                             ;// 
+            REX_W mov    _rax.dw[0], eax;// mov     qword ptr [_rax], rax
 
             X64_End();
 
             mov    ax, ds
-            mov    ss, ax
-            mov    esp, back_esp
+                mov    ss, ax
+                mov    esp, back_esp
 
-            ;// restore FS segment
+                ;// restore FS segment
             mov    ax, back_fs
-            mov    fs, ax
+                mov    fs, ax
         }
         return _rax.v;
 #endif // !_WIN64
@@ -170,14 +178,15 @@ public:
         {
             GetMem64(&head, head.InLoadOrderLinks.Flink, sizeof(LDR_DATA_TABLE_ENTRY64));
 
-            wchar_t* tempBuf = (wchar_t*)malloc(head.BaseDllName.MaximumLength);
+            std::unique_ptr<wchar_t, void(*)(void*)> tempBuf{ (wchar_t*)Wow64Malloc(head.BaseDllName.MaximumLength), Wow64Free };
             if (nullptr == tempBuf)
                 return 0;
-            WATCH(tempBuf);
-            GetMem64(tempBuf, head.BaseDllName.Buffer, head.BaseDllName.MaximumLength);
 
-            if (0 == _wcsicmp(lpModuleName, tempBuf))
+            GetMem64(tempBuf.get(), head.BaseDllName.Buffer, head.BaseDllName.MaximumLength);
+
+            if (0 == _wcsicmp(lpModuleName, tempBuf.get())) {
                 return head.DllBase;
+            }
         } while (head.InLoadOrderLinks.Flink != LastEntry);
 
         return 0;
@@ -221,7 +230,7 @@ public:
         return funcRet;
     }
 
-    static SIZE_T __cdecl VirtualQueryEx64(HANDLE hProcess, DWORD64 lpAddress, MEMORY_BASIC_INFORMATION64 * lpBuffer, SIZE_T dwLength) {
+    static SIZE_T __cdecl VirtualQueryEx64(HANDLE hProcess, DWORD64 lpAddress, MEMORY_BASIC_INFORMATION64* lpBuffer, SIZE_T dwLength) {
         static DWORD64 ntqvm = 0;
         if (0 == ntqvm)
         {
@@ -278,7 +287,7 @@ public:
             return TRUE;
     }
 
-    static BOOL __cdecl VirtualProtectEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize, DWORD flNewProtect, DWORD * lpflOldProtect) {
+    static BOOL __cdecl VirtualProtectEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize, DWORD flNewProtect, DWORD* lpflOldProtect) {
         static DWORD64 ntpvm = 0;
         if (0 == ntpvm)
         {
@@ -299,7 +308,7 @@ public:
             return TRUE;
     }
 
-    static BOOL __cdecl ReadProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPVOID lpBuffer, SIZE_T nSize, SIZE_T * lpNumberOfBytesRead) {
+    static BOOL __cdecl ReadProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPVOID lpBuffer, SIZE_T nSize, SIZE_T* lpNumberOfBytesRead) {
         static DWORD64 nrvm = 0;
         if (0 == nrvm)
         {
@@ -322,7 +331,7 @@ public:
         }
     }
 
-    static BOOL __cdecl WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPVOID lpBuffer, SIZE_T nSize, SIZE_T * lpNumberOfBytesWritten) {
+    static BOOL __cdecl WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPVOID lpBuffer, SIZE_T nSize, SIZE_T* lpNumberOfBytesWritten) {
         static DWORD64 nrvm = 0;
         if (0 == nrvm)
         {
@@ -345,7 +354,7 @@ public:
         }
     }
 
-    static BOOL __cdecl GetThreadContext64(HANDLE hThread, _CONTEXT64 * lpContext) {
+    static BOOL __cdecl GetThreadContext64(HANDLE hThread, _CONTEXT64* lpContext) {
         static DWORD64 gtc = 0;
         if (0 == gtc)
         {
@@ -363,7 +372,7 @@ public:
             return TRUE;
     }
 
-    static BOOL __cdecl SetThreadContext64(HANDLE hThread, _CONTEXT64 * lpContext) {
+    static BOOL __cdecl SetThreadContext64(HANDLE hThread, _CONTEXT64* lpContext) {
         static DWORD64 stc = 0;
         if (0 == stc)
         {
@@ -381,8 +390,6 @@ public:
             return TRUE;
     }
 
-private:
-    
     static void GetMem64(void* dstMem, DWORD64 srcMem, size_t sz) {
 #ifdef _WIN64
         return;
@@ -539,31 +546,31 @@ private:
         IMAGE_EXPORT_DIRECTORY ied;
         GetMem64(&ied, modBase + idd.VirtualAddress, sizeof(ied));
 
-        DWORD* rvaTable = (DWORD*)malloc(sizeof(DWORD) * ied.NumberOfFunctions);
+        std::unique_ptr<DWORD, void(*)(void*)> rvaTable{ (DWORD*)Wow64Malloc(sizeof(DWORD) * ied.NumberOfFunctions), Wow64Free };
         if (nullptr == rvaTable)
             return 0;
-        WATCH(rvaTable);
-        GetMem64(rvaTable, modBase + ied.AddressOfFunctions, sizeof(DWORD) * ied.NumberOfFunctions);
+            
+        GetMem64(rvaTable.get(), modBase + ied.AddressOfFunctions, sizeof(DWORD) * ied.NumberOfFunctions);
 
-        WORD* ordTable = (WORD*)malloc(sizeof(WORD) * ied.NumberOfFunctions);
+        std::unique_ptr<WORD, void(*)(void*)> ordTable{ (WORD*)Wow64Malloc(sizeof(WORD) * ied.NumberOfFunctions), Wow64Free };
         if (nullptr == ordTable)
             return 0;
-        WATCH(ordTable);
-        GetMem64(ordTable, modBase + ied.AddressOfNameOrdinals, sizeof(WORD) * ied.NumberOfFunctions);
+            
+        GetMem64(ordTable.get(), modBase + ied.AddressOfNameOrdinals, sizeof(WORD) * ied.NumberOfFunctions);
 
-        DWORD* nameTable = (DWORD*)malloc(sizeof(DWORD) * ied.NumberOfNames);
+        std::unique_ptr<DWORD, void(*)(void*)> nameTable { (DWORD*)Wow64Malloc(sizeof(DWORD) * ied.NumberOfNames), Wow64Free };
         if (nullptr == nameTable)
             return 0;
-        WATCH(nameTable);
-        GetMem64(nameTable, modBase + ied.AddressOfNames, sizeof(DWORD) * ied.NumberOfNames);
+
+        GetMem64(nameTable.get(), modBase + ied.AddressOfNames, sizeof(DWORD) * ied.NumberOfNames);
 
         // lazy search, there is no need to use binsearch for just one function
         for (DWORD i = 0; i < ied.NumberOfFunctions; i++)
         {
-            if (!CmpMem64("LdrGetProcedureAddress", modBase + nameTable[i], sizeof("LdrGetProcedureAddress")))
+            if (!CmpMem64("LdrGetProcedureAddress", modBase + nameTable.get()[i], sizeof("LdrGetProcedureAddress")))
                 continue;
             else
-                return modBase + rvaTable[ordTable[i]];
+                return modBase + rvaTable.get()[ordTable.get()[i]];
         }
         return 0;
     }

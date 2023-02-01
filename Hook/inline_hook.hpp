@@ -58,10 +58,12 @@ public:
 
 public:
 
-	// 安装Hook
-	// 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
-	// x86要求instrLen>=5，x64要求instrLen>=14
-	bool Install(void* hookAddr, size_t instrLen, HookCallBack callback) {
+	/*
+	* 安装Hook
+	* 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
+	* x86要求instrLen>=5，x64要求instrLen>=14
+	*/
+	bool Install(PVOID64 hookAddr, size_t instrLen, HookCallBack callback) {
 		mforwardPage = mProcess->AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (!mforwardPage) {
 			return false;
@@ -239,13 +241,18 @@ public:
 		}
 		DWORD oldProtect;
 		mProcess->SetMemoryProtect(hookAddr, instrLen, PAGE_EXECUTE_READWRITE, &oldProtect);
-		mProcess->WriteMemory((char*)hookAddr, &jmpInstr[0], instrLen);
-		mProcess->SetMemoryProtect((char*)hookAddr, instrLen, oldProtect, &oldProtect);
+		mProcess->WriteMemory(hookAddr, &jmpInstr[0], instrLen);
+		mProcess->SetMemoryProtect(hookAddr, instrLen, oldProtect, &oldProtect);
 		return true;
 	}
 
-	// 卸载Hook
+	/*
+	* 卸载Hook
+	*/
 	void Uninstall() {
+		if (!mforwardPage) {
+			return;
+		}
 		DWORD oldProtect;
 		mProcess->SetMemoryProtect(mHookAddr, mOldInstr.size(), PAGE_EXECUTE_READWRITE, &oldProtect);
 		mProcess->WriteMemory(mOldInstr.data(), mOldInstr.data(), mOldInstr.size());
@@ -254,18 +261,19 @@ public:
 	}
 
 private:
-	size_t GetJmpOffset(void* curAddr, size_t instrLen, void* desAddr) {
-		size_t curAddr_ = (size_t)curAddr;;
-		size_t desAddr_ = (size_t)desAddr;
-		return desAddr_ - curAddr_ - instrLen;
-	}
-
-private:
 	Process* mProcess;
 	void* mHookAddr;
 	void* mJmpAddr;
 	void* mforwardPage;
 	std::vector<char> mOldInstr;
+
+public:
+	static uint64_t GetJmpOffset(PVOID64 instrAddr, size_t instrLen, PVOID64 jmpAddr) {
+		uint64_t instrAddr_ = (uint64_t)instrAddr;;
+		uint64_t jmpAddr_ = (uint64_t)jmpAddr;
+		return jmpAddr_ - instrAddr_ - instrLen;
+	}
+
 };
 
 } // namespace geek

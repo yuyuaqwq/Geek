@@ -10,10 +10,10 @@ namespace geek {
 
 class UniqueHandle {
 public:
-	UniqueHandle() noexcept : mHanlde { (HANDLE)-1 } {
+	UniqueHandle() noexcept : mHandle{ INVALID_HANDLE_VALUE } {
 
 	}
-	explicit UniqueHandle(HANDLE tHandle) noexcept : mHanlde{ tHandle } {
+	explicit UniqueHandle(HANDLE tHandle) noexcept : mHandle{ tHandle } {
 
 	}
 	~UniqueHandle() noexcept {
@@ -30,29 +30,40 @@ public:
 	}
 	void operator=(UniqueHandle&& tUniqueHandle) noexcept {
 		Close();
-		mHanlde = tUniqueHandle.mHanlde;
-		tUniqueHandle.mHanlde = NULL;
+		mHandle = tUniqueHandle.mHandle;
+		tUniqueHandle.mHandle = INVALID_HANDLE_VALUE;
 	}
 
 public:
 	inline HANDLE Get() const noexcept {
-		return mHanlde;
+		return mHandle;
 	}
 
 	inline bool Valid() const noexcept {
-		return mHanlde != NULL && mHanlde != INVALID_HANDLE_VALUE;
+		return mHandle != NULL && mHandle != INVALID_HANDLE_VALUE;
 	}
 
+	inline HANDLE Release() noexcept {
+		auto temp = mHandle;
+		mHandle = INVALID_HANDLE_VALUE;
+		return temp;
+	}
+
+	inline void Reset(HANDLE handle = INVALID_HANDLE_VALUE) noexcept {
+		Close();
+		auto temp = mHandle;
+		mHandle = handle;
+	}
 
 private:
 	inline void Close() noexcept {
 		if (Valid()) {
-			::CloseHandle(mHanlde);
+			::CloseHandle(mHandle);
 		}
 	}
 
 private:
-	HANDLE mHanlde;
+	HANDLE mHandle;
 };
 
 } // namespace geek

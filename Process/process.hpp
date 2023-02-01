@@ -1,7 +1,6 @@
-#ifndef GEEK_PROCESS_H_
-#define GEEK_PROCESS_H_
+#ifndef GEEK_PROCESS_PROCESS_H_
+#define GEEK_PROCESS_PROCESS_H_
 
-#include <exception>
 #include <string>
 #include <vector>
 
@@ -14,6 +13,8 @@
 
 namespace geek {
 
+
+
 	class Process {
 	public:
 		enum class Status {
@@ -25,11 +26,7 @@ namespace geek {
 
 	public:
 		Process() {
-			Open(kCurrentProcess);
-		}
-
-		void Open(HANDLE hProcess) {
-			mHandle = UniqueHandle(hProcess);
+			Open(UniqueHandle(kCurrentProcess));
 		}
 
 		void Open(UniqueHandle hProcess) {
@@ -63,7 +60,7 @@ namespace geek {
 		/*
 		* L"explorer.exe"
 		*/
-		Status CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+		Status CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
 			HANDLE hToken_ = NULL;
 			std::wstring tokenProcessName_ = tokenProcessName;
 			DWORD pid = GetProcessIdByProcessName(tokenProcessName);
@@ -95,9 +92,60 @@ namespace geek {
 				return Status::kApiCallFailed;
 			}
 			mHandle = UniqueHandle(pi->hProcess);
-			CloseHandle(pi->hThread);
+			if (!thread) {
+				CloseHandle(pi->hThread);
+			}
+			else {
+				*thread = pi->hThread;
+			}
 			return Status::kOk;
 		}
+
+		Status Terminate(DWORD exitCode) {
+			BOOL ret = ::TerminateProcess(Get(), exitCode);
+			mHandle.Reset();
+			return ret ? Status::kOk : Status::kApiCallFailed;
+		}
+
+		BOOL KtSetDebugPrivilege(BOOL IsEnable)
+		{
+			DWORD  LastError = 0;
+			HANDLE TokenHandle = 0;
+
+			if (!OpenProcessToken(Get(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TokenHandle))
+			{
+				LastError = GetLastError();
+				if (TokenHandle)
+				{
+					CloseHandle(TokenHandle);
+				}
+				return LastError;
+			}
+			TOKEN_PRIVILEGES TokenPrivileges;
+			memset(&TokenPrivileges, 0, sizeof(TOKEN_PRIVILEGES));
+			LUID v1;//权限类型，本地独有标识
+			if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &v1))
+			{
+				LastError = GetLastError();
+				CloseHandle(TokenHandle);
+				return LastError;
+			}
+			TokenPrivileges.PrivilegeCount = 1;
+			TokenPrivileges.Privileges[0].Luid = v1;
+			if (IsEnable)
+			{
+				TokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+			}
+			else
+			{
+				TokenPrivileges.Privileges[0].Attributes = 0;
+			}
+			AdjustTokenPrivileges(TokenHandle, FALSE, &TokenPrivileges, sizeof(TOKEN_PRIVILEGES), NULL, NULL);
+			LastError = GetLastError();
+			CloseHandle(TokenHandle);
+			return LastError;
+		}
+
 
 		HANDLE Get() const noexcept {
 			if (this == nullptr) {
@@ -110,42 +158,34 @@ namespace geek {
 			return GetProcessId(Get());
 		}
 
-		Status IsX86(bool* isX86) const {
+		bool IsX86() const {
 			auto handle = Get();
-			if (handle == NULL) {
-				return Status::kProcessInvalid;
-			}
 
 			::BOOL IsWow64;
 			if (!::IsWow64Process(handle, &IsWow64)) {
-				return Status::kApiCallFailed;
+				return true;
 			}
 
 			if (IsWow64) {
-				*isX86 = true;
-				return Status::kOk;
+				return true;
 			}
 
 			::SYSTEM_INFO SystemInfo = { 0 };
 			::GetNativeSystemInfo(&SystemInfo);		//获得系统信息
 			if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {		//得到系统位数64
-				*isX86 = false;
-				return Status::kOk;
+				return false;
 			}
 			else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {		// 得到系统位数32
-				*isX86 = true;
-				return Status::kOk;
+				return true;
 			}
-			*isX86 = false;
-			return Status::kApiCallFailed;
+			return true;
 
 		}
 
-		BOOL IsTheOwningThread(HANDLE thread) {
-			return GetProcessIdOfThread(thread) == GetId();
-		}
-
-		// VirtualMemory
+		
+		/*
+		* Memory
+		*/
 		PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
 			if (msWOW64.WOW64Operation(Get())) {
 				return (PVOID64)msWOW64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
@@ -164,52 +204,71 @@ namespace geek {
 			return VirtualFreeEx(Get(), addr, size, type);
 		}
 
-		Status ReadMemory(PVOID64 addr, size_t len, std::vector<char>* buf) {
-			buf->resize(len);
+		bool ReadMemory(PVOID64 addr, void* buf, size_t len) {
 			if (this == nullptr) {
-				memcpy(buf->data(), (void*)addr, len);
-				return Status::kOk;
+				memcpy(buf, (void*)addr, len);
+				return true;
 			}
 			SIZE_T readByte;
 
 			if (msWOW64.WOW64Operation(Get())) {
-				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
-				pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");
-				if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), addr, buf->data(), len, NULL))) {
-					return Status::kApiCallFailed;
+				HMODULE NtdllModule = ::GetModuleHandleW(L"ntdll.dll");
+				pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)::GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");
+				if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), addr, buf, len, NULL))) {
+					return false;
 				}
 			}
 			else {
-				if (!ReadProcessMemory(Get(), (void*)addr, buf->data(), len, &readByte)) {
+				if (!::ReadProcessMemory(Get(), (void*)addr, buf, len, &readByte)) {
 					// throw ProcessException(ProcessException::Type::kReadProcessMemoryError);
-					return Status::kApiCallFailed;
+					return false;
 				}
 			}
-
-			return Status::kOk;
+			return true;
 		}
 
-		Status WriteMemory(PVOID64 addr, const void* buf, size_t len) {
+		bool ReadMemory(PVOID64 addr, std::vector<char>* buf, size_t len) {
+			buf->resize(len);
+			return ReadMemory(addr, buf->data(), len);
+		}
+
+		bool WriteMemory(PVOID64 addr, const void* buf, size_t len, bool force = false) {
 			if (this == nullptr) {
 				memcpy(addr, buf, len);
-				return Status::kOk;
+				return true;
 			}
 			SIZE_T readByte;
+			bool success = true;
+			DWORD oldProtect;
+			if (force) {
+				SetMemoryProtect(addr, len, PAGE_EXECUTE_READWRITE, &oldProtect);
+			}
 			if (msWOW64.WOW64Operation(Get())) {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 				pfnNtWow64WriteVirtualMemory64 NtWow64WriteVirtualMemory64 = (pfnNtWow64WriteVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64WriteVirtualMemory64");
 				if (!NT_SUCCESS(NtWow64WriteVirtualMemory64(Get(), addr, (PVOID)buf, len, NULL))) {
-					return Status::kApiCallFailed;
+					success = false;
 				}
 			}
 			else {
-				if (!WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
-					return Status::kApiCallFailed;
+				if (!::WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
+					success = false;
 				}
 			}
-			return Status::kOk;
+			if (force) {
+				SetMemoryProtect(addr, len, oldProtect, &oldProtect);
+			}
+			return true;
+		}
+
+		PVOID64 WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
+			auto mem = AllocMemory(len, MEM_COMMIT, protect);
+			if (!mem) {
+				return nullptr;
+			}
+			WriteMemory(mem, buf, len);
+			return mem;
 		}
 
 		Status SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
@@ -218,7 +277,7 @@ namespace geek {
 				success = msWOW64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
 			}
 			else {
-				success = VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
+				success = ::VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
 			}
 			if (!success) {
 				return Status::kApiCallFailed;
@@ -226,116 +285,168 @@ namespace geek {
 			return Status::kOk;
 		}
 
-		Status GetThreadContext(HANDLE thread, std::vector<char>* context, bool* isX86) {
+
+		/*
+		* Thread
+		*/
+		bool IsTheOwningThread(HANDLE thread) {
+			return GetProcessIdOfThread(thread) == GetId();
+		}
+
+		bool GetThreadContext(HANDLE thread, std::vector<char>* context, bool* isX86 = nullptr, DWORD flags = CONTEXT64_INTEGER) {
 			bool success = false;
 			if (!IsTheOwningThread(thread)) {
-				return Status::kOther;
+				return false;
 			}
 			if (msWOW64.WOW64Operation(Get())) {
 				context->resize(sizeof(_CONTEXT64));
+				((_CONTEXT64*)context->data())->ContextFlags = flags;
 				success = msWOW64.GetThreadContext64(thread, (_CONTEXT64*)context->data());
-				*isX86 = false;
+				if (isX86) *isX86 = false;
 			}
 			else {
-				bool res;
-				auto ret = IsX86(&res);
-				if (ret != Status::kOk) {
-					return ret;
-				}
-				if (res && !CurIsX86()) {
-					*isX86 = true;
+				if (IsX86() && !CurIsX86()) {
+					if (isX86) *isX86 = true;
 					context->resize(sizeof(WOW64_CONTEXT));
+					((WOW64_CONTEXT*)context->data())->ContextFlags = flags;
 					success = ::Wow64GetThreadContext(thread, (PWOW64_CONTEXT)context->data());
 				}
 				else {
-					*isX86 = false;
+					if (isX86) *isX86 = false;
 					context->resize(sizeof(CONTEXT));
+					((CONTEXT*)context->data())->ContextFlags = flags;
 					success = ::GetThreadContext(thread, (LPCONTEXT)context->data());
 				}
 			}
-			return success ? Status::kOk : Status::kApiCallFailed;
+			return success;
 		}
 
-		// Module
-		Status GetModuleList() {
-
+		/*
+		* Module
+		*/
+		
+		std::vector<LDR_DATA_TABLE_ENTRY32> GetModuleList32() {
 			/*
 			* https://blog.csdn.net/wh445306/article/details/107867375
 			*/
 
-			Status status = Status::kOk;
+			std::vector<LDR_DATA_TABLE_ENTRY32> moduleList;
 			do {
-				if (msWOW64.WOW64Operation(Get())) {
-					HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-					pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
-					pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");
-					PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
+				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
+				pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
 
-					status = Status::kApiCallFailed;
+				PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
+
+				if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
+					break;
+				}
+
+				DWORD Ldr32 = 0;
+				LIST_ENTRY32 ListEntry32 = { 0 };
+				LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
+				wchar_t ProPath32[256];
+
+				if (!ReadProcessMemory(Get(), (PVOID)(pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32), NULL)) {
+					break;
+				}
+				if (!ReadProcessMemory(Get(), (PVOID)(Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32), NULL)) {
+					break;
+				}
+				if (!ReadProcessMemory(Get(), (PVOID)(ListEntry32.Flink), &LDTE32, sizeof(LDTE32), NULL)) {
+					break;
+				}
+				while (1) {
+					if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
+					if (ReadProcessMemory(Get(), (PVOID)LDTE32.FullDllName.Buffer, ProPath32, sizeof(ProPath32), NULL)) {
+						// printf("模块基址:0x%X\t模块大小:0x%X\t模块路径:%ls\n", LDTE32.DllBase, LDTE32.SizeOfImage, ProPath32);
+						moduleList.push_back(LDTE32);
+					}
+					if (!ReadProcessMemory(Get(), (PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32), NULL)) break;
+				}
+			} while (false);
+			return moduleList;
+		}
+
+		std::vector<LDR_DATA_TABLE_ENTRY64> GetModuleList64() {
+			/*
+			* https://blog.csdn.net/wh445306/article/details/107867375
+			*/
+			std::vector<LDR_DATA_TABLE_ENTRY64> moduleList;
+			do {
+				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
+				PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
+				if (msWOW64.WOW64Operation(Get())) {
+					pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 					if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
 						break;
 					}
-					DWORD64 Ldr64 = 0;
-					LIST_ENTRY64 ListEntry64 = { 0 };
-					LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
-					wchar_t ProPath64[256];
-
-					if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), (PVOID64)(pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64), NULL))) {
-						break;
-					}
-					if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), (PVOID64)(Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64), NULL))) {
-						break;
-					}
-					if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), (PVOID64)(ListEntry64.Flink), &LDTE64, sizeof(_LDR_DATA_TABLE_ENTRY64), NULL))) {
-						break;
-					}
-
-					while (1) {
-						if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
-						if (NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), (PVOID64)LDTE64.FullDllName.Buffer, ProPath64, sizeof(ProPath64), NULL))) {
-							// printf("模块基址:0x%llX\t模块大小:0x%X\t模块路径:%ls\n", LDTE64.DllBase, LDTE64.SizeOfImage, ProPath64);
-
-						}
-						if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), (PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(_LDR_DATA_TABLE_ENTRY64), NULL))) break;
-					}
-					status = Status::kOk;
 				}
 				else {
-					HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 					pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
-					PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
-
-					status = Status::kApiCallFailed;
-
-					if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
+					if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
 						break;
 					}
-
-					DWORD Ldr32 = 0;
-					LIST_ENTRY32 ListEntry32 = { 0 };
-					LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
-					wchar_t ProPath32[256];
-
-					if (!ReadProcessMemory(Get(), (PVOID)(pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32), NULL)) {
-						break;
-					}
-					if (!ReadProcessMemory(Get(), (PVOID)(Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(LIST_ENTRY32), NULL)) {
-						break;
-					}
-					if (!ReadProcessMemory(Get(), (PVOID)(ListEntry32.Flink), &LDTE32, sizeof(_LDR_DATA_TABLE_ENTRY32), NULL)) {
-						break;
-					}
-					while (1) {
-						if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
-						if (ReadProcessMemory(Get(), (PVOID)LDTE32.FullDllName.Buffer, ProPath32, sizeof(ProPath32), NULL)) {
-							// printf("模块基址:0x%X\t模块大小:0x%X\t模块路径:%ls\n", LDTE32.DllBase, LDTE32.SizeOfImage, ProPath32);
-						}
-						if (!ReadProcessMemory(Get(), (PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(_LDR_DATA_TABLE_ENTRY32), NULL)) break;
-					}
-					status = Status::kOk;
 				}
+
+				DWORD64 Ldr64 = 0;
+				LIST_ENTRY64 ListEntry64 = { 0 };
+				LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
+				wchar_t ProPath64[256];
+
+				if (!ReadMemory((PVOID64)(pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
+					break;
+				}
+				if (!ReadMemory((PVOID64)(Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
+					break;
+				}
+				if (!ReadMemory((PVOID64)(ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
+					break;
+				}
+
+				while (1) {
+					if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
+					if (ReadMemory((PVOID64)LDTE64.FullDllName.Buffer, ProPath64, sizeof(ProPath64))) {
+						// printf("模块基址:0x%llX\t模块大小:0x%X\t模块路径:%ls\n", LDTE64.DllBase, LDTE64.SizeOfImage, ProPath64);
+						moduleList.push_back(LDTE64);
+					}
+					if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+				}
+				
 			} while (false);
-			return status;
+			return moduleList;
+		}
+
+		bool FindModlueByModuleName32(const WCHAR* name, LDR_DATA_TABLE_ENTRY32* entry) {
+			std::wstring name_ = name;
+			for (auto& it : GetModuleList32()) {
+				std::vector<char> buf;
+				ReadMemory((PVOID64)it.BaseDllName.Buffer, &buf, it.BaseDllName.Length);
+				WCHAR* dllName = (WCHAR*)buf.data();
+				_wcsupr(dllName);
+				_wcsupr((LPWSTR)name_.c_str());
+				if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
+					if (entry) memcpy(&it, entry, sizeof(it));
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool FindModlueByModuleName64(const WCHAR* name, LDR_DATA_TABLE_ENTRY64* entry) {
+			std::wstring name_ = name;
+			auto moduleList = GetModuleList64();
+			for (auto& it : moduleList) {
+				std::vector<char> buf;
+				ReadMemory((PVOID64)it.BaseDllName.Buffer, &buf, it.BaseDllName.Length + 2);
+				WCHAR* dllName = (WCHAR*)buf.data();
+				_wcsupr(dllName);
+				_wcsupr((LPWSTR)name_.c_str());
+				if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
+					if (entry) memcpy(&it, entry, sizeof(it));
+					return true;
+				}
+			}
+			return false;
 		}
 
 
@@ -351,33 +462,32 @@ namespace geek {
 	public:
 		static bool CurIsX86() {
 			Process process;
-			bool res;
-			process.IsX86(&res);
-			return res;
+			return process.IsX86();
 		}
 
 		static DWORD GetProcessIdOfThread(HANDLE thread) {
-			return GetProcessIdOfThread(thread);
+			return ::GetProcessIdOfThread(thread);
 		}
 
-		static Status GetProcessList(std::vector<PROCESSENTRY32W>* processEntryList) {
+		static std::vector<PROCESSENTRY32W> GetProcessList() {
 			PROCESSENTRY32W pe32 = { 0 };
 			pe32.dwSize = sizeof(PROCESSENTRY32W);
+			std::vector<PROCESSENTRY32W> processEntryList;
+
 			UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
 			if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
-				return Status::kApiCallFailed;
+				return processEntryList;
 			}
 			do {
-				processEntryList->push_back(pe32);
+				processEntryList.push_back(pe32);
 			} while (Process32NextW(hProcessSnap.Get(), &pe32));
-			return Status::kOk;
+			return processEntryList;
 		}
 
 		static DWORD GetProcessIdByProcessName(const std::wstring& processName) {
-			std::vector<PROCESSENTRY32W> processEntryList;
-			auto status = GetProcessList(&processEntryList);
+			auto processEntryList = GetProcessList();
 			std::wstring processName_ = processName;
-			if (status != Status::kOk) {
+			if (processEntryList.empty()) {
 				return NULL;
 			}
 			for (auto& entry : processEntryList) {
@@ -392,4 +502,4 @@ namespace geek {
 
 } // namespace geek
 
-#endif // GEEK_PROCESS_H_
+#endif // GEEK_PROCESS_PROCESS_H_
