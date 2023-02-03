@@ -33,6 +33,7 @@ public:
 		uint64_t rcx;
 		uint64_t rax;
 
+		uint64_t forwardPage;
 		uint64_t retAddr;
 		uint64_t rsp;
 		uint64_t stack[];
@@ -48,6 +49,7 @@ public:
 		uint32_t ecx;
 		uint32_t eax;
 
+		uint32_t forwardPage;
 		uint32_t retAddr;
 		uint32_t esp;
 		uint32_t stack[];
@@ -70,7 +72,8 @@ public:
 	* 安装转发调用Hook
 	* 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
 	* x86要求instrLen>=5，x64要求instrLen>=14
-	* 自行注意堆栈平衡，push和pop顺序为  push esp -> push retAddr -> push xxx  call  pop xxx -> pop&save retAddr -> pop esp -> 执行原指令 -> get&push retAddr -> ret  
+	* 跨进程请关闭/GS(安全检查)，避免生成__security_cookie插入代码
+	* 如果需要修改rsp或者retAddr，注意堆栈平衡，push和pop顺序为  push esp -> push retAddr -> push xxx  call  pop xxx -> pop&save retAddr -> pop esp -> 执行原指令 -> get&push retAddr -> ret  
 	*/
 	bool Install(PVOID64 hookAddr, size_t instrLen, PVOID64 callback, bool execOldInstr = true) {
 		Uninstall();
@@ -88,7 +91,9 @@ public:
 
 		// 保存原指令
 		mOldInstr.resize(instrLen);
-		memcpy(mOldInstr.data(), hookAddr, instrLen);
+		if (!mProcess->ReadMemory(hookAddr, mOldInstr.data(), instrLen)) {
+			return false;
+		}
 		
 		std::vector<char> jmpInstr(instrLen);
 		bool res;
@@ -97,7 +102,6 @@ public:
 				return false;
 			}
 
-			
 			int i = 0;
 
 			forwardPageTemp[i++] = 0x54;		// push esp
@@ -107,6 +111,10 @@ public:
 			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)hookAddr + instrLen;
 			i += 4;
 
+			// push forwardPage
+			forwardPageTemp[i++] = 0x68;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint;
+			i += 4;
 
 
 			forwardPageTemp[i++] = 0x60;		// pushad
@@ -123,6 +131,12 @@ public:
 
 			forwardPageTemp[i++] = 0x9d;		// popfd
 			forwardPageTemp[i++] = 0x61;		// popad
+
+			
+			forwardPageTemp[i++] = 0x83;		// add esp, 4，跳过forwardPage
+			forwardPageTemp[i++] = 0xc4;
+			forwardPageTemp[i++] = 0x04;
+
 
 
 			// 在原指令执行前还原所有环境，包括压入的retAddr
@@ -208,6 +222,17 @@ public:
 			i += 4;
 
 
+			// push forwardPageLow
+			forwardPageTemp[i++] = 0x68;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint;
+			i += 4;
+			forwardPageTemp[i++] = 0xc7;		// mov dword ptr ss:[rsp+4], forwardPageHigh
+			forwardPageTemp[i++] = 0x44;
+			forwardPageTemp[i++] = 0x24;
+			forwardPageTemp[i++] = 0x04;
+			*(uint32_t*)&forwardPageTemp[i] = forwardPageUint >> 32;
+			i += 4;
+
 
 			forwardPageTemp[i++] = 0x50;		// push rax
 			forwardPageTemp[i++] = 0x51;		// push rcx
@@ -291,6 +316,13 @@ public:
 			forwardPageTemp[i++] = 0x5a;		// pop rdx
 			forwardPageTemp[i++] = 0x59;		// pop rcx
 			forwardPageTemp[i++] = 0x58;		// pop rax
+
+
+			forwardPageTemp[i++] = 0x48;		// add esp, 8，跳过forwardPage
+			forwardPageTemp[i++] = 0x83;
+			forwardPageTemp[i++] = 0xc4;
+			forwardPageTemp[i++] = 0x08;
+
 
 
 			// 在原指令执行前还原所有环境，包括压入的retAddr
@@ -396,6 +428,7 @@ public:
 		return jmpAddr_ - instrAddr_ - instrLen;
 	}
 
+#define EMITASM_GET_CURRENT_ADDR() 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05, 		// call next;    next: pop eax/rax;    add eax/rax, 5;
 };
 
 } // namespace geek

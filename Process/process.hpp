@@ -33,13 +33,13 @@ namespace geek {
 			mHandle = std::move(hProcess);
 		}
 
-		Status Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+		bool Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
 			auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
 			if (hProcess == NULL) {
-				return Status::kApiCallFailed;
+				return false;
 			}
 			mHandle = UniqueHandle(hProcess);
-			return Status::kOk;
+			return true;
 		}
 
 		/*
@@ -293,8 +293,11 @@ namespace geek {
 		*/
 		uint16_t BlockAddress(PVOID64 addr) {
 			uint16_t instr;
+			if (!ReadMemory(addr, &instr, 2)) {
+				return 0;
+			}
 			unsigned char jmpSelf[] = { 0xeb, 0xfe };
-			if (!WriteMemory(addr, &instr, 2, true)) {
+			if (!WriteMemory(addr, jmpSelf, 2, true)) {
 				return 0;
 			}
 			return instr;
@@ -532,6 +535,7 @@ namespace geek {
 		inline static WOW64 msWOW64;
 
 	public:
+
 		static bool CurIsX86() {
 			Process process;
 			return process.IsX86();
@@ -569,6 +573,19 @@ namespace geek {
 					return entry.th32ProcessID;
 			}
 			return NULL;
+		}
+
+		static bool Terminate(const std::wstring& processName) {
+			auto pid = GetProcessIdByProcessName(processName);
+			if (pid == 0) {
+				return false;
+			}
+			Process process;
+			if (!process.Open(pid)) {
+				return false;
+			}
+			process.Terminate(0);
+			return true;
 		}
 	};
 
