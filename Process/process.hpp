@@ -227,22 +227,24 @@ namespace geek {
 			return true;
 		}
 
-		bool ReadMemory(PVOID64 addr, std::vector<char>* buf, size_t len) {
-			buf->resize(len);
-			return ReadMemory(addr, buf->data(), len);
+		std::vector<char> ReadMemory(PVOID64 addr, size_t len) {
+			std::vector<char> buf;
+			buf.resize(len);
+			if (!ReadMemory(addr, buf.data(), len)) {
+				buf.clear();
+			}
+			return buf;
 		}
 
 		bool WriteMemory(PVOID64 addr, const void* buf, size_t len, bool force = false) {
-			if (this == nullptr) {
-				memcpy(addr, buf, len);
-				return true;
+			DWORD oldProtect;
+			if (force) {
+				if (!SetMemoryProtect(addr, len, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+					return false;
+				}
 			}
 			SIZE_T readByte;
 			bool success = true;
-			DWORD oldProtect;
-			if (force) {
-				SetMemoryProtect(addr, len, PAGE_EXECUTE_READWRITE, &oldProtect);
-			}
 			if (msWOW64.WOW64Operation(Get())) {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
@@ -252,7 +254,10 @@ namespace geek {
 				}
 			}
 			else {
-				if (!::WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
+				if (Get() == kCurrentProcess) {
+					memcpy(addr, buf, len);
+				}
+				else if (!::WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
 					success = false;
 				}
 			}
@@ -271,7 +276,7 @@ namespace geek {
 			return mem;
 		}
 
-		Status SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
+		bool SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
 			bool success = false;
 			if (msWOW64.WOW64Operation(Get())) {
 				success = msWOW64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
@@ -279,46 +284,114 @@ namespace geek {
 			else {
 				success = ::VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
 			}
-			if (!success) {
-				return Status::kApiCallFailed;
-			}
-			return Status::kOk;
+			return success;
 		}
 
+		
+		/*
+		* Run
+		*/
+		uint16_t BlockAddress(PVOID64 addr) {
+			uint16_t instr;
+			unsigned char jmpSelf[] = { 0xeb, 0xfe };
+			if (!WriteMemory(addr, &instr, 2, true)) {
+				return 0;
+			}
+			return instr;
+		}
+
+		bool ResumeBlockedAddress(PVOID64 addr, uint16_t instr) {
+			return WriteMemory(addr, &instr, 2, true);
+		}
 
 		/*
 		* Thread
 		*/
+		bool SuspendThread(HANDLE thread) {
+			return ::SuspendThread(thread);
+		}
+
+		bool ResumeThread(HANDLE thread) {
+			return ::ResumeThread(thread);
+		}
+
+		uint16_t BlockThread(HANDLE thread) {
+			if (!SuspendThread(thread)) {
+				return 0;
+			}
+			unsigned char jmpSelf[] = { 0xeb, 0xfe };
+			bool isX86;
+			auto contextBuf = GetThreadContext(thread, &isX86);
+			PVOID64 ip;
+			if (isX86) {
+				auto context = (_CONTEXT32*)contextBuf.data();
+				ip = (PVOID64)context->Eip;
+			} else {
+				auto context = (_CONTEXT64*)contextBuf.data();
+				ip = (PVOID64)context->Rip;
+			}
+			auto oldInstr = BlockAddress(ip);
+			ResumeThread(thread);
+			return oldInstr;
+		}
+
+		bool ResumeBlockedThread(HANDLE thread, uint16_t instr) {
+			if (!SuspendThread(thread)) {
+				return false;
+			}
+			uint16_t oldInstr;
+			bool isX86;
+			auto contextBuf = GetThreadContext(thread, &isX86);
+			PVOID64 ip;
+			if (isX86) {
+				auto context = (_CONTEXT32*)contextBuf.data();
+				ip = (PVOID64)context->Eip;
+			}
+			else {
+				auto context = (_CONTEXT64*)contextBuf.data();
+				ip = (PVOID64)context->Rip;
+			}
+			auto success = ResumeBlockedAddress(ip, instr);
+			ResumeThread(thread);
+			return success;
+		}
+		
+		
+
 		bool IsTheOwningThread(HANDLE thread) {
 			return GetProcessIdOfThread(thread) == GetId();
 		}
 
-		bool GetThreadContext(HANDLE thread, std::vector<char>* context, bool* isX86 = nullptr, DWORD flags = CONTEXT64_INTEGER) {
-			bool success = false;
+		std::vector<char> GetThreadContext(HANDLE thread, bool* isX86 = nullptr, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
+			std::vector<char> context;
+			bool success;
 			if (!IsTheOwningThread(thread)) {
-				return false;
+				return context;
 			}
 			if (msWOW64.WOW64Operation(Get())) {
-				context->resize(sizeof(_CONTEXT64));
-				((_CONTEXT64*)context->data())->ContextFlags = flags;
-				success = msWOW64.GetThreadContext64(thread, (_CONTEXT64*)context->data());
+				context.resize(sizeof(_CONTEXT64));
+				((_CONTEXT64*)context.data())->ContextFlags = flags;
+				success = msWOW64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
 				if (isX86) *isX86 = false;
 			}
 			else {
 				if (IsX86() && !CurIsX86()) {
 					if (isX86) *isX86 = true;
-					context->resize(sizeof(WOW64_CONTEXT));
-					((WOW64_CONTEXT*)context->data())->ContextFlags = flags;
-					success = ::Wow64GetThreadContext(thread, (PWOW64_CONTEXT)context->data());
+					context.resize(sizeof(WOW64_CONTEXT));
+					((WOW64_CONTEXT*)context.data())->ContextFlags = flags;
+					success = ::Wow64GetThreadContext(thread, (PWOW64_CONTEXT)context.data());
 				}
 				else {
 					if (isX86) *isX86 = false;
-					context->resize(sizeof(CONTEXT));
-					((CONTEXT*)context->data())->ContextFlags = flags;
-					success = ::GetThreadContext(thread, (LPCONTEXT)context->data());
+					context.resize(sizeof(CONTEXT));
+					((CONTEXT*)context.data())->ContextFlags = flags;
+					success = ::GetThreadContext(thread, (LPCONTEXT)context.data());
 				}
 			}
-			return success;
+			if (!success) {
+				context.clear();
+			}
+			return context;
 		}
 
 		/*
@@ -425,7 +498,7 @@ namespace geek {
 				_wcsupr(dllName);
 				_wcsupr((LPWSTR)name_.c_str());
 				if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
-					if (entry) memcpy(&it, entry, sizeof(it));
+					if (entry) memcpy(entry, &it, sizeof(it));
 					return true;
 				}
 			}
@@ -436,13 +509,12 @@ namespace geek {
 			std::wstring name_ = name;
 			auto moduleList = GetModuleList64();
 			for (auto& it : moduleList) {
-				std::vector<char> buf;
-				ReadMemory((PVOID64)it.BaseDllName.Buffer, &buf, it.BaseDllName.Length + 2);
+				auto buf = ReadMemory((PVOID64)it.BaseDllName.Buffer, it.BaseDllName.Length + 2);
 				WCHAR* dllName = (WCHAR*)buf.data();
 				_wcsupr(dllName);
 				_wcsupr((LPWSTR)name_.c_str());
 				if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
-					if (entry) memcpy(&it, entry, sizeof(it));
+					if (entry) memcpy(entry, &it, sizeof(it));
 					return true;
 				}
 			}
@@ -451,7 +523,7 @@ namespace geek {
 
 
 	public:
-		const HANDLE kCurrentProcess = (HANDLE)-1;
+		inline static const HANDLE kCurrentProcess = (HANDLE)-1;
 
 	private:
 		UniqueHandle mHandle;

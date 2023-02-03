@@ -472,6 +472,8 @@ struct _CONTEXT64
     DWORD64 LastExceptionFromRip;
 };
 
+typedef WOW64_CONTEXT _CONTEXT32;
+
 // Below defines for .ContextFlags field are taken from WinNT.h
 #ifndef CONTEXT_AMD64
 #define CONTEXT_AMD64 0x100000

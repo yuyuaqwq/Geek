@@ -30,53 +30,30 @@ public:
 
 
 public:
+	bool LoadModuleFromImage(void* buf_) {
+		IMAGE_SECTION_HEADER* sectionHeaderTable;
+		if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
+			return false;
+		}
+		auto buf = (char*)buf_;
+		mSectionHeaderTable.resize(mFileHeader->NumberOfSections);
+		mSectionList.resize(mFileHeader->NumberOfSections);
+		// 保存节区和头节区
+		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
+			mSectionHeaderTable[i] = sectionHeaderTable[i];
+			mSectionList[i].resize(mSectionHeaderTable[i].SizeOfRawData, 0);
+			memcpy(mSectionList[i].data(), &buf[mSectionHeaderTable[i].VirtualAddress], mSectionHeaderTable[i].SizeOfRawData);
+		}
+		return true;
+	}
+
 	bool LoadModuleFromFile(const std::wstring& path) {
 		File pe(path, std::ios::in | std::ios::binary);
 		auto buf = pe.Read();
-
-		mDosHeader = *(IMAGE_DOS_HEADER*)buf.data();
-		if (mDosHeader.e_magic != 'ZM') {		// 'MZ'
-			return false;
-		}
-		auto dosStubSize = mDosHeader.e_lfanew - sizeof(mDosHeader);
-		if (dosStubSize < 0) {
-			dosStubSize = 0;
-		}
-		mDosStub.resize(dosStubSize, 0);
-		memcpy(mDosStub.data(), &buf[sizeof(mDosHeader)], dosStubSize);
-
-		auto ntHeader = (IMAGE_NT_HEADERS32*)&buf[mDosHeader.e_lfanew];
-		if (ntHeader->Signature != 'EP') {		// 'PE'
-			return false;
-		}
-
-		
-
-		// 拷贝PE头
-		auto optionalHeader32 = &ntHeader->OptionalHeader;
-		if (optionalHeader32->Magic == 0x10b) {
-			mNtHeader = new IMAGE_NT_HEADERS32;
-			*mNtHeader = *ntHeader;
-		}
-		else if (optionalHeader32->Magic == 0x20b) {
-			mNtHeader = (IMAGE_NT_HEADERS32*)new IMAGE_NT_HEADERS64;
-			*(IMAGE_NT_HEADERS64*)mNtHeader = *(IMAGE_NT_HEADERS64*)ntHeader;
-		}
-		else {
-			return false;
-		}
-
-		mFileHeader = &mNtHeader->FileHeader;
-
-		auto optionalHeader = &mNtHeader->OptionalHeader;
 		IMAGE_SECTION_HEADER* sectionHeaderTable;
-		if (optionalHeader->Magic == 0x10b) {
-			sectionHeaderTable = (IMAGE_SECTION_HEADER*)(ntHeader + 1);
+		if (!CopyPEHeader(buf.data(), &sectionHeaderTable)) {
+			return false;
 		}
-		else {
-			sectionHeaderTable = (IMAGE_SECTION_HEADER*)((IMAGE_NT_HEADERS64*)ntHeader + 1);
-		}
-
 		mSectionHeaderTable.resize(mFileHeader->NumberOfSections);
 		mSectionList.resize(mFileHeader->NumberOfSections);
 		// 保存节区和头节区
@@ -210,6 +187,50 @@ private:
 	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) mNtHeader->OptionalHeader.##field = var; \
 	else if (mNtHeader->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)mNtHeader)->OptionalHeader.##field = var; \
 	else var = 0; } 
+
+	bool CopyPEHeader(void* buf_, IMAGE_SECTION_HEADER** sectionHeaderTable) {
+		auto buf = (char*)buf_;
+		mDosHeader = *(IMAGE_DOS_HEADER*)buf;
+		if (mDosHeader.e_magic != 'ZM') {		// 'MZ'
+			return false;
+		}
+		auto dosStubSize = mDosHeader.e_lfanew - sizeof(mDosHeader);
+		if (dosStubSize < 0) {
+			dosStubSize = 0;
+		}
+		mDosStub.resize(dosStubSize, 0);
+		memcpy(mDosStub.data(), &buf[sizeof(mDosHeader)], dosStubSize);
+
+		auto ntHeader = (IMAGE_NT_HEADERS32*)&buf[mDosHeader.e_lfanew];
+		if (ntHeader->Signature != 'EP') {		// 'PE'
+			return false;
+		}
+
+		// 拷贝PE头
+		auto optionalHeader32 = &ntHeader->OptionalHeader;
+		if (optionalHeader32->Magic == 0x10b) {
+			mNtHeader = new IMAGE_NT_HEADERS32;
+			*mNtHeader = *ntHeader;
+		}
+		else if (optionalHeader32->Magic == 0x20b) {
+			mNtHeader = (IMAGE_NT_HEADERS32*)new IMAGE_NT_HEADERS64;
+			*(IMAGE_NT_HEADERS64*)mNtHeader = *(IMAGE_NT_HEADERS64*)ntHeader;
+		}
+		else {
+			return false;
+		}
+
+		mFileHeader = &mNtHeader->FileHeader;
+
+		auto optionalHeader = &mNtHeader->OptionalHeader;
+		if (optionalHeader->Magic == 0x10b) {
+			*sectionHeaderTable = (IMAGE_SECTION_HEADER*)(ntHeader + 1);
+		}
+		else {
+			*sectionHeaderTable = (IMAGE_SECTION_HEADER*)((IMAGE_NT_HEADERS64*)ntHeader + 1);
+		}
+		return true;
+	}
 
 	inline uint32_t NarrowAlignment(uint32_t val, uint32_t alignval) noexcept {
 		return val - val % alignval;

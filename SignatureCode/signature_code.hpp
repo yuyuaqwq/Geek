@@ -167,25 +167,21 @@ private:
 				if (c == '&') {
 					offset = totalLength + tempSignatureElement.length;
 				}
-				else if (c == '*') {
-					if (i + 1 < hexStringData.length()) {
-						// 如果*号后面还有字符，将其视作重复次数
-						size_t countInt;
-						unsigned int lenInt = DecStringToUInt(&hexStringData[i] + 1, &countInt) - 1;
-						if (countInt) {
-							if (oldType == SignatureElementType::whole) {
-								if (tempSignatureElement.data.size() > 0) {
-									unsigned char repC = tempSignatureElement.data[tempSignatureElement.data.size() - 1];
-									for (size_t j = 0; j < lenInt; ++j) {
-										tempSignatureElement.data.push_back(repC);
-									}
-
-								}
+				else if (c == '*' && i + 1 < hexStringData.length()) {
+					// 如果*号后面还有字符，将其视作重复次数
+					size_t countInt;
+					unsigned int lenInt = DecStringToUInt(&hexStringData[i] + 1, &countInt) - 1;
+					if (countInt) {
+						if (oldType == SignatureElementType::whole && tempSignatureElement.data.size() > 0) {
+							unsigned char repC = tempSignatureElement.data[tempSignatureElement.data.size() - 1];
+							for (size_t j = 0; j < lenInt; ++j) {
+								tempSignatureElement.data.push_back(repC);
 							}
-							tempSignatureElement.length += lenInt;
-							i += countInt;
 						}
+						tempSignatureElement.length += lenInt;
+						i += countInt;
 					}
+						
 				}
 
 				// 无效字符，不需要检测类型
@@ -248,7 +244,6 @@ private:
 			++tempSignatureElement.length;
 		}
 
-
 		//有匹配单元，推入
 		if (tempSignatureElement.length > 0 || tempSignatureElement.data.size() > 0) {
 			tempSignatureElement.type = oldType;
@@ -258,9 +253,6 @@ private:
 
 		return totalLength;
 	}
-
-	
-
 
 private:
 	size_t m_offset;
