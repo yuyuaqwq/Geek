@@ -59,7 +59,7 @@ public:
 	typedef void (*HookCallback64)(uint64_t context);
 
 public:
-	explicit InlineHook(Process* tProcess = nullptr) : mProcess{ tProcess }, mHookAddr{ nullptr }, mJmpAddr{ nullptr }, mforwardPage{ nullptr }{
+	explicit InlineHook(Process* tProcess) : mProcess{ tProcess }, mHookAddr{ nullptr }, mJmpAddr{ nullptr }, mforwardPage{ nullptr }{
 		
 	}
 	~InlineHook() {

@@ -13,8 +13,6 @@
 
 namespace geek {
 
-
-
 	class Process {
 	public:
 		enum class Status {
@@ -182,6 +180,9 @@ namespace geek {
 
 		}
 
+		bool IsCur() const {
+			return Get() == kCurrentProcess;
+		}
 		
 		/*
 		* Memory

@@ -1,11 +1,15 @@
-#ifndef GEEK_SIGNATURE_CODE_H_
-#define GEEK_SIGNATURE_CODE_H_
+#ifndef GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
+#define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
 
 
 
 #include <string>
 #include <vector>
 
+#include <Geek/Process/Process.hpp>
+
+
+namespace geek{
 
 /*
 * 特征码类
@@ -13,9 +17,9 @@
 class SignatureCode {
 private:
 	enum class SignatureElementType {
-		none,
-		whole,
-		vague
+		kNone,
+		kWhole,
+		kVague
 	};
 
 	struct SignatureElement {
@@ -26,10 +30,8 @@ private:
 
 
 public:
-	SignatureCode() { }
-	SignatureCode(const std::string& hexStringData) {
-		m_offset = 0, StringToElement(hexStringData, m_signtureCode, m_offset);
-	}
+	SignatureCode() : m_process { nullptr } { }
+	explicit SignatureCode(Process* process) : m_process{ process } { }
 	~SignatureCode() { }
 
 public:
@@ -38,24 +40,36 @@ public:
 	* 限定大小查找特征码
 	*/
 
-	void* Search(const void* startAddress, size_t size, const std::string& hexStringData) {
+	PVOID64 Search(PVOID64 startAddress, size_t size, const std::string& hexStringData) {
 		std::vector<SignatureElement> signature;
 		size_t offset = 0, totalLength = StringToElement(hexStringData, signature, offset);
 
 		size_t SignatureSize = signature.size();
 		if (!SignatureSize) return nullptr;
 
+		std::vector<char> buf;
+		int64_t base = 0;
+		if (!m_process->IsCur()) {
+			buf = m_process->ReadMemory(startAddress, size);
+			if (buf.empty()) {
+				return nullptr;
+			}
+			PVOID64 newStartAddress = buf.data();
+			base = ((int64_t)startAddress - (int64_t)newStartAddress);
+			startAddress = newStartAddress;
+		}
+
 		for (size_t i = 0; i < size; ++i) {
-			unsigned char* currentPos = (unsigned char*)startAddress + i;
-			unsigned char* returnPos = (unsigned char*)currentPos;
+			uint64_t currentPos = (uint64_t)startAddress + i;
+			uint64_t returnPos = currentPos;
 			if (i + totalLength > size) break;
 			bool match = true;
 
 			for (size_t j = 0; j < SignatureSize; ++j) {
 				size_t length = signature[j].length;
 
-				if (signature[j].type == SignatureElementType::whole) {
-					int ret = memcmp_ex(currentPos, signature[j].data.data(), length);
+				if (signature[j].type == SignatureElementType::kWhole) {
+					int ret = memcmp_ex((void*)currentPos, signature[j].data.data(), length);
 					if (ret == 1) {
 						match = false;
 						break;
@@ -65,10 +79,10 @@ public:
 					}
 
 				}
-				currentPos = (unsigned char*)currentPos + length;
+				currentPos = currentPos + length;
 			}
 			if (match) {
-				return (unsigned char*)returnPos + offset;
+				return (PVOID)(base + returnPos + offset);
 			}
 
 		}
@@ -76,12 +90,11 @@ public:
 
 	}
 
-
 	/*
 	* 限定范围查找特征码
 	*/
-	void* Search(const void* startAddress, const void* endAddress, const std::string& hexStringData) {
-		return Search(startAddress, (size_t)endAddress - (size_t)startAddress + 1, hexStringData);
+	PVOID64 Search(PVOID64 startAddress, PVOID64 endAddress, const std::string& hexStringData) {
+		return Search(startAddress, (uint64_t)endAddress - (uint64_t)startAddress + 1, hexStringData);
 	}
 
 
@@ -141,7 +154,7 @@ private:
 		unsigned char sum = 0;
 		SignatureElement tempSignatureElement;
 		tempSignatureElement.length = 0;
-		SignatureElementType oldType = SignatureElementType::none, newType = SignatureElementType::none;
+		SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
 		size_t totalLength = 0;
 
 		//遍历字符
@@ -150,18 +163,18 @@ private:
 			bool validChar = true;
 			if (c >= 0x30 && c <= 0x39) {
 				c -= 0x30;
-				newType = SignatureElementType::whole;
+				newType = SignatureElementType::kWhole;
 			}
 			else if (c >= 0x41 && c <= 0x46) {
 				c = c - 0x37;
-				newType = SignatureElementType::whole;
+				newType = SignatureElementType::kWhole;
 			}
 			else if (c >= 0x61 && c <= 0x66) {
 				c = c - 0x57;
-				newType = SignatureElementType::whole;
+				newType = SignatureElementType::kWhole;
 			}
 			else if (c == '?') {
-				newType = SignatureElementType::vague;
+				newType = SignatureElementType::kVague;
 			}
 			else {
 				if (c == '&') {
@@ -172,7 +185,7 @@ private:
 					size_t countInt;
 					unsigned int lenInt = DecStringToUInt(&hexStringData[i] + 1, &countInt) - 1;
 					if (countInt) {
-						if (oldType == SignatureElementType::whole && tempSignatureElement.data.size() > 0) {
+						if (oldType == SignatureElementType::kWhole && tempSignatureElement.data.size() > 0) {
 							unsigned char repC = tempSignatureElement.data[tempSignatureElement.data.size() - 1];
 							for (size_t j = 0; j < lenInt; ++j) {
 								tempSignatureElement.data.push_back(repC);
@@ -189,7 +202,7 @@ private:
 				goto _PushChar;
 			}
 
-			if (oldType == SignatureElementType::none) {
+			if (oldType == SignatureElementType::kNone) {
 				// 如果旧类型未初始化，将新类型赋值给旧类型
 				oldType = newType;
 			}
@@ -207,7 +220,7 @@ private:
 
 		_PushChar:
 			// 如果原先类型是精确匹配，则添加字符
-			if (oldType == SignatureElementType::whole) {
+			if (oldType == SignatureElementType::kWhole) {
 				if (first && validChar) {
 					sum = c << 4;
 					first = false;
@@ -224,7 +237,7 @@ private:
 			}
 
 			// 模糊匹配，是第二个符号就直接递增长度
-			else if (oldType == SignatureElementType::vague) {
+			else if (oldType == SignatureElementType::kVague) {
 				if (first && validChar) {
 					first = false;
 				}
@@ -238,7 +251,7 @@ private:
 
 		//如果有未完成的字符，则推入
 		if (!first) {
-			if (oldType == SignatureElementType::whole) {
+			if (oldType == SignatureElementType::kWhole) {
 				tempSignatureElement.data.push_back(sum >> 4);
 			}
 			++tempSignatureElement.length;
@@ -256,9 +269,10 @@ private:
 
 private:
 	size_t m_offset;
-	std::vector<SignatureElement> m_signtureCode;
+	Process* m_process;
 
 };
 
+} // namespace geek
 
-#endif // GEEK_SIGNATURE_CODE_H_
+#endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
