@@ -39,7 +39,6 @@ public:
 	/*
 	* 限定大小查找特征码
 	*/
-
 	PVOID64 Search(PVOID64 startAddress, size_t size, const std::string& hexStringData) {
 		std::vector<SignatureElement> signature;
 		size_t offset = 0, totalLength = StringToElement(hexStringData, signature, offset);
@@ -96,7 +95,6 @@ public:
 	PVOID64 Search(PVOID64 startAddress, PVOID64 endAddress, const std::string& hexStringData) {
 		return Search(startAddress, (uint64_t)endAddress - (uint64_t)startAddress + 1, hexStringData);
 	}
-
 
 private:
 
