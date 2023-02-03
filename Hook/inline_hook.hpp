@@ -72,19 +72,23 @@ public:
 	* 安装转发调用Hook
 	* 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9
 	* x86要求instrLen>=5，x64要求instrLen>=14
+	* forwardPage是转发页面，至少需要0x1000，前0x1000不可覆写，可以指定较多的空间，便于交互数据
 	* 跨进程请关闭/GS(安全检查)，避免生成__security_cookie插入代码
 	* 如果需要修改rsp或者retAddr，注意堆栈平衡，push和pop顺序为  push esp -> push retAddr -> push xxx  call  pop xxx -> pop&save retAddr -> pop esp -> 执行原指令 -> get&push retAddr -> ret  
 	*/
-	bool Install(PVOID64 hookAddr, size_t instrLen, PVOID64 callback, bool execOldInstr = true) {
+	bool Install(PVOID64 hookAddr, size_t instrLen, PVOID64 callback, size_t forwardPageSize = 0x1000,bool execOldInstr = true) {
 		Uninstall();
-		
-		mforwardPage = mProcess->AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		if (forwardPageSize == 0) {
+			forwardPageSize = 0x1000;
+		}
+
+		mforwardPage = mProcess->AllocMemory(NULL, forwardPageSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (!mforwardPage) {
 			return false;
 		}
 		
 		// 处理转发页面指令
-		auto forwardPage = mProcess->ReadMemory(mforwardPage, 0x1000);
+		std::vector<char> forwardPage(forwardPageSize);
 		auto forwardPageTemp = forwardPage.data();
 
 		uint64_t forwardPageUint = (uint64_t)mforwardPage;
@@ -396,7 +400,7 @@ public:
 				jmpInstr[i] = 0x90;		// nop
 			}
 		}
-		mProcess->WriteMemory(mforwardPage, forwardPageTemp, 0x1000);
+		mProcess->WriteMemory(mforwardPage, forwardPageTemp, forwardPageSize);
 		mProcess->WriteMemory(hookAddr, &jmpInstr[0], instrLen, true);
 		return true;
 	}
