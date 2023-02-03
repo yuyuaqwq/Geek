@@ -81,8 +81,10 @@ public:
 		}
 		
 		// 处理转发页面指令
-		auto forwardPageVector = mProcess->ReadMemory(mforwardPage, 0x1000);
-		auto forwardPage = forwardPageVector.data();
+		auto forwardPage = mProcess->ReadMemory(mforwardPage, 0x1000);
+		auto forwardPageTemp = forwardPage.data();
+
+		uint64_t forwardPageUint = (uint64_t)mforwardPage;
 
 		// 保存原指令
 		mOldInstr.resize(instrLen);
@@ -98,76 +100,76 @@ public:
 			
 			int i = 0;
 
-			forwardPage[i++] = 0x54;		// push esp
+			forwardPageTemp[i++] = 0x54;		// push esp
 
 			// push hookAddr+instrLen
-			forwardPage[i++] = 0x68;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)hookAddr + instrLen;
+			forwardPageTemp[i++] = 0x68;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)hookAddr + instrLen;
 			i += 4;
 
 
 
-			forwardPage[i++] = 0x60;		// pushad
-			forwardPage[i++] = 0x9c;		// pushfd
+			forwardPageTemp[i++] = 0x60;		// pushad
+			forwardPageTemp[i++] = 0x9c;		// pushfd
 
 			// 传递参数
-			forwardPage[i++] = 0x54;		// push esp
+			forwardPageTemp[i++] = 0x54;		// push esp
 
-			forwardPage[i++] = 0xe8;		// call callback
-			*(uint32_t*)&forwardPage[i] = GetJmpOffset(forwardPage + i - 1, 5, callback);
+			forwardPageTemp[i++] = 0xe8;		// call callback
+			*(uint32_t*)&forwardPageTemp[i] = GetJmpOffset((PVOID64)(forwardPageUint + i - 1), 5, callback);
 			i += 4;
 
-			forwardPage[i++] = 0x5c;		// pop esp
+			forwardPageTemp[i++] = 0x5c;		// pop esp
 
-			forwardPage[i++] = 0x9d;		// popfd
-			forwardPage[i++] = 0x61;		// popad
+			forwardPageTemp[i++] = 0x9d;		// popfd
+			forwardPageTemp[i++] = 0x61;		// popad
 
 
-			// 在原指令执行前还原所有环境，包括压入的retAddr，以及设置在callback中修改的esp
+			// 在原指令执行前还原所有环境，包括压入的retAddr
 			// 要用eax，先存到内存里
 			// mov [forwardPage + 0x1000 - 4], eax
-			forwardPage[i++] = 0xa3;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 4;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 4;
 			i += 4;
 
 			// 接下来把retAddr存到内存里
-			forwardPage[i++] = 0x58;		// pop eax，弹出压入的retAddr
+			forwardPageTemp[i++] = 0x58;		// pop eax，弹出压入的retAddr
 			// mov [forwardPage + 0x1000 - 8], eax
-			forwardPage[i++] = 0xa3;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 8;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 8;
 			i += 4;
 
 			// mov eax, [forwardPage + 0x1000 - 4]，恢复eax
-			forwardPage[i++] = 0xa1;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 4;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 4;
 			i += 4;
 
 			// 在执行前设置esp
-			forwardPage[i++] = 0x5c;		// pop esp，弹出压入的esp
+			forwardPageTemp[i++] = 0x5c;		// pop esp，弹出压入的esp
 
 			if (execOldInstr) {
 				// 执行原指令
-				memcpy(&forwardPage[i], mOldInstr.data(), mOldInstr.size());
+				memcpy(&forwardPageTemp[i], mOldInstr.data(), mOldInstr.size());
 				i += mOldInstr.size();
 			}
 
 			// 恢复retAddr环境
 			// mov [forwardPage + 0x1000 - 4], eax，还是先保存eax
-			forwardPage[i++] = 0xa3;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 4;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 4;
 			i += 4;
 
 
 			// mov eax, [forwardPage + 0x1000 - 8]，保存的retAddr
-			forwardPage[i++] = 0xa1;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 8;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 8;
 			i += 4;
 			// push eax
-			forwardPage[i++] = 0x50;
+			forwardPageTemp[i++] = 0x50;
 
 			// mov eax, [forwardPage + 0x1000 - 4]，恢复eax
-			forwardPage[i++] = 0xa1;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 4;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint32_t*)&forwardPageTemp[i] = (uint32_t)forwardPageUint + 0x1000 - 4;
 			i += 4;
 
 
@@ -175,7 +177,7 @@ public:
 			//forwardPage[i++] = 0xe9;		// jmp 
 			//*(uint32_t*)&forwardPage[i] = GetJmpOffset(forwardPage + i - 1, 5, (char*)hookAddr + instrLen);
 			
-			forwardPage[i++] = 0xc3;		// ret
+			forwardPageTemp[i++] = 0xc3;		// ret
 
 			// 为目标地址挂hook
 			jmpInstr[0] = 0xe9;		// jmp
@@ -192,154 +194,177 @@ public:
 
 			int i = 0;
 
-			forwardPage[i++] = 0x54;		// push rsp
+			forwardPageTemp[i++] = 0x54;		// push rsp
 
 			// 提前压入转回地址，以便HookCallback能够修改
-			forwardPage[i++] = 0x68;		// push lowAddr
-			*(uint32_t*)&forwardPage[i] = ((uint64_t)hookAddr + instrLen) & 0xffffffff;
+			forwardPageTemp[i++] = 0x68;		// push lowAddr
+			*(uint32_t*)&forwardPageTemp[i] = ((uint64_t)hookAddr + instrLen) & 0xffffffff;
 			i += 4;
-			forwardPage[i++] = 0xc7;		// mov dword ptr ss:[rsp+4], highAddr
-			forwardPage[i++] = 0x44;
-			forwardPage[i++] = 0x24;
-			forwardPage[i++] = 0x04;
-			*(uint32_t*)&forwardPage[i] = ((uint64_t)hookAddr + instrLen) >> 32;
+			forwardPageTemp[i++] = 0xc7;		// mov dword ptr ss:[rsp+4], highAddr
+			forwardPageTemp[i++] = 0x44;
+			forwardPageTemp[i++] = 0x24;
+			forwardPageTemp[i++] = 0x04;
+			*(uint32_t*)&forwardPageTemp[i] = ((uint64_t)hookAddr + instrLen) >> 32;
 			i += 4;
 
 
 
-			forwardPage[i++] = 0x50;		// push rax
-			forwardPage[i++] = 0x51;		// push rcx
-			forwardPage[i++] = 0x52;		// push rdx
-			forwardPage[i++] = 0x53;		// push rbx
-			forwardPage[i++] = 0x54;		// push rsp
-			forwardPage[i++] = 0x55;		// push rbp
-			forwardPage[i++] = 0x56;		// push rsi
-			forwardPage[i++] = 0x57;		// push rdi
-			forwardPage[i++] = 0x41;		// push r8
-			forwardPage[i++] = 0x50;
-			forwardPage[i++] = 0x41;		// push r9
-			forwardPage[i++] = 0x51;
-			forwardPage[i++] = 0x41;		// push r10
-			forwardPage[i++] = 0x52;
-			forwardPage[i++] = 0x41;		// push r11
-			forwardPage[i++] = 0x53;
-			forwardPage[i++] = 0x41;		// push r12
-			forwardPage[i++] = 0x54;
-			forwardPage[i++] = 0x41;		// push r13
-			forwardPage[i++] = 0x55;
-			forwardPage[i++] = 0x41;		// push r14
-			forwardPage[i++] = 0x56;
-			forwardPage[i++] = 0x41;		// push r15
-			forwardPage[i++] = 0x57;
-			forwardPage[i++] = 0x9c;		// pushfq
+			forwardPageTemp[i++] = 0x50;		// push rax
+			forwardPageTemp[i++] = 0x51;		// push rcx
+			forwardPageTemp[i++] = 0x52;		// push rdx
+			forwardPageTemp[i++] = 0x53;		// push rbx
+			forwardPageTemp[i++] = 0x54;		// push rsp
+			forwardPageTemp[i++] = 0x55;		// push rbp
+			forwardPageTemp[i++] = 0x56;		// push rsi
+			forwardPageTemp[i++] = 0x57;		// push rdi
+			forwardPageTemp[i++] = 0x41;		// push r8
+			forwardPageTemp[i++] = 0x50;
+			forwardPageTemp[i++] = 0x41;		// push r9
+			forwardPageTemp[i++] = 0x51;
+			forwardPageTemp[i++] = 0x41;		// push r10
+			forwardPageTemp[i++] = 0x52;
+			forwardPageTemp[i++] = 0x41;		// push r11
+			forwardPageTemp[i++] = 0x53;
+			forwardPageTemp[i++] = 0x41;		// push r12
+			forwardPageTemp[i++] = 0x54;
+			forwardPageTemp[i++] = 0x41;		// push r13
+			forwardPageTemp[i++] = 0x55;
+			forwardPageTemp[i++] = 0x41;		// push r14
+			forwardPageTemp[i++] = 0x56;
+			forwardPageTemp[i++] = 0x41;		// push r15
+			forwardPageTemp[i++] = 0x57;
+			forwardPageTemp[i++] = 0x9c;		// pushfq
 
 
 			// 遵循x64调用约定，为当前函数的使用提前分配栈空间
-			forwardPage[i++] = 0x48;		// sub rsp, 20
-			forwardPage[i++] = 0x83;
-			forwardPage[i++] = 0xec;
-			forwardPage[i++] = 0x20;
+			forwardPageTemp[i++] = 0x48;		// sub rsp, 20
+			forwardPageTemp[i++] = 0x83;
+			forwardPageTemp[i++] = 0xec;
+			forwardPageTemp[i++] = 0x20;
 
 			// 传递参数
-			forwardPage[i++] = 0x48;		// lea rcx, [rsp+20]
-			forwardPage[i++] = 0x8d;
-			forwardPage[i++] = 0x4c;
-			forwardPage[i++] = 0x24;
-			forwardPage[i++] = 0x20;
+			forwardPageTemp[i++] = 0x48;		// lea rcx, [rsp+20]
+			forwardPageTemp[i++] = 0x8d;
+			forwardPageTemp[i++] = 0x4c;
+			forwardPageTemp[i++] = 0x24;
+			forwardPageTemp[i++] = 0x20;
 
 
 
-			forwardPage[i++] = 0x48;		// mov rax, addr
-			forwardPage[i++] = 0xb8;
-			*(uint64_t*)&forwardPage[i] = (uint64_t)callback;
+			forwardPageTemp[i++] = 0x48;		// mov rax, addr
+			forwardPageTemp[i++] = 0xb8;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)callback;
 			i += 8;
 
-			forwardPage[i++] = 0xff;		// call rax
-			forwardPage[i++] = 0xd0;
+			forwardPageTemp[i++] = 0xff;		// call rax
+			forwardPageTemp[i++] = 0xd0;
 
 			// 回收栈空间
-			forwardPage[i++] = 0x48;		// add rsp, 20
-			forwardPage[i++] = 0x83;
-			forwardPage[i++] = 0xc4;
-			forwardPage[i++] = 0x20;
+			forwardPageTemp[i++] = 0x48;		// add rsp, 20
+			forwardPageTemp[i++] = 0x83;
+			forwardPageTemp[i++] = 0xc4;
+			forwardPageTemp[i++] = 0x20;
 
 
-			forwardPage[i++] = 0x9d;		// popfq
-			forwardPage[i++] = 0x41;		// pop r15
-			forwardPage[i++] = 0x5f;
-			forwardPage[i++] = 0x41;		// pop r14
-			forwardPage[i++] = 0x5e;
-			forwardPage[i++] = 0x41;		// pop r13
-			forwardPage[i++] = 0x5d;
-			forwardPage[i++] = 0x41;		// pop r12
-			forwardPage[i++] = 0x5c;
-			forwardPage[i++] = 0x41;		// pop r11
-			forwardPage[i++] = 0x5b;
-			forwardPage[i++] = 0x41;		// pop r10
-			forwardPage[i++] = 0x5a;
-			forwardPage[i++] = 0x41;		// pop r9
-			forwardPage[i++] = 0x59;
-			forwardPage[i++] = 0x41;		// pop r8
-			forwardPage[i++] = 0x58;
-			forwardPage[i++] = 0x5f;		// pop rdi
-			forwardPage[i++] = 0x5e;		// pop rsi
-			forwardPage[i++] = 0x5d;		// pop rbp
-			forwardPage[i++] = 0x5c;		// pop rsp
-			forwardPage[i++] = 0x5b;		// pop rbx
-			forwardPage[i++] = 0x5a;		// pop rdx
-			forwardPage[i++] = 0x59;		// pop rcx
-			forwardPage[i++] = 0x58;		// pop rax
+			forwardPageTemp[i++] = 0x9d;		// popfq
+			forwardPageTemp[i++] = 0x41;		// pop r15
+			forwardPageTemp[i++] = 0x5f;
+			forwardPageTemp[i++] = 0x41;		// pop r14
+			forwardPageTemp[i++] = 0x5e;
+			forwardPageTemp[i++] = 0x41;		// pop r13
+			forwardPageTemp[i++] = 0x5d;
+			forwardPageTemp[i++] = 0x41;		// pop r12
+			forwardPageTemp[i++] = 0x5c;
+			forwardPageTemp[i++] = 0x41;		// pop r11
+			forwardPageTemp[i++] = 0x5b;
+			forwardPageTemp[i++] = 0x41;		// pop r10
+			forwardPageTemp[i++] = 0x5a;
+			forwardPageTemp[i++] = 0x41;		// pop r9
+			forwardPageTemp[i++] = 0x59;
+			forwardPageTemp[i++] = 0x41;		// pop r8
+			forwardPageTemp[i++] = 0x58;
+			forwardPageTemp[i++] = 0x5f;		// pop rdi
+			forwardPageTemp[i++] = 0x5e;		// pop rsi
+			forwardPageTemp[i++] = 0x5d;		// pop rbp
+			forwardPageTemp[i++] = 0x5c;		// pop rsp
+			forwardPageTemp[i++] = 0x5b;		// pop rbx
+			forwardPageTemp[i++] = 0x5a;		// pop rdx
+			forwardPageTemp[i++] = 0x59;		// pop rcx
+			forwardPageTemp[i++] = 0x58;		// pop rax
 
 
-			// 在原指令执行前还原所有环境，包括压入的retAddr，以及设置在callback中修改的rsp
+			// 在原指令执行前还原所有环境，包括压入的retAddr
 			// 要用rax，先存到内存里
-			// mov [forwardPage + 0x1000 - 4], rax
-			forwardPage[i++] = 0xa3;
-			*(uint64_t*)&forwardPage[i] = (uint64_t)forwardPage + 0x1000 - 4;
+			// mov [forwardPage + 0x1000 - 8], rax
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 8;
 			i += 8;
 
 			// 接下来把retAddr存到内存里
-			forwardPage[i++] = 0x58;		// pop eax，弹出压入的retAddr
-			// mov [forwardPage + 0x1000 - 8], eax
-			forwardPage[i++] = 0xa3;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 8;
-			i += 4;
+			forwardPageTemp[i++] = 0x58;		// pop rax，弹出压入的retAddr
+			// mov [forwardPage + 0x1000 - 16], rax
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 16;
+			i += 8;
 
-			// mov eax, [forwardPage + 0x1000 - 4]，恢复eax
-			forwardPage[i++] = 0xa1;
-			*(uint32_t*)&forwardPage[i] = (uint32_t)forwardPage + 0x1000 - 4;
-			i += 4;
+			// mov rax, [forwardPage + 0x1000 - 8]，恢复rax
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 8;
+			i += 8;
 
-			// 在执行前设置esp
-			forwardPage[i++] = 0x5c;		// pop esp，弹出压入的esp
-
-
+			// 在执行前设置rsp
+			forwardPageTemp[i++] = 0x5c;		// pop rsp，弹出压入的esp
 
 			if (execOldInstr) {
 				// 执行原指令
-				memcpy(&forwardPage[i], mOldInstr.data(), mOldInstr.size());
+				memcpy(&forwardPageTemp[i], mOldInstr.data(), mOldInstr.size());
 				i += mOldInstr.size();
 			}
 
+
+			// 恢复retAddr环境
+			// mov [forwardPage + 0x1000 - 8], rax，还是先保存eax
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa3;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 8;
+			i += 8;
+
+			// mov rax, [forwardPage + 0x1000 - 16]，保存的retAddr
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 16;
+			i += 8;
+			// push rax
+			forwardPageTemp[i++] = 0x50;
+
+			// mov rax, [forwardPage + 0x1000 - 8]，恢复eax
+			forwardPageTemp[i++] = 0x48;
+			forwardPageTemp[i++] = 0xa1;
+			*(uint64_t*)&forwardPageTemp[i] = (uint64_t)forwardPageUint + 0x1000 - 8;
+			i += 8;
+
 			// 转回去继续执行
-			forwardPage[i++] = 0xc3;		// ret
+			forwardPageTemp[i++] = 0xc3;		// ret
 
 
 			// 为目标地址挂hook
 			jmpInstr[0] = 0x68;		// push lowAddr
-			*(uint32_t*)&jmpInstr[1] = (uint64_t)forwardPage & 0xffffffff;
+			*(uint32_t*)&jmpInstr[1] = (uint64_t)forwardPageUint & 0xffffffff;
 			jmpInstr[5] = 0xc7;		// mov dword ptr ss:[rsp+4], highAddr
 			jmpInstr[6] = 0x44;
 			jmpInstr[7] = 0x24;
 			jmpInstr[8] = 0x04;
-			*(uint32_t*)&jmpInstr[9] = (uint64_t)forwardPage >> 32;
+			*(uint32_t*)&jmpInstr[9] = (uint64_t)forwardPageUint >> 32;
 			jmpInstr[13] = 0xc3;		// ret
 
 			for (int i = 14; i < instrLen; i++) {
 				jmpInstr[i] = 0x90;		// nop
 			}
 		}
-		mProcess->WriteMemory(mforwardPage, forwardPage, 0x1000);
+		mProcess->WriteMemory(mforwardPage, forwardPageTemp, 0x1000);
 		mProcess->WriteMemory(hookAddr, &jmpInstr[0], instrLen, true);
 		return true;
 	}
