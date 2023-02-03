@@ -1,20 +1,20 @@
-#ifndef GEEK_WOW64EXT_WOW64EXT_H_
-#define GEEK_WOW64EXT_WOW64EXT_H_
+#ifndef GEEK_Wow64EXT_Wow64EXT_H_
+#define GEEK_Wow64EXT_Wow64EXT_H_
 
 #include <Windows.h>
 
-#include <Geek/wow64ext/internal.h>
-#include <Geek/wow64ext/wow64ext.h>
+#include <Geek/Wow64ext/internal.h>
+#include <Geek/Wow64ext/Wow64ext.h>
 
 /*
-* https://github.com/rwfpl/rewolf-wow64ext
+* https://github.com/rwfpl/rewolf-Wow64ext
 */
 
 namespace geek {
 
-class WOW64 {
+class Wow64 {
 public:
-    static bool WOW64Operation(HANDLE hProcess) {
+    static bool Wow64Operation(HANDLE hProcess) {
         BOOL source, target;
         IsWow64Process(GetCurrentProcess(), &source);
         IsWow64Process(hProcess, &target);
@@ -33,7 +33,7 @@ public:
 
 public:
 
-    WOW64() {
+    Wow64() {
         Wow64ExtInit();
     }
 
@@ -508,7 +508,7 @@ public:
         reg.v = 0;
 
         X64_Start();
-        // R12 register should always contain pointer to TEB64 in WoW64 processes
+        // R12 register should always contain pointer to TEB64 in Wow64 processes
         X64_Push(_R12);
         // below pop will pop QWORD from stack, as we're in x64 mode now
         __asm pop reg.dw[0]
@@ -582,4 +582,4 @@ private:
 
 }
 
-#endif // GEEK_WOW64EXT_WOW64EXT_H_
+#endif // GEEK_Wow64EXT_Wow64EXT_H_

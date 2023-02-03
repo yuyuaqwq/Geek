@@ -187,8 +187,8 @@ namespace geek {
 		* Memory
 		*/
 		PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
-			if (msWOW64.WOW64Operation(Get())) {
-				return (PVOID64)msWOW64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
+			if (msWow64.Wow64Operation(Get())) {
+				return (PVOID64)msWow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
 			}
 			return VirtualAllocEx(Get(), addr, len, type, protect);
 		}
@@ -198,8 +198,8 @@ namespace geek {
 		}
 
 		bool FreeMemory(PVOID64 addr, size_t size = 0, DWORD type = MEM_RELEASE) {
-			if (msWOW64.WOW64Operation(Get())) {
-				return msWOW64.VirtualFreeEx64(Get(), (DWORD64)addr, size, type);
+			if (msWow64.Wow64Operation(Get())) {
+				return msWow64.VirtualFreeEx64(Get(), (DWORD64)addr, size, type);
 			}
 			return VirtualFreeEx(Get(), addr, size, type);
 		}
@@ -211,7 +211,7 @@ namespace geek {
 			}
 			SIZE_T readByte;
 
-			if (msWOW64.WOW64Operation(Get())) {
+			if (msWow64.Wow64Operation(Get())) {
 				HMODULE NtdllModule = ::GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)::GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");
 				if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), addr, buf, len, NULL))) {
@@ -245,7 +245,7 @@ namespace geek {
 			}
 			SIZE_T readByte;
 			bool success = true;
-			if (msWOW64.WOW64Operation(Get())) {
+			if (msWow64.Wow64Operation(Get())) {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 				pfnNtWow64WriteVirtualMemory64 NtWow64WriteVirtualMemory64 = (pfnNtWow64WriteVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64WriteVirtualMemory64");
@@ -278,8 +278,8 @@ namespace geek {
 
 		bool SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
 			bool success = false;
-			if (msWOW64.WOW64Operation(Get())) {
-				success = msWOW64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
+			if (msWow64.Wow64Operation(Get())) {
+				success = msWow64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
 			}
 			else {
 				success = ::VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
@@ -371,10 +371,10 @@ namespace geek {
 			if (!IsTheOwningThread(thread)) {
 				return context;
 			}
-			if (msWOW64.WOW64Operation(Get())) {
+			if (msWow64.Wow64Operation(Get())) {
 				context.resize(sizeof(_CONTEXT64));
 				((_CONTEXT64*)context.data())->ContextFlags = flags;
-				success = msWOW64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
+				success = msWow64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
 				if (isX86) *isX86 = false;
 			}
 			else {
@@ -451,7 +451,7 @@ namespace geek {
 			do {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
-				if (msWOW64.WOW64Operation(Get())) {
+				if (msWow64.Wow64Operation(Get())) {
 					pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 					if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
 						break;
@@ -532,7 +532,7 @@ namespace geek {
 		UniqueHandle mHandle;
 
 	private:
-		inline static WOW64 msWOW64;
+		inline static Wow64 msWow64;
 
 	public:
 
