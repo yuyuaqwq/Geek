@@ -225,7 +225,7 @@ private:
 				}
 				else if (!first) {
 					first = true;
-					// 如果是无效字符，说明玩家并未提供连续的两个有效字符，将修正第一个有效字符的值
+					// 如果是无效字符，说明调用者并未提供连续的两个有效字符，将修正第一个有效字符的值
 					validChar ? sum += c : sum >>= 4;
 					tempSignatureElement.data.push_back(sum);
 					++tempSignatureElement.length;
