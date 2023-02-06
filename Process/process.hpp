@@ -292,7 +292,7 @@ namespace geek {
 		/*
 		* Run
 		*/
-		uint16_t BlockAddress(PVOID64 addr) {
+		uint16_t LockAddress(PVOID64 addr) {
 			uint16_t instr;
 			if (!ReadMemory(addr, &instr, 2)) {
 				return 0;
@@ -304,7 +304,7 @@ namespace geek {
 			return instr;
 		}
 
-		bool ResumeBlockedAddress(PVOID64 addr, uint16_t instr) {
+		bool UnlockAddress(PVOID64 addr, uint16_t instr) {
 			return WriteMemory(addr, &instr, 2, true);
 		}
 
@@ -334,7 +334,7 @@ namespace geek {
 				auto context = (_CONTEXT64*)contextBuf.data();
 				ip = (PVOID64)context->Rip;
 			}
-			auto oldInstr = BlockAddress(ip);
+			auto oldInstr = LockAddress(ip);
 			ResumeThread(thread);
 			return oldInstr;
 		}
@@ -355,7 +355,7 @@ namespace geek {
 				auto context = (_CONTEXT64*)contextBuf.data();
 				ip = (PVOID64)context->Rip;
 			}
-			auto success = ResumeBlockedAddress(ip, instr);
+			auto success = UnlockAddress(ip, instr);
 			ResumeThread(thread);
 			return success;
 		}

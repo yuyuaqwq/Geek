@@ -409,13 +409,16 @@ public:
 	* 卸载Hook
 	*/
 	void Uninstall() {
-		if (mforwardPage) {
-			mProcess->FreeMemory(mforwardPage);
-		}
 		if (mHookAddr) {
 			mProcess->WriteMemory(mHookAddr, mOldInstr.data(), mOldInstr.size(), true);
 		}
-		
+		if (mforwardPage) {
+			mProcess->FreeMemory(mforwardPage);
+		}
+	}
+
+	PVOID64 GetForwardPage() {
+		return mforwardPage;
 	}
 
 private:
@@ -433,6 +436,17 @@ public:
 	}
 
 #define EMITASM_GET_CURRENT_ADDR() 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05, 		// call next;    next: pop eax/rax;    add eax/rax, 5;
+
+	/* 定位kernel32
+	mov eax, dword ptr fs : [30h]   ;指向PEB结构
+    mov eax, dword ptr[eax + 0Ch]   ;指向LDR Ptr32 _PEB_LDR_DATA
+    mov eax, dword ptr[eax + 0Ch]   ;指向InLoadOrderModuleList _LIST_ENTRY
+    mov eax, dword ptr[eax]         ;移动_LIST_ENTRY
+    mov eax, dword ptr[eax]         ;指向Kernel32
+    mov eax, dword ptr[eax + 18h]   ;指向DllBase基址
+    ret
+	*/
+
 };
 
 } // namespace geek
