@@ -38,18 +38,18 @@ public:
     }
 
     static void* Wow64Malloc(size_t size) {
-        return HeapAlloc(msHeap, 0, size);
+        return HeapAlloc(ms_heap, 0, size);
     }
 
     static void Wow64Free(void* ptr) {
         if (nullptr != ptr)
-            HeapFree(msHeap, 0, ptr);
+            HeapFree(ms_heap, 0, ptr);
     }
 
     static VOID __cdecl Wow64ExtInit() {
-        if (msHeap == NULL) {
-            ::IsWow64Process(GetCurrentProcess(), &msIsWow64);
-            msHeap = GetProcessHeap();
+        if (ms_heap == NULL) {
+            ::IsWow64Process(GetCurrentProcess(), &ms_is_wow64);
+            ms_heap = GetProcessHeap();
         }
     }
 
@@ -57,7 +57,7 @@ public:
 #ifdef _WIN64
         return 0;
 #else
-        if (!msIsWow64)
+        if (!ms_is_wow64)
             return 0;
 
         va_list args;
@@ -160,7 +160,7 @@ public:
     }
 
     static DWORD64 __cdecl GetModuleHandle64(const wchar_t* lpModuleName) {
-        if (!msIsWow64)
+        if (!ms_is_wow64)
             return 0;
 
         TEB64 teb64;
@@ -576,8 +576,8 @@ public:
     }
 
 private:
-    inline static HANDLE msHeap = NULL;
-    inline static BOOL msIsWow64 = FALSE;
+    inline static HANDLE ms_heap = NULL;
+    inline static BOOL ms_is_wow64 = FALSE;
 };
 
 }

@@ -2,11 +2,10 @@
 #define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
 
 
-
 #include <string>
 #include <vector>
 
-#include <Geek/Process/Process.hpp>
+#include <Geek/Process/process.hpp>
 
 
 namespace geek{
@@ -39,36 +38,36 @@ public:
 	/*
 	* 限定大小查找特征码
 	*/
-	PVOID64 Search(PVOID64 startAddress, size_t size, const std::string& hexStringData) {
+	PVOID64 Search(PVOID64 start_address, size_t size, const std::string& hex_string_data) {
 		std::vector<SignatureElement> signature;
-		size_t offset = 0, totalLength = StringToElement(hexStringData, signature, offset);
+		size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 
-		size_t SignatureSize = signature.size();
-		if (!SignatureSize) return nullptr;
+		size_t signature_size = signature.size();
+		if (!signature_size) return nullptr;
 
 		std::vector<char> buf;
 		int64_t base = 0;
 		if (!m_process->IsCur()) {
-			buf = m_process->ReadMemory(startAddress, size);
+			buf = m_process->ReadMemory(start_address, size);
 			if (buf.empty()) {
 				return nullptr;
 			}
-			PVOID64 newStartAddress = buf.data();
-			base = ((int64_t)startAddress - (int64_t)newStartAddress);
-			startAddress = newStartAddress;
+			PVOID64 new_start_address = buf.data();
+			base = ((int64_t)start_address - (int64_t)new_start_address);
+			start_address = new_start_address;
 		}
 
 		for (size_t i = 0; i < size; ++i) {
-			uint64_t currentPos = (uint64_t)startAddress + i;
-			uint64_t returnPos = currentPos;
-			if (i + totalLength > size) break;
+			uint64_t cur_pos = (uint64_t)start_address + i;
+			uint64_t ret_pos = cur_pos;
+			if (i + total_len > size) break;
 			bool match = true;
 
-			for (size_t j = 0; j < SignatureSize; ++j) {
+			for (size_t j = 0; j < signature_size; ++j) {
 				size_t length = signature[j].length;
 
 				if (signature[j].type == SignatureElementType::kWhole) {
-					int ret = memcmp_ex((void*)currentPos, signature[j].data.data(), length);
+					int ret = memcmp_ex((void*)cur_pos, signature[j].data.data(), length);
 					if (ret == 1) {
 						match = false;
 						break;
@@ -78,10 +77,10 @@ public:
 					}
 
 				}
-				currentPos = currentPos + length;
+				cur_pos = cur_pos + length;
 			}
 			if (match) {
-				return (PVOID)(base + returnPos + offset);
+				return (PVOID64)(base + ret_pos + offset);
 			}
 
 		}
@@ -92,13 +91,13 @@ public:
 	/*
 	* 限定范围查找特征码
 	*/
-	PVOID64 Search(PVOID64 startAddress, PVOID64 endAddress, const std::string& hexStringData) {
-		return Search(startAddress, (uint64_t)endAddress - (uint64_t)startAddress + 1, hexStringData);
+	PVOID64 Search(PVOID64 start_address, PVOID64 end_address, const std::string& hex_string_data) {
+		return Search(start_address, (uint64_t)end_address - (uint64_t)start_address + 1, hex_string_data);
 	}
 
 private:
 
-	static unsigned int DecStringToUInt(const std::string& str, size_t* i = nullptr, const unsigned char* endCharArr = nullptr, size_t endCharArrSize = 0) {
+	static unsigned int DecStringToUInt(const std::string& str, size_t* i = nullptr, const unsigned char* end_char_arr = nullptr, size_t end_char_arr_size = 0) {
 		unsigned int sum = 0;
 		if (!i) {
 			size_t j;
@@ -111,9 +110,9 @@ private:
 				sum = sum * 10 + c;
 			}
 			//如果设置了结束字符，除开结束字符其他的一律不管
-			else if (endCharArr) {
-				for (size_t j = 0; j < endCharArrSize; ++j) {
-					if (c == endCharArr[j]) return sum;
+			else if (end_char_arr) {
+				for (size_t j = 0; j < end_char_arr_size; ++j) {
+					if (c == end_char_arr[j]) return sum;
 				}
 			}
 			//不需要-1，因为计数本来就要比索引多1
@@ -123,9 +122,9 @@ private:
 		return sum;
 	}
 
-	static int __cdecl memcmp_ex(void const* _Buf1, void const* _Buf2, size_t _Size) {
+	static int __cdecl memcmp_ex(void const* buf1, void const* buf2, size_t size) {
 		__try {
-			if (memcmp(_Buf1, _Buf2, _Size)) {
+			if (memcmp(buf1, buf2, size)) {
 				return 1;
 			}
 			else {
@@ -147,17 +146,17 @@ private:
 	* ??表示模糊匹配此字节
 	* *xx表示上一个字节的重复次数，示例就是重复0x65 20次，是十进制
 	*/
-	size_t StringToElement(const std::string& hexStringData, std::vector<SignatureElement>& signature, size_t& offset) {
+	size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
 		bool first = true;
 		unsigned char sum = 0;
-		SignatureElement tempSignatureElement;
-		tempSignatureElement.length = 0;
+		SignatureElement temp_signature_element;
+		temp_signature_element.length = 0;
 		SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
-		size_t totalLength = 0;
+		size_t total_length = 0;
 
 		//遍历字符
-		for (size_t i = 0; i < hexStringData.length(); ++i) {
-			unsigned char c = hexStringData[i];
+		for (size_t i = 0; i < hex_string_data.length(); ++i) {
+			unsigned char c = hex_string_data[i];
 			bool validChar = true;
 			if (c >= 0x30 && c <= 0x39) {
 				c -= 0x30;
@@ -176,20 +175,20 @@ private:
 			}
 			else {
 				if (c == '&') {
-					offset = totalLength + tempSignatureElement.length;
+					offset = total_length + temp_signature_element.length;
 				}
-				else if (c == '*' && i + 1 < hexStringData.length()) {
+				else if (c == '*' && i + 1 < hex_string_data.length()) {
 					// 如果*号后面还有字符，将其视作重复次数
 					size_t countInt;
-					unsigned int lenInt = DecStringToUInt(&hexStringData[i] + 1, &countInt) - 1;
+					unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
 					if (countInt) {
-						if (oldType == SignatureElementType::kWhole && tempSignatureElement.data.size() > 0) {
-							unsigned char repC = tempSignatureElement.data[tempSignatureElement.data.size() - 1];
+						if (oldType == SignatureElementType::kWhole && temp_signature_element.data.size() > 0) {
+							unsigned char repC = temp_signature_element.data[temp_signature_element.data.size() - 1];
 							for (size_t j = 0; j < lenInt; ++j) {
-								tempSignatureElement.data.push_back(repC);
+								temp_signature_element.data.push_back(repC);
 							}
 						}
-						tempSignatureElement.length += lenInt;
+						temp_signature_element.length += lenInt;
 						i += countInt;
 					}
 						
@@ -207,13 +206,13 @@ private:
 
 			// 旧字符类型和新字符类型不同时，需要添加新的匹配单元
 			else if (oldType != newType) {
-				tempSignatureElement.type = oldType;
-				totalLength += tempSignatureElement.length;
-				signature.push_back(tempSignatureElement);
+				temp_signature_element.type = oldType;
+				total_length += temp_signature_element.length;
+				signature.push_back(temp_signature_element);
 
 				oldType = newType;
-				tempSignatureElement.length = 0;
-				tempSignatureElement.data.clear();
+				temp_signature_element.length = 0;
+				temp_signature_element.data.clear();
 			}
 
 		_PushChar:
@@ -227,8 +226,8 @@ private:
 					first = true;
 					// 如果是无效字符，说明调用者并未提供连续的两个有效字符，将修正第一个有效字符的值
 					validChar ? sum += c : sum >>= 4;
-					tempSignatureElement.data.push_back(sum);
-					++tempSignatureElement.length;
+					temp_signature_element.data.push_back(sum);
+					++temp_signature_element.length;
 				}
 
 				// 最后一种情况就是，即未开始拼接字节，且是无效字符，直接无视即可
@@ -241,7 +240,7 @@ private:
 				}
 				else if (!first) {
 					first = true;
-					++tempSignatureElement.length;
+					++temp_signature_element.length;
 				}
 			}
 
@@ -250,25 +249,24 @@ private:
 		//如果有未完成的字符，则推入
 		if (!first) {
 			if (oldType == SignatureElementType::kWhole) {
-				tempSignatureElement.data.push_back(sum >> 4);
+				temp_signature_element.data.push_back(sum >> 4);
 			}
-			++tempSignatureElement.length;
+			++temp_signature_element.length;
 		}
 
 		//有匹配单元，推入
-		if (tempSignatureElement.length > 0 || tempSignatureElement.data.size() > 0) {
-			tempSignatureElement.type = oldType;
-			totalLength += tempSignatureElement.length;
-			signature.push_back(tempSignatureElement);
+		if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
+			temp_signature_element.type = oldType;
+			total_length += temp_signature_element.length;
+			signature.push_back(temp_signature_element);
 		}
 
-		return totalLength;
+		return total_length;
 	}
 
 private:
 	size_t m_offset;
 	Process* m_process;
-
 };
 
 } // namespace geek

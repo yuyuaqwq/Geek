@@ -155,14 +155,14 @@ public:
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
 			i += 4;
 
-			// 接下来把retAddr存到内存里
-			forward_page_temp[i++] = 0x58;		// pop eax，弹出压入的retAddr
-			// mov [forwardPage + 0x1000 - 8], eax
+			// 接下来把ret_addr临时存到内存里
+			forward_page_temp[i++] = 0x58;		// pop eax，弹出压入的ret_addr
+			// mov [forward_page + 0x1000 - 8], eax
 			forward_page_temp[i++] = 0xa3;
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 8;
 			i += 4;
 
-			// mov eax, [forwardPage + 0x1000 - 4]，恢复eax
+			// mov eax, [forward_page + 0x1000 - 4]，恢复eax
 			forward_page_temp[i++] = 0xa1;
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
 			i += 4;
@@ -177,29 +177,28 @@ public:
 			}
 
 			// 恢复ret_addr环境
-			// mov [forwardPage + 0x1000 - 4], eax，还是先保存eax
+			// mov [forward_page + 0x1000 - 4], eax，还是先保存eax
 			forward_page_temp[i++] = 0xa3;
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
 			i += 4;
 
 
-			// mov eax, [forwardPage + 0x1000 - 8]，保存的ret_addr
+			// mov eax, [forward_page + 0x1000 - 8]，保存的ret_addr
 			forward_page_temp[i++] = 0xa1;
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 8;
 			i += 4;
 			// push eax
 			forward_page_temp[i++] = 0x50;
 
-			// mov eax, [forwardPage + 0x1000 - 4]，恢复eax
+			// mov eax, [forward_page + 0x1000 - 4]，恢复eax
 			forward_page_temp[i++] = 0xa1;
 			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
 			i += 4;
 
 
 			// 转回去继续执行
-			//forwardPage[i++] = 0xe9;		// jmp 
-			//*(uint32_t*)&forwardPage[i] = GetJmpOffset(forwardPage + i - 1, 5, (char*)hookAddr + instrLen);
-			
+			//forward_page[i++] = 0xe9;		// jmp 
+			//*(uint32_t*)&forward_page[i] = GetJmpOffset(forward_page + i - 1, 5, (char*)hook_addr + instr_size);
 			forward_page_temp[i++] = 0xc3;		// ret
 
 			// 为目标地址挂hook
@@ -336,21 +335,21 @@ public:
 
 			// 在原指令执行前还原所有环境，包括压入的retAddr
 			// 要用rax，先存到内存里
-			// mov [forwardPage + 0x1000 - 8], rax
+			// mov [forward_page + 0x1000 - 8], rax
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa3;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
 			i += 8;
 
 			// 接下来把retAddr存到内存里
-			forward_page_temp[i++] = 0x58;		// pop rax，弹出压入的retAddr
-			// mov [forwardPage + 0x1000 - 16], rax
+			forward_page_temp[i++] = 0x58;		// pop rax，弹出压入的ret_addr
+			// mov [forward_page + 0x1000 - 16], rax
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa3;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 16;
 			i += 8;
 
-			// mov rax, [forwardPage + 0x1000 - 8]，恢复rax
+			// mov rax, [forward_page + 0x1000 - 8]，恢复rax
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa1;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
@@ -366,14 +365,14 @@ public:
 			}
 
 
-			// 恢复retAddr环境
-			// mov [forwardPage + 0x1000 - 8], rax，还是先保存eax
+			// 恢复ret_addr环境
+			// mov [forward_page + 0x1000 - 8], rax，还是先保存eax
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa3;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
 			i += 8;
 
-			// mov rax, [forwardPage + 0x1000 - 16]，保存的retAddr
+			// mov rax, [forward_page + 0x1000 - 16]，保存的ret_addr
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa1;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 16;
@@ -381,7 +380,7 @@ public:
 			// push rax
 			forward_page_temp[i++] = 0x50;
 
-			// mov rax, [forwardPage + 0x1000 - 8]，恢复eax
+			// mov rax, [forward_page + 0x1000 - 8]，恢复eax
 			forward_page_temp[i++] = 0x48;
 			forward_page_temp[i++] = 0xa1;
 			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
@@ -392,9 +391,9 @@ public:
 
 
 			// 为目标地址挂hook
-			jmp_instr[0] = 0x68;		// push lowAddr
+			jmp_instr[0] = 0x68;		// push low_addr
 			*(uint32_t*)&jmp_instr[1] = (uint64_t)forward_page_uint & 0xffffffff;
-			jmp_instr[5] = 0xc7;		// mov dword ptr ss:[rsp+4], highAddr
+			jmp_instr[5] = 0xc7;		// mov dword ptr ss:[rsp+4], high_addr
 			jmp_instr[6] = 0x44;
 			jmp_instr[7] = 0x24;
 			jmp_instr[8] = 0x04;

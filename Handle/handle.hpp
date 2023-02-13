@@ -10,10 +10,10 @@ namespace geek {
 
 class UniqueHandle {
 public:
-	UniqueHandle() noexcept : mHandle{ INVALID_HANDLE_VALUE } {
+	UniqueHandle() noexcept : m_handle{ INVALID_HANDLE_VALUE } {
 
 	}
-	explicit UniqueHandle(HANDLE tHandle) noexcept : mHandle{ tHandle } {
+	explicit UniqueHandle(HANDLE handle) noexcept : m_handle{ handle } {
 
 	}
 	~UniqueHandle() noexcept {
@@ -30,40 +30,40 @@ public:
 	}
 	void operator=(UniqueHandle&& tUniqueHandle) noexcept {
 		Close();
-		mHandle = tUniqueHandle.mHandle;
-		tUniqueHandle.mHandle = INVALID_HANDLE_VALUE;
+		m_handle = tUniqueHandle.m_handle;
+		tUniqueHandle.m_handle = INVALID_HANDLE_VALUE;
 	}
 
 public:
 	inline HANDLE Get() const noexcept {
-		return mHandle;
+		return m_handle;
 	}
 
 	inline bool Valid() const noexcept {
-		return mHandle != NULL && mHandle != INVALID_HANDLE_VALUE;
+		return m_handle != NULL && m_handle != INVALID_HANDLE_VALUE;
 	}
 
 	inline HANDLE Release() noexcept {
-		auto temp = mHandle;
-		mHandle = INVALID_HANDLE_VALUE;
+		auto temp = m_handle;
+		m_handle = INVALID_HANDLE_VALUE;
 		return temp;
 	}
 
 	inline void Reset(HANDLE handle = INVALID_HANDLE_VALUE) noexcept {
 		Close();
-		auto temp = mHandle;
-		mHandle = handle;
+		auto temp = m_handle;
+		m_handle = handle;
 	}
 
 private:
 	inline void Close() noexcept {
 		if (Valid()) {
-			::CloseHandle(mHandle);
+			::CloseHandle(m_handle);
 		}
 	}
 
 private:
-	HANDLE mHandle;
+	HANDLE m_handle;
 };
 
 } // namespace geek
