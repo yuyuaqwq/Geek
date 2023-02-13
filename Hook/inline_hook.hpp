@@ -79,7 +79,7 @@ public:
 		* 在函数起始hook
 		* exec_old_instr = false
 		* callback中指定 ret_addr = stack[0]
-		* callback中 context->esp -= 4 / context->rsp -= 8	; 跳过外部call到该函数的返回地址
+		* callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
 	*/
 	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
