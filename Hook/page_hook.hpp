@@ -28,22 +28,22 @@ public:
 
 public:
 	PageHook() {
-		mStatus = Status::kNormal;
-		mHookAddr = nullptr;
-		mCallback = nullptr;
+		m_status = Status::kNormal;
+		m_hook_addr = nullptr;
+		m_callback = nullptr;
 
-		if (msVEHCount == 0) {
+		if (ms_veh_count == 0) {
 			// 注册VEH
-			mExceptionHandlerHandle = AddVectoredExceptionHandler(TRUE, ExceptionHandler);
+			m_exception_handler_handle = AddVectoredExceptionHandler(TRUE, ExceptionHandler);
 		}
-		++msVEHCount;
+		++ms_veh_count;
 	}
 
 	~PageHook() {
-		--msVEHCount;
-		if (msVEHCount == 0) {
+		--ms_veh_count;
+		if (ms_veh_count == 0) {
 			// 移除VEH
-			RemoveVectoredExceptionHandler(mExceptionHandlerHandle);
+			RemoveVectoredExceptionHandler(m_exception_handler_handle);
 		}
 
 		Uninstall();
@@ -53,35 +53,35 @@ public:
 public:
 	// 安装Hook，protect用于控制被hook页面的保护属性以触发hook
 	bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
-		if (mStatus == Status::kNormal) {
-			mStatus = Status::kRepeatInstall;
+		if (m_status == Status::kNormal) {
+			m_status = Status::kRepeatInstall;
 			return false;
 		}
 
-		auto it_addr = msPageHookAddr.find(hookAddr);
-		if (it_addr != msPageHookAddr.end()) {
-			mStatus = Status::kDuplicateAddress;
+		auto it_addr = ms_page_hook_addr.find(hookAddr);
+		if (it_addr != ms_page_hook_addr.end()) {
+			m_status = Status::kDuplicateAddress;
 			return false;
 		}
 
-		LPVOID pageBase = PageAlignment(hookAddr);
+		LPVOID page_base = PageAlignment(hookAddr);
 
-		mHookAddr = hookAddr;
-		mCallback = callback;
-		mStatus = Status::kNormal;
+		m_hook_addr = hookAddr;
+		m_callback = callback;
+		m_status = Status::kNormal;
 
-		msPageHookAddr.insert(std::pair<void*, PageHook&>(hookAddr, *this));
-		auto it_base = msPageHookBase.find(pageBase);
-		if (it_base == msPageHookBase.end()) {
+		ms_page_hook_addr.insert(std::pair<void*, PageHook&>(hookAddr, *this));
+		auto it_base = ms_page_hook_base.find(page_base);
+		if (it_base == ms_page_hook_base.end()) {
 			PageRecord pageRecord;
 			pageRecord.count = 1;
-			pageRecord.pageBase = pageBase;
+			pageRecord.page_base = page_base;
 			pageRecord.protect = 0;
-			msPageHookBase.insert(std::pair<void*, PageRecord>(pageBase, pageRecord));
-			it_base = msPageHookBase.find(pageBase);
-			if (!VirtualProtect(pageBase, 0x1000, protect, &it_base->second.protect)) {
+			ms_page_hook_base.insert(std::pair<void*, PageRecord>(page_base, pageRecord));
+			it_base = ms_page_hook_base.find(page_base);
+			if (!VirtualProtect(page_base, 0x1000, protect, &it_base->second.protect)) {
 				Uninstall();
-				mStatus = Status::kSetProtectFailed;
+				m_status = Status::kSetProtectFailed;
 				return false;
 			}
 		}
@@ -93,32 +93,32 @@ public:
 
 	// 卸载Hook
 	bool Uninstall() noexcept {
-		if (mStatus != Status::kNormal) {
+		if (m_status != Status::kNormal) {
 			return true;
 		}
 
-		LPVOID pageBase = PageAlignment(mHookAddr);
-		auto it_base = msPageHookBase.find(pageBase);
+		LPVOID page_base = PageAlignment(m_hook_addr);
+		auto it_base = ms_page_hook_base.find(page_base);
 
-		if (it_base != msPageHookBase.end()) {
+		if (it_base != ms_page_hook_base.end()) {
 			if (it_base->second.count == 1) {
-				if (!VirtualProtect(pageBase, 0x1000, it_base->second.protect, &it_base->second.protect)) {
-					mStatus = Status::kSetProtectFailed;
+				if (!VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect)) {
+					m_status = Status::kSetProtectFailed;
 					return false;
 				}
-				msPageHookBase.erase(it_base);
+				ms_page_hook_base.erase(it_base);
 			}
 			else {
 				--it_base->second.count;
 			}
 		}
 
-		msPageHookAddr.erase(mHookAddr);
+		ms_page_hook_addr.erase(m_hook_addr);
 
-		mHookAddr = nullptr;
-		mCallback = nullptr;
+		m_hook_addr = nullptr;
+		m_callback = nullptr;
 
-		mStatus = Status::kUnhooked;
+		m_status = Status::kUnhooked;
 		return true;
 	}
 
@@ -126,7 +126,7 @@ public:
 private:
 
 	struct PageRecord {
-		LPVOID pageBase;
+		LPVOID page_base;
 		size_t count;
 		DWORD protect;
 	};
@@ -142,22 +142,22 @@ private:
 		if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
 			LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
-			LPVOID pageBase = PageAlignment(address);
-			auto it_base = msPageHookBase.find(pageBase);
-			if (it_base == msPageHookBase.end()) {
+			LPVOID page_base = PageAlignment(address);
+			auto it_base = ms_page_hook_base.find(page_base);
+			if (it_base == ms_page_hook_base.end()) {
 				// 不是我们设置的页面属性产生的异常，忽略
 				return EXCEPTION_CONTINUE_SEARCH;
 			}
 
 			// 执行的指令与我们的Hook位于同一页面，恢复原有属性
-			VirtualProtect(pageBase, 0x1000, it_base->second.protect, &it_base->second.protect);
+			VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
 
 			// 获取发生异常的线程的上下文
 			LPCONTEXT context = ExceptionInfo->ContextRecord;
 
 
-			auto it_addr = msPageHookAddr.find(address);
-			if (it_addr != msPageHookAddr.end()) {
+			auto it_addr = ms_page_hook_addr.find(address);
+			if (it_addr != ms_page_hook_addr.end()) {
 				// 是被hook的地址
 
 				// 调用回调
@@ -168,7 +168,7 @@ private:
 			context->EFlags |= 0x100;
 
 			// 用于识别是否咱们设置的单步
-			msPageHookStep.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
+			ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
 
 			// 异常处理完成 让程序继续执行
 			return EXCEPTION_CONTINUE_EXECUTION;
@@ -177,17 +177,17 @@ private:
 		}
 		else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
 		{
-			LPCONTEXT pContext = ExceptionInfo->ContextRecord;
+			LPCONTEXT context = ExceptionInfo->ContextRecord;
 
 			// 判断是否DR寄存器触发的异常
-			if (pContext->Dr6 & 0xf) {
+			if (context->Dr6 & 0xf) {
 				// 排除DR寄存器触发的单步异常
 				return EXCEPTION_CONTINUE_SEARCH;
 			}
 			else {
 				// 单步异常
-				auto it = msPageHookStep.find(GetCurrentThreadId());
-				if (it == msPageHookStep.end()) {
+				auto it = ms_page_hook_step.find(GetCurrentThreadId());
+				if (it == ms_page_hook_step.end()) {
 					//不是咱们设置的单步断点，不处理
 					return EXCEPTION_CONTINUE_SEARCH;
 				}
@@ -195,9 +195,9 @@ private:
 
 				DWORD uselessProtect;
 				// 恢复Hook
-				VirtualProtect(it->second.pageBase, 0x1000, it->second.protect, &it->second.protect);
+				VirtualProtect(it->second.page_base, 0x1000, it->second.protect, &it->second.protect);
 
-				msPageHookStep.erase(GetCurrentThreadId());
+				ms_page_hook_step.erase(GetCurrentThreadId());
 
 				// 不需要重设TF，单步异常自动将TF置0
 				// 单步异常是陷阱类异常，无需修复ip
@@ -212,16 +212,16 @@ private:
 	}
 
 private:
-	Status mStatus;
-	void* mExceptionHandlerHandle;
-	void* mHookAddr;
-	HookCallBack mCallback;
+	Status m_status;
+	void* m_exception_handler_handle;
+	void* m_hook_addr;
+	HookCallBack m_callback;
 
 	// C++17
-	inline static int msVEHCount = 0;
-	inline static std::map<void*, PageRecord> msPageHookBase;
-	inline static std::map<void*, PageHook&> msPageHookAddr;
-	inline static std::map<DWORD, PageRecord&> msPageHookStep;
+	inline static int ms_veh_count = 0;
+	inline static std::map<void*, PageRecord> ms_page_hook_base;
+	inline static std::map<void*, PageHook&> ms_page_hook_addr;
+	inline static std::map<DWORD, PageRecord&> ms_page_hook_step;
 };
 
 } // namespace PageHook

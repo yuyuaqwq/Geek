@@ -58,17 +58,17 @@ namespace geek {
 		/*
 		* L"explorer.exe"
 		*/
-		Status CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+		bool CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
 			HANDLE hToken_ = NULL;
 			std::wstring tokenProcessName_ = tokenProcessName;
 			DWORD pid = GetProcessIdByProcessName(tokenProcessName);
 			if (pid == NULL) {
-				return Status::kApiCallFailed;
+				return false;
 			}
 			UniqueHandle hProcess{ OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid) };
 			OpenProcessToken(hProcess.Get(), TOKEN_ALL_ACCESS, &hToken_);
 			if (hToken_ == NULL) {
-				return Status::kApiCallFailed;
+				return false;
 			}
 			UniqueHandle hToken{ hToken_ };
 
@@ -87,7 +87,7 @@ namespace geek {
 			std::wstring command_ = command;
 			BOOL ret = CreateProcessAsUserW(hToken.Get(), NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags | NORMAL_PRIORITY_CLASS, NULL, NULL, si, pi);
 			if (!ret) {
-				return Status::kApiCallFailed;
+				return false;
 			}
 			mHandle = UniqueHandle(pi->hProcess);
 			if (!thread) {
@@ -96,13 +96,13 @@ namespace geek {
 			else {
 				*thread = pi->hThread;
 			}
-			return Status::kOk;
+			return true;
 		}
 
-		Status Terminate(DWORD exitCode) {
+		bool Terminate(DWORD exitCode) {
 			BOOL ret = ::TerminateProcess(Get(), exitCode);
 			mHandle.Reset();
-			return ret ? Status::kOk : Status::kApiCallFailed;
+			return ret;
 		}
 
 		BOOL KtSetDebugPrivilege(BOOL IsEnable)
