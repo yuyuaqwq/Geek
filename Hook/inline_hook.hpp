@@ -9,7 +9,7 @@
 #include <Geek/Process/process.hpp>
 
 
-namespace geek {
+namespace Geek {
 
 class InlineHook {
 public:
@@ -49,7 +49,7 @@ public:
 		uint32_t ecx;
 		uint32_t eax;
 
-		uint32_t forward_page_base;
+		uint32_t c;
 		uint32_t ret_addr;
 		uint32_t esp;
 		uint32_t stack[];
@@ -206,7 +206,7 @@ public:
 			*(uint32_t*)&jmp_instr[1] = GetJmpOffset(hook_addr, 5, m_forward_page);
 
 			for (int i = 5; i < instr_size; i++) {
-				jmp_instr[i] = 0x90;		// nop
+				jmp_instr[i] = 0xcc;		// int 3
 			}
 		}
 		else {
@@ -401,7 +401,7 @@ public:
 			jmp_instr[13] = 0xc3;		// ret
 
 			for (int i = 14; i < instr_size; i++) {
-				jmp_instr[i] = 0x90;		// nop
+				jmp_instr[i] = 0xcc;		// int 3
 			}
 		}
 		m_process->WriteMemory(m_forward_page, forward_page_temp, forward_page_size);
@@ -453,6 +453,6 @@ public:
 
 };
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_HOOK_INLINE_HOOK_H_

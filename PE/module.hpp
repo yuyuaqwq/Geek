@@ -8,7 +8,7 @@
 
 #include <Geek/File/file.hpp>
 
-namespace geek {
+namespace Geek {
 
 class Module {
 public:
@@ -342,6 +342,6 @@ private:
 	std::vector<std::vector<uint8_t>> mSectionList;
 };
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_PE_MODULE_H_

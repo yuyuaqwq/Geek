@@ -8,13 +8,13 @@
 
 #include <Geek\Handle\handle.hpp>
 
-namespace geek {
+namespace Geek {
 
 class Thread {
 
 };
 
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_THREAD_THREAD_H_

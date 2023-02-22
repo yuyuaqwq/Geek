@@ -4,7 +4,7 @@
 #include <fstream>
 #include <vector>
 
-namespace geek {
+namespace Geek {
 
 class File {
 public:
@@ -57,6 +57,6 @@ private:
 	std::fstream m_fs;
 };
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_FILE_FILE_H_

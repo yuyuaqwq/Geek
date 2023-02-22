@@ -3,13 +3,13 @@
 
 #include <wow64ext/wow64ext.hpp>
 
-namespace geek {
+namespace Geek {
 
 class RemoteThreadInjection {
 
 };
 
-} // namespace geek
+} // namespace Geek
 
 
 #endif // GEEK_INJECT_REMOTE_THREAD_INJECTION_H_

@@ -7,7 +7,7 @@
 #include <Windows.h>
 
 
-namespace geek {
+namespace Geek {
 
 // 启用增量链接会导致实际函数地址与通过函数名获取的地址不一致
 // 对数据进行读写hook时，保证类中的内联静态成员与外部变量不在同一页面

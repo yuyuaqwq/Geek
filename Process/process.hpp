@@ -11,7 +11,7 @@
 #include <Geek/Handle/handle.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
-namespace geek {
+namespace Geek {
 
 	class Process {
 	public:
@@ -28,7 +28,7 @@ namespace geek {
 		}
 
 		void Open(UniqueHandle hProcess) {
-			mHandle = std::move(hProcess);
+			m_handle = std::move(hProcess);
 		}
 
 		bool Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
@@ -36,7 +36,7 @@ namespace geek {
 			if (hProcess == NULL) {
 				return false;
 			}
-			mHandle = UniqueHandle(hProcess);
+			m_handle = UniqueHandle(hProcess);
 			return true;
 		}
 
@@ -50,7 +50,7 @@ namespace geek {
 			if (!CreateProcessW(NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
 				return Status::kApiCallFailed;
 			}
-			mHandle = UniqueHandle(processInformation.hProcess);
+			m_handle = UniqueHandle(processInformation.hProcess);
 			CloseHandle(processInformation.hThread);
 			return Status::kOk;
 		}
@@ -89,7 +89,7 @@ namespace geek {
 			if (!ret) {
 				return false;
 			}
-			mHandle = UniqueHandle(pi->hProcess);
+			m_handle = UniqueHandle(pi->hProcess);
 			if (!thread) {
 				CloseHandle(pi->hThread);
 			}
@@ -101,11 +101,11 @@ namespace geek {
 
 		bool Terminate(DWORD exitCode) {
 			BOOL ret = ::TerminateProcess(Get(), exitCode);
-			mHandle.Reset();
+			m_handle.Reset();
 			return ret;
 		}
 
-		BOOL KtSetDebugPrivilege(BOOL IsEnable)
+		BOOL SetDebugPrivilege(BOOL IsEnable)
 		{
 			DWORD  LastError = 0;
 			HANDLE TokenHandle = 0;
@@ -149,14 +149,14 @@ namespace geek {
 			if (this == nullptr) {
 				return kCurrentProcess;
 			}
-			return mHandle.Get();
+			return m_handle.Get();
 		}
 
-		DWORD GetId() {
+		DWORD GetId() const noexcept {
 			return GetProcessId(Get());
 		}
 
-		bool IsX86() const {
+		bool IsX86() const noexcept {
 			auto handle = Get();
 
 			::BOOL IsWow64;
@@ -188,8 +188,8 @@ namespace geek {
 		* Memory
 		*/
 		PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
-			if (msWow64.Wow64Operation(Get())) {
-				return (PVOID64)msWow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
+			if (ms_wow64.Wow64Operation(Get())) {
+				return (PVOID64)ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
 			}
 			return VirtualAllocEx(Get(), addr, len, type, protect);
 		}
@@ -199,8 +199,8 @@ namespace geek {
 		}
 
 		bool FreeMemory(PVOID64 addr, size_t size = 0, DWORD type = MEM_RELEASE) {
-			if (msWow64.Wow64Operation(Get())) {
-				return msWow64.VirtualFreeEx64(Get(), (DWORD64)addr, size, type);
+			if (ms_wow64.Wow64Operation(Get())) {
+				return ms_wow64.VirtualFreeEx64(Get(), (DWORD64)addr, size, type);
 			}
 			return VirtualFreeEx(Get(), addr, size, type);
 		}
@@ -212,7 +212,7 @@ namespace geek {
 			}
 			SIZE_T readByte;
 
-			if (msWow64.Wow64Operation(Get())) {
+			if (ms_wow64.Wow64Operation(Get())) {
 				HMODULE NtdllModule = ::GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)::GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");
 				if (!NT_SUCCESS(NtWow64ReadVirtualMemory64(Get(), addr, buf, len, NULL))) {
@@ -246,7 +246,7 @@ namespace geek {
 			}
 			SIZE_T readByte;
 			bool success = true;
-			if (msWow64.Wow64Operation(Get())) {
+			if (ms_wow64.Wow64Operation(Get())) {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 				pfnNtWow64WriteVirtualMemory64 NtWow64WriteVirtualMemory64 = (pfnNtWow64WriteVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64WriteVirtualMemory64");
@@ -279,14 +279,140 @@ namespace geek {
 
 		bool SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
 			bool success = false;
-			if (msWow64.Wow64Operation(Get())) {
-				success = msWow64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
+			if (ms_wow64.Wow64Operation(Get())) {
+				success = ms_wow64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
 			}
 			else {
 				success = ::VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
 			}
 			return success;
 		}
+
+
+		std::vector<MEMORY_BASIC_INFORMATION> EnumAllMemoryBlocks() const {
+			std::vector<MEMORY_BASIC_INFORMATION> memoryBlockList;
+
+			// 初始化 vector 容量
+			memoryBlockList.reserve(200);
+
+			// 获取 PageSize 和地址粒度
+			SYSTEM_INFO sysInfo = { 0 };
+			GetSystemInfo(&sysInfo);
+			/*
+			typedef struct _SYSTEM_INFO {
+			union {
+			DWORD dwOemId;							// 兼容性保留
+			struct {
+			WORD wProcessorArchitecture;			// 操作系统处理器体系结构
+			WORD wReserved;						// 保留
+			} DUMMYSTRUCTNAME;
+			} DUMMYUNIONNAME;
+			DWORD     dwPageSize;						// 页面大小和页面保护和承诺的粒度
+			LPVOID    lpMinimumApplicationAddress;	// 指向应用程序和dll可访问的最低内存地址的指针
+			LPVOID    lpMaximumApplicationAddress;	// 指向应用程序和dll可访问的最高内存地址的指针
+			DWORD_PTR dwActiveProcessorMask;			// 处理器掩码
+			DWORD     dwNumberOfProcessors;			// 当前组中逻辑处理器的数量
+			DWORD     dwProcessorType;				// 处理器类型，兼容性保留
+			DWORD     dwAllocationGranularity;		// 虚拟内存的起始地址的粒度
+			WORD      wProcessorLevel;				// 处理器级别
+			WORD      wProcessorRevision;				// 处理器修订
+			} SYSTEM_INFO, *LPSYSTEM_INFO;
+			*/
+
+			//遍历内存
+			const char* p = (const char*)sysInfo.lpMinimumApplicationAddress;
+			MEMORY_BASIC_INFORMATION  memInfo = { 0 };
+			while (p < sysInfo.lpMaximumApplicationAddress) {
+				// 获取进程虚拟内存块缓冲区字节数
+				size_t size = VirtualQueryEx(Get(), p, &memInfo, sizeof(MEMORY_BASIC_INFORMATION32));
+				if (size != sizeof(MEMORY_BASIC_INFORMATION32)) { break; }
+
+				// 将内存块信息追加到 vector 数组尾部
+				memoryBlockList.push_back(memInfo);
+
+				// 移动指针
+				p += memInfo.RegionSize;
+			}
+			return memoryBlockList;
+		}
+
+		std::vector<MODULEENTRY32W> EnumAllProcessModules() const {
+			std::vector<MODULEENTRY32W> moduleList;
+			HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetId());
+			if (hSnapshot == INVALID_HANDLE_VALUE) {
+				return moduleList;
+			}
+
+			MODULEENTRY32 mi = { 0 };
+			mi.dwSize = sizeof(MODULEENTRY32); //第一次使用必须初始化成员
+			BOOL bRet = Module32First(hSnapshot, &mi);
+			do {
+				if (bRet == false) {
+					break;
+				}
+				do {
+					moduleList.push_back(mi);
+					bRet = Module32Next(hSnapshot, &mi);
+				} while (bRet);
+			} while (false);
+
+			CloseHandle(hSnapshot);
+			return moduleList;
+		}
+
+		bool MemoryDump(bool(*callback)(char*, size_t, void*), void* arg) const {
+			HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+			PROCESSENTRY32 process = { sizeof(PROCESSENTRY32) };
+			bool success = false;
+
+			std::vector<char> buf;
+
+			do {
+				std::vector<MODULEENTRY32> modulelist = EnumAllProcessModules();
+
+				std::vector<MEMORY_BASIC_INFORMATION> vec = EnumAllMemoryBlocks();
+
+				// 遍历该进程的内存块
+				size_t sizeSum = 0;
+
+				//if (compress) {
+				//	_outFilePath += L".temp";
+				//}
+				// CreateDirectoryW((path + L"\\temp").c_str(), NULL);
+				for (int i = 0; i < vec.size(); i++) {
+					bool isModule = false;
+					for (int j = 0; j < modulelist.size(); j++) {
+						if (vec[i].BaseAddress >= modulelist[j].modBaseAddr && vec[i].BaseAddress < modulelist[j].modBaseAddr + modulelist[j].modBaseSize) {
+							isModule = true;
+							break;
+						}
+					}
+					if (!(!isModule && vec[i].AllocationProtect & PAGE_READWRITE && vec[i].State & MEM_COMMIT)) {
+						continue;
+					}
+
+					std::vector<char> tempBuff(vec[i].RegionSize);
+
+					DWORD readCount = 0;
+					if (!ReadProcessMemory(Get(), vec[i].BaseAddress, tempBuff.data(), vec[i].RegionSize, &readCount)) {
+						printf("%d\n", GetLastError());
+						continue;
+					}
+					printf("%d/%d\n", i, vec.size());
+					if (callback(tempBuff.data(), tempBuff.size(), arg)) {
+						break;
+					}
+					sizeSum += vec[i].RegionSize;
+				}
+
+				success = true;
+			} while (false);
+
+			return success;
+		}
+
+		
+
 
 		
 		/*
@@ -360,8 +486,6 @@ namespace geek {
 			return success;
 		}
 		
-		
-
 		bool IsTheOwningThread(HANDLE thread) {
 			return GetProcessIdOfThread(thread) == GetId();
 		}
@@ -372,10 +496,10 @@ namespace geek {
 			if (!IsTheOwningThread(thread)) {
 				return context;
 			}
-			if (msWow64.Wow64Operation(Get())) {
+			if (ms_wow64.Wow64Operation(Get())) {
 				context.resize(sizeof(_CONTEXT64));
 				((_CONTEXT64*)context.data())->ContextFlags = flags;
-				success = msWow64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
+				success = ms_wow64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
 				if (isX86) *isX86 = false;
 			}
 			else {
@@ -452,7 +576,7 @@ namespace geek {
 			do {
 				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
-				if (msWow64.Wow64Operation(Get())) {
+				if (ms_wow64.Wow64Operation(Get())) {
 					pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 					if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
 						break;
@@ -525,15 +649,18 @@ namespace geek {
 			return false;
 		}
 
+		/*
+		* other
+		*/
 
 	public:
 		inline static const HANDLE kCurrentProcess = (HANDLE)-1;
 
 	private:
-		UniqueHandle mHandle;
+		UniqueHandle m_handle;
 
 	private:
-		inline static Wow64 msWow64;
+		inline static Wow64 ms_wow64;
 
 	public:
 
@@ -590,6 +717,6 @@ namespace geek {
 		}
 	};
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_PROCESS_PROCESS_H_

@@ -8,7 +8,7 @@
 #include <Geek/Process/process.hpp>
 
 
-namespace geek{
+namespace Geek{
 
 /*
 * Ãÿ’˜¬Î¿‡
@@ -269,6 +269,6 @@ private:
 	Process* m_process;
 };
 
-} // namespace geek
+} // namespace Geek
 
 #endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_

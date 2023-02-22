@@ -10,7 +10,7 @@
 * https://github.com/rwfpl/rewolf-Wow64ext
 */
 
-namespace geek {
+namespace Geek {
 
 class Wow64 {
 public:
