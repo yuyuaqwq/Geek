@@ -649,9 +649,71 @@ namespace Geek {
 			return false;
 		}
 
+		static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
+			bool success = false;
+			HRSRC hResID = NULL;
+			HRSRC hRes = NULL;
+			HANDLE hResFile = INVALID_HANDLE_VALUE;
+			do {
+				//查找资源
+
+				HRSRC hResID = FindResourceW(hModule, MAKEINTRESOURCEW(ResourceID), type);
+				if (!hResID) {
+					break;
+				}
+				//加载资源  
+				HGLOBAL hRes = LoadResource(hModule, hResID);
+				if (!hRes) {
+					break;
+				}
+				//锁定资源
+				LPVOID pRes = LockResource(hRes);
+				if (pRes == NULL)
+				{
+					break;
+				}
+				//得到待释放资源文件大小 
+				unsigned long dwResSize = SizeofResource(hModule, hResID);
+				//创建文件 
+				hResFile = CreateFileW(saveFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+				if (INVALID_HANDLE_VALUE == hResFile)
+				{
+					DWORD errorCode = GetLastError();
+					if (errorCode == 32) {
+						success = true;
+						break;
+					}
+					break;
+				}
+				DWORD dwWrited = 0;
+				if (FALSE == WriteFile(hResFile, pRes, dwResSize, &dwWrited, NULL))
+				{
+					// Log(LogLevel::LOG_ERROR, Cmd::CMD_UPLOAD_ACCOUNTS_INFO, "[KeePass.SaveFileFromResource] WriteFile error:%d\n", GetLastError());
+					break;
+				}
+				success = true;
+			} while (false);
+
+			if (hResFile != INVALID_HANDLE_VALUE) {
+				CloseHandle(hResFile);
+				hResFile = INVALID_HANDLE_VALUE;
+			}
+			if (hRes) {
+				UnlockResource(hRes);
+				FreeResource(hRes);
+				hRes = NULL;
+			}
+			return success;
+
+		}
+
+
+
 		/*
 		* other
 		*/
+
+
 
 	public:
 		inline static const HANDLE kCurrentProcess = (HANDLE)-1;

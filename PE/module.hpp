@@ -12,17 +12,17 @@ namespace Geek {
 
 class Module {
 public:
-	Module() : mDosHeader{ 0 }, mNtHeader { nullptr }, mFileHeader{ nullptr } {
+	Module() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
 
 	}
 
 	~Module() {
-		if (mNtHeader) {
-			if (mNtHeader->OptionalHeader.Magic == 0x10b) {
-				delete mNtHeader;
+		if (m_nt_header) {
+			if (m_nt_header->OptionalHeader.Magic == 0x10b) {
+				delete m_nt_header;
 			}
 			else {
-				delete (IMAGE_NT_HEADERS64*)mNtHeader;
+				delete (IMAGE_NT_HEADERS64*)m_nt_header;
 			}
 		}
 		
@@ -36,13 +36,13 @@ public:
 			return false;
 		}
 		auto buf = (char*)buf_;
-		mSectionHeaderTable.resize(mFileHeader->NumberOfSections);
-		mSectionList.resize(mFileHeader->NumberOfSections);
+		m_section_header_table.resize(m_file_header->NumberOfSections);
+		m_section_list.resize(m_file_header->NumberOfSections);
 		// 保存节区和头节区
-		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
-			mSectionHeaderTable[i] = sectionHeaderTable[i];
-			mSectionList[i].resize(mSectionHeaderTable[i].SizeOfRawData, 0);
-			memcpy(mSectionList[i].data(), &buf[mSectionHeaderTable[i].VirtualAddress], mSectionHeaderTable[i].SizeOfRawData);
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			m_section_header_table[i] = sectionHeaderTable[i];
+			m_section_list[i].resize(m_section_header_table[i].SizeOfRawData, 0);
+			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].VirtualAddress], m_section_header_table[i].SizeOfRawData);
 		}
 		return true;
 	}
@@ -54,13 +54,13 @@ public:
 		if (!CopyPEHeader(buf.data(), &sectionHeaderTable)) {
 			return false;
 		}
-		mSectionHeaderTable.resize(mFileHeader->NumberOfSections);
-		mSectionList.resize(mFileHeader->NumberOfSections);
+		m_section_header_table.resize(m_file_header->NumberOfSections);
+		m_section_list.resize(m_file_header->NumberOfSections);
 		// 保存节区和头节区
-		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
-			mSectionHeaderTable[i] = sectionHeaderTable[i];
-			mSectionList[i].resize(mSectionHeaderTable[i].SizeOfRawData, 0);
-			memcpy(mSectionList[i].data(), &buf[mSectionHeaderTable[i].PointerToRawData], mSectionHeaderTable[i].SizeOfRawData);
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			m_section_header_table[i] = sectionHeaderTable[i];
+			m_section_list[i].resize(m_section_header_table[i].SizeOfRawData, 0);
+			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], m_section_header_table[i].SizeOfRawData);
 		}
 		return true;
 	}
@@ -72,34 +72,34 @@ public:
 
 		int offset = 0;
 
-		memcpy(&buf[offset], &mDosHeader, sizeof(mDosHeader));
-		offset = mDosHeader.e_lfanew;
+		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
+		offset = m_dos_header.e_lfanew;
 
-		memcpy(&buf[offset], mDosStub.data(), mDosStub.size());
-		offset += mDosStub.size();
+		memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
+		offset += m_dos_stub.size();
 
-		if (mNtHeader->OptionalHeader.Magic == 0x10b) {
-			memcpy(&buf[offset], mNtHeader, sizeof(*mNtHeader));
-			offset += sizeof(*mNtHeader);
+		if (m_nt_header->OptionalHeader.Magic == 0x10b) {
+			memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
+			offset += sizeof(*m_nt_header);
 		}
 		else {
-			memcpy(&buf[offset], mNtHeader, sizeof(IMAGE_NT_HEADERS64));
+			memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
 			offset += sizeof(IMAGE_NT_HEADERS64);
 		}
 		
-		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
-			memcpy(&buf[offset], &mSectionHeaderTable[i], sizeof(mSectionHeaderTable[i]));
-			offset += sizeof(mSectionHeaderTable[i]);
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
+			offset += sizeof(m_section_header_table[i]);
 		}
 
-		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
-			memcpy(&buf[mSectionHeaderTable[i].PointerToRawData], mSectionList[i].data(), mSectionHeaderTable[i].SizeOfRawData);
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			memcpy(&buf[m_section_header_table[i].PointerToRawData], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
 		}
 
 		return pe.Write(buf);
 	}
 
-	uint32_t GetExportRVAByName(const std::string& funcName) {
+	uint32_t GetExportRVAByName(const std::string& func_name) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 		if (exportDirectory == nullptr) {
 			return 0;
@@ -111,7 +111,7 @@ public:
 		int funcIdx = -1;
 		for (int i = 0; i < numberOfNames; i++) {
 			auto exportName = (char*)RVAToPoint(addressOfNames[i]);
-			if (funcName == exportName) {
+			if (func_name == exportName) {
 				// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
 				funcIdx = addressOfNameOrdinals[i];
 			}
@@ -150,27 +150,53 @@ public:
 			auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
 			for (int i = 0; i < fieldCount; i++) {
 				auto offsetType = fieldTable[i] >> 12;
-
 				if (offsetType == IMAGE_REL_BASED_ABSOLUTE) {
 					continue;
 				}
 				auto RVA = blockRVA + (fieldTable[i] & 0xfff);
-
 				if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
 					auto addr = (uint32_t*)RVAToPoint(RVA);
 					*addr = *addr - imageBase + newImageBase;
 				}
-
 				if (offsetType == IMAGE_REL_BASED_DIR64) {
 					auto addr = (uint64_t*)RVAToPoint(RVA);
 					*addr = *addr - imageBase + newImageBase;
 				}
-
 			}
 		} while (true);
-		
 		SetImageBase(newImageBase);
 		return true;
+	}
+
+	bool RepairImportAddressTable() {
+		auto import_table = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+		if (import_table == nullptr) {
+			return false;
+		}
+		IMAGE_IMPORT_DESCRIPTOR* import_descriptor = (IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(import_table->VirtualAddress);
+		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
+			uint64_t import_module_base = (uint64_t)LoadLibraryA(import_module_name);
+			if (import_module_base) {
+				continue;
+			}
+			IMAGE_THUNK_DATA* import_name_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+			IMAGE_THUNK_DATA* import_address_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->FirstThunk);
+			Module import_module;
+			import_module.LoadModuleFromImage((void*)import_module_base);
+			for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+				uint32_t export_rva;
+				if (import_name_table->u1.Ordinal >> 31 == 1) {
+					export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+				}
+				else {
+					IMAGE_IMPORT_BY_NAME* by_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+					char* func_name = by_name->Name;
+					export_rva = import_module.GetExportRVAByName(func_name);
+				}
+				import_address_table->u1.Function = import_module_base + export_rva;
+			}
+		}
 	}
 
 	bool CheckDigitalSignature() {
@@ -180,28 +206,28 @@ public:
 
 private:
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
-	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) var = mNtHeader->OptionalHeader.##field; \
-	else if (mNtHeader->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)mNtHeader)->OptionalHeader.##field; \
+	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; \
 	else var = 0; } 
 #define SET_OPTIONAL_HEADER_FIELD(field, var) \
-	{ if (mNtHeader->OptionalHeader.Magic == 0x10b) mNtHeader->OptionalHeader.##field = var; \
-	else if (mNtHeader->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)mNtHeader)->OptionalHeader.##field = var; \
+	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; \
 	else var = 0; } 
 
 	bool CopyPEHeader(void* buf_, IMAGE_SECTION_HEADER** sectionHeaderTable) {
 		auto buf = (char*)buf_;
-		mDosHeader = *(IMAGE_DOS_HEADER*)buf;
-		if (mDosHeader.e_magic != 'ZM') {		// 'MZ'
+		m_dos_header = *(IMAGE_DOS_HEADER*)buf;
+		if (m_dos_header.e_magic != 'ZM') {		// 'MZ'
 			return false;
 		}
-		auto dosStubSize = mDosHeader.e_lfanew - sizeof(mDosHeader);
+		auto dosStubSize = m_dos_header.e_lfanew - sizeof(m_dos_header);
 		if (dosStubSize < 0) {
 			dosStubSize = 0;
 		}
-		mDosStub.resize(dosStubSize, 0);
-		memcpy(mDosStub.data(), &buf[sizeof(mDosHeader)], dosStubSize);
+		m_dos_stub.resize(dosStubSize, 0);
+		memcpy(m_dos_stub.data(), &buf[sizeof(m_dos_header)], dosStubSize);
 
-		auto ntHeader = (IMAGE_NT_HEADERS32*)&buf[mDosHeader.e_lfanew];
+		auto ntHeader = (IMAGE_NT_HEADERS32*)&buf[m_dos_header.e_lfanew];
 		if (ntHeader->Signature != 'EP') {		// 'PE'
 			return false;
 		}
@@ -209,20 +235,20 @@ private:
 		// 拷贝PE头
 		auto optionalHeader32 = &ntHeader->OptionalHeader;
 		if (optionalHeader32->Magic == 0x10b) {
-			mNtHeader = new IMAGE_NT_HEADERS32;
-			*mNtHeader = *ntHeader;
+			m_nt_header = new IMAGE_NT_HEADERS32;
+			*m_nt_header = *ntHeader;
 		}
 		else if (optionalHeader32->Magic == 0x20b) {
-			mNtHeader = (IMAGE_NT_HEADERS32*)new IMAGE_NT_HEADERS64;
-			*(IMAGE_NT_HEADERS64*)mNtHeader = *(IMAGE_NT_HEADERS64*)ntHeader;
+			m_nt_header = (IMAGE_NT_HEADERS32*)new IMAGE_NT_HEADERS64;
+			*(IMAGE_NT_HEADERS64*)m_nt_header = *(IMAGE_NT_HEADERS64*)ntHeader;
 		}
 		else {
 			return false;
 		}
 
-		mFileHeader = &mNtHeader->FileHeader;
+		m_file_header = &m_nt_header->FileHeader;
 
-		auto optionalHeader = &mNtHeader->OptionalHeader;
+		auto optionalHeader = &m_nt_header->OptionalHeader;
 		if (optionalHeader->Magic == 0x10b) {
 			*sectionHeaderTable = (IMAGE_SECTION_HEADER*)(ntHeader + 1);
 		}
@@ -242,15 +268,15 @@ private:
 
 	int GetSectionIndexByRVA(uint32_t rva) {
 		int i = 0;
-		for (; i < mFileHeader->NumberOfSections; i++) {
-			if (rva < mSectionHeaderTable[i].VirtualAddress) {
+		for (; i < m_file_header->NumberOfSections; i++) {
+			if (rva < m_section_header_table[i].VirtualAddress) {
 				return i - 1;
 			}
 		}
 
 		i--;
 		// 可能位于最后一个节区，但不能越界
-		if (rva - mSectionHeaderTable[i].VirtualAddress > mSectionHeaderTable[i].SizeOfRawData) {
+		if (rva - m_section_header_table[i].VirtualAddress > m_section_header_table[i].SizeOfRawData) {
 			return -1;
 		}
 
@@ -259,15 +285,15 @@ private:
 
 	int GetSectionIndexByRAW(uint32_t raw) {
 		int i = 0;
-		for (; i < mFileHeader->NumberOfSections; i++) {
-			if (raw < mSectionHeaderTable[i].PointerToRawData) {
+		for (; i < m_file_header->NumberOfSections; i++) {
+			if (raw < m_section_header_table[i].PointerToRawData) {
 				return i - 1;
 			}
 		}
 
 		i--;
 		// 可能位于最后一个节区，但不能越界
-		if (raw - mSectionHeaderTable[i].PointerToRawData + 1 > mSectionHeaderTable[i].SizeOfRawData) {
+		if (raw - m_section_header_table[i].PointerToRawData + 1 > m_section_header_table[i].SizeOfRawData) {
 			return -1;
 		}
 
@@ -279,7 +305,7 @@ private:
 		if (i == -1) {
 			return nullptr;
 		}
-		return &mSectionList[i][rva - mSectionHeaderTable[i].VirtualAddress];
+		return &m_section_list[i][rva - m_section_header_table[i].VirtualAddress];
 	}
 
 	uint32_t RVAToRAW(uint32_t rva) {
@@ -287,7 +313,7 @@ private:
 		if (i == -1) {
 			return 0;
 		}
-		return rva - mSectionHeaderTable[i].VirtualAddress + mSectionHeaderTable[i].PointerToRawData;
+		return rva - m_section_header_table[i].VirtualAddress + m_section_header_table[i].PointerToRawData;
 	}
 
 	uint32_t RAWToRVA(uint32_t raw) {
@@ -295,13 +321,13 @@ private:
 		if (i == -1) {
 			return 0;
 		}
-		return raw - mSectionHeaderTable[i].PointerToRawData + mSectionHeaderTable[i].VirtualAddress;
+		return raw - m_section_header_table[i].PointerToRawData + m_section_header_table[i].VirtualAddress;
 	}
 
 	uint32_t GetFileSize() {
 		int sum = GetPEHeaderSize();
-		for (int i = 0; i < mFileHeader->NumberOfSections; i++) {
-			sum += mSectionHeaderTable[i].SizeOfRawData;
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			sum += m_section_header_table[i].SizeOfRawData;
 		}
 		return sum;
 	}
@@ -328,18 +354,20 @@ private:
 		return dataDirectory;
 	}
 
+
+
 	std::vector<uint8_t> CalculationAuthHashCalc() {
 
 	}
 
 
 private:
-	IMAGE_DOS_HEADER mDosHeader;
-	std::vector<uint8_t> mDosStub;
-	IMAGE_NT_HEADERS32* mNtHeader;
-	IMAGE_FILE_HEADER* mFileHeader;
-	std::vector<IMAGE_SECTION_HEADER> mSectionHeaderTable;
-	std::vector<std::vector<uint8_t>> mSectionList;
+	IMAGE_DOS_HEADER m_dos_header;
+	std::vector<uint8_t> m_dos_stub;
+	IMAGE_NT_HEADERS32* m_nt_header;
+	IMAGE_FILE_HEADER* m_file_header;
+	std::vector<IMAGE_SECTION_HEADER> m_section_header_table;
+	std::vector<std::vector<uint8_t>> m_section_list;
 };
 
 } // namespace Geek

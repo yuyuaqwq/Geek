@@ -4,6 +4,7 @@
 #define NT_SUCCESS(x) ((x) >= 0)
 #define ProcessBasicInformation 0
 
+
 typedef NTSTATUS(NTAPI* pfnNtWow64QueryInformationProcess64)(
     IN HANDLE ProcessHandle,
     IN ULONG ProcessInformationClass,
