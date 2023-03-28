@@ -190,9 +190,8 @@ public:
 					export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
 				}
 				else {
-					IMAGE_IMPORT_BY_NAME* by_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-					char* func_name = by_name->Name;
-					export_rva = import_module.GetExportRVAByName(func_name);
+					IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+					export_rva = import_module.GetExportRVAByName(func_name->Name);
 				}
 				import_address_table->u1.Function = import_module_base + export_rva;
 			}
