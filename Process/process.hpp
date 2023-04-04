@@ -11,6 +11,8 @@
 #include <Geek/Handle/handle.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
+#include <CppUtils/String/string.hpp>
+
 namespace Geek {
 
 	class Process {
@@ -635,7 +637,9 @@ namespace Geek {
 			for (auto& it : moduleList) {
 				auto buf = ReadMemory((PVOID64)it.BaseDllName.Buffer, it.BaseDllName.Length + 2);
 				WCHAR* dllName = (WCHAR*)buf.data();
-				_wcsupr(dllName);
+				auto dllName_str = CppUtils::String::ToUppercase(std::wstring(dllName));
+				name_ = CppUtils::String::ToUppercase(name_);
+
 				_wcsupr((LPWSTR)name_.c_str());
 				if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
 					if (entry) memcpy(entry, &it, sizeof(it));
@@ -753,9 +757,9 @@ namespace Geek {
 				return NULL;
 			}
 			for (auto& entry : processEntryList) {
-				_wcsupr_s(entry.szExeFile);
-				_wcsupr_s((LPWSTR)processName_.c_str(), processName_.size());
-				if (!wcscmp(entry.szExeFile, (LPWSTR)processName_.c_str()))
+				auto exeFile_str = CppUtils::String::ToUppercase(std::wstring(entry.szExeFile));
+				processName_ = CppUtils::String::ToUppercase(processName_);
+				if (exeFile_str == processName_)
 					return entry.th32ProcessID;
 			}
 			return NULL;
