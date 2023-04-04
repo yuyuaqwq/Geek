@@ -40,6 +40,14 @@ namespace Geek {
 			return true;
 		}
 
+		bool Open(const wchar_t* process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+			DWORD pid = GetProcessIdByProcessName(process_name);
+			if (pid == 0) {
+				return false;
+			}
+			return Open(pid, desiredAccess);
+		}
+
 		/*
 		* CREATE_SUSPENDED:创建挂起进程
 		*/
@@ -360,25 +368,17 @@ namespace Geek {
 			return moduleList;
 		}
 
-		bool MemoryDump(bool(*callback)(char*, size_t, void*), void* arg) const {
+		bool MemoryEnum(bool(*callback)(char* addr, size_t size, void* arg), void* arg) const {
 			HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 			PROCESSENTRY32 process = { sizeof(PROCESSENTRY32) };
 			bool success = false;
-
 			std::vector<char> buf;
-
 			do {
 				std::vector<MODULEENTRY32> modulelist = EnumAllProcessModules();
-
 				std::vector<MEMORY_BASIC_INFORMATION> vec = EnumAllMemoryBlocks();
 
 				// 遍历该进程的内存块
 				size_t sizeSum = 0;
-
-				//if (compress) {
-				//	_outFilePath += L".temp";
-				//}
-				// CreateDirectoryW((path + L"\\temp").c_str(), NULL);
 				for (int i = 0; i < vec.size(); i++) {
 					bool isModule = false;
 					for (int j = 0; j < modulelist.size(); j++) {
@@ -390,24 +390,20 @@ namespace Geek {
 					if (!(!isModule && vec[i].AllocationProtect & PAGE_READWRITE && vec[i].State & MEM_COMMIT)) {
 						continue;
 					}
-
 					std::vector<char> tempBuff(vec[i].RegionSize);
-
 					DWORD readCount = 0;
 					if (!ReadProcessMemory(Get(), vec[i].BaseAddress, tempBuff.data(), vec[i].RegionSize, &readCount)) {
-						printf("%d\n", GetLastError());
+						//printf("%d\n", GetLastError());
 						continue;
 					}
-					printf("%d/%d\n", i, vec.size());
+					//printf("%d/%d\n", i, vec.size());
 					if (callback(tempBuff.data(), tempBuff.size(), arg)) {
 						break;
 					}
 					sizeSum += vec[i].RegionSize;
 				}
-
 				success = true;
 			} while (false);
-
 			return success;
 		}
 
@@ -757,8 +753,8 @@ namespace Geek {
 				return NULL;
 			}
 			for (auto& entry : processEntryList) {
-				_wcsupr(entry.szExeFile);
-				_wcsupr((LPWSTR)processName_.c_str());
+				_wcsupr_s(entry.szExeFile);
+				_wcsupr_s((LPWSTR)processName_.c_str(), processName_.size());
 				if (!wcscmp(entry.szExeFile, (LPWSTR)processName_.c_str()))
 					return entry.th32ProcessID;
 			}

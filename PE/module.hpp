@@ -10,6 +10,17 @@
 
 namespace Geek {
 
+
+
+#define GET_OPTIONAL_HEADER_FIELD(field, var) \
+	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; \
+	else var = 0; } 
+#define SET_OPTIONAL_HEADER_FIELD(field, var) \
+	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; \
+	else var = 0; } 
+
 class Module {
 public:
 	Module() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
@@ -98,6 +109,37 @@ public:
 
 		return pe.Write(buf);
 	}
+
+	uint32_t GetFileSize() {
+		int sum = GetPEHeaderSize();
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			sum += m_section_header_table[i].SizeOfRawData;
+		}
+		return sum;
+	}
+
+	uint32_t GetImageSize() {
+		uint32_t headerSize;
+		GET_OPTIONAL_HEADER_FIELD(SizeOfImage, headerSize);
+		return headerSize;
+	}
+
+	uint32_t GetPEHeaderSize() {
+		uint32_t headerSize;
+		GET_OPTIONAL_HEADER_FIELD(SizeOfHeaders, headerSize);
+		return headerSize;
+	}
+
+	uint64_t GetImageBase() {
+		uint64_t imageBase;
+		GET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
+		return imageBase;
+	}
+
+	void SetImageBase(uint64_t imageBase) {
+		SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
+	}
+
 
 	uint32_t GetExportRVAByName(const std::string& func_name) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
@@ -204,14 +246,6 @@ public:
 
 
 private:
-#define GET_OPTIONAL_HEADER_FIELD(field, var) \
-	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; \
-	else var = 0; } 
-#define SET_OPTIONAL_HEADER_FIELD(field, var) \
-	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; \
-	else var = 0; } 
 
 	bool CopyPEHeader(void* buf_, IMAGE_SECTION_HEADER** sectionHeaderTable) {
 		auto buf = (char*)buf_;
@@ -321,30 +355,6 @@ private:
 			return 0;
 		}
 		return raw - m_section_header_table[i].PointerToRawData + m_section_header_table[i].VirtualAddress;
-	}
-
-	uint32_t GetFileSize() {
-		int sum = GetPEHeaderSize();
-		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
-			sum += m_section_header_table[i].SizeOfRawData;
-		}
-		return sum;
-	}
-
-	uint32_t GetPEHeaderSize() {
-		uint32_t headerSize;
-		GET_OPTIONAL_HEADER_FIELD(SizeOfHeaders, headerSize);
-		return headerSize;
-	}
-
-	uint64_t GetImageBase() {
-		uint64_t imageBase;
-		GET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
-		return imageBase;
-	}
-
-	void SetImageBase(uint64_t imageBase) {
-		SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
 	}
 
 	IMAGE_DATA_DIRECTORY* GetDataDirectory() {

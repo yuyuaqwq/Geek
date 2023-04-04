@@ -1,6 +1,8 @@
 #ifndef GEEK_Wow64EXT_Wow64EXT_H_
 #define GEEK_Wow64EXT_Wow64EXT_H_
 
+#include <memory>
+
 #include <Windows.h>
 
 #include <Geek/Wow64ext/internal.h>
