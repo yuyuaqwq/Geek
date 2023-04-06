@@ -4,7 +4,11 @@
 #include <string>
 #include <vector>
 
+#ifndef WINNT
 #include <Windows.h>
+#else
+#include <ntimage.h>
+#endif
 
 #include <Geek/File/file.hpp>
 
@@ -180,9 +184,9 @@ public:
 			return 0;
 		}
 		auto numberOfNames = exportDirectory->NumberOfNames;
-		auto addressOfNames = (DWORD*)RVAToPoint(exportDirectory->AddressOfNames);
-		auto addressOfNameOrdinals = (WORD*)RVAToPoint(exportDirectory->AddressOfNameOrdinals);
-		auto addressOfFunctions = (DWORD*)RVAToPoint(exportDirectory->AddressOfFunctions);
+		auto addressOfNames = (uint32_t*)RVAToPoint(exportDirectory->AddressOfNames);
+		auto addressOfNameOrdinals = (uint16_t*)RVAToPoint(exportDirectory->AddressOfNameOrdinals);
+		auto addressOfFunctions = (uint32_t*)RVAToPoint(exportDirectory->AddressOfFunctions);
 		int funcIdx = -1;
 		for (int i = 0; i < numberOfNames; i++) {
 			auto exportName = (char*)RVAToPoint(addressOfNames[i]);
@@ -202,7 +206,7 @@ public:
 		if (exportDirectory == nullptr) {
 			return 0;
 		}
-		auto addressOfFunctions = (DWORD*)RVAToPoint(exportDirectory->AddressOfFunctions);
+		auto addressOfFunctions = (uint32_t*)RVAToPoint(exportDirectory->AddressOfFunctions);
 		// 外部提供的ordinal需要减去base
 		auto funcIdx = ordinal - exportDirectory->Base;
 		return addressOfFunctions[funcIdx];
@@ -220,7 +224,7 @@ public:
 			if (blockRVA == 0 && blockSize == 0) {
 				break;
 			}
-			WORD* fieldTable = (WORD*)((char*)relocationTable + sizeof(*relocationTable));
+			uint16_t* fieldTable = (uint16_t*)((char*)relocationTable + sizeof(*relocationTable));
 			relocationTable  = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
 			auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
 			for (int i = 0; i < fieldCount; i++) {

@@ -9,7 +9,7 @@
 
 #include <Geek/Process/ntinc.h>
 #include <Geek/Handle/handle.hpp>
-#include <Geek/Module/module.hpp>
+#include <Geek/Module/image.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
 #include <CppUtils/String/string.hpp>
