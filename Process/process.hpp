@@ -622,8 +622,8 @@ public:
 			std::vector<char> buf;
 			ReadMemory((PVOID64)it.BaseDllName.Buffer, &buf, it.BaseDllName.Length);
 			WCHAR* dllName = (WCHAR*)buf.data();
-			_wcsupr(dllName);
-			_wcsupr((LPWSTR)name_.c_str());
+			auto dllName_uppercase = CppUtils::String::ToUppercase(std::wstring(dllName));
+			auto name__uppercase = CppUtils::String::ToUppercase(name_);
 			if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
 				if (entry) memcpy(entry, &it, sizeof(it));
 				return true;
@@ -640,9 +640,7 @@ public:
 			WCHAR* dllName = (WCHAR*)buf.data();
 			auto dllName_str = CppUtils::String::ToUppercase(std::wstring(dllName));
 			name_ = CppUtils::String::ToUppercase(name_);
-
-			_wcsupr((LPWSTR)name_.c_str());
-			if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
+			if (dllName_str == name_) {
 				if (entry) memcpy(entry, &it, sizeof(it));
 				return true;
 			}

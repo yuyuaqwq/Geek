@@ -52,6 +52,10 @@ public:
 		return true;
 	}
 
+	bool Ok() {
+		return m_status == Status::kNormal;
+	}
+
 private:
 	Status m_status;
 	std::fstream m_fs;

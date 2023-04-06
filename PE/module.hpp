@@ -14,12 +14,10 @@ namespace Geek {
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; \
-	else var = 0; } 
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; } 
 #define SET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; \
-	else var = 0; } 
+	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
 
 class Module {
 public:
@@ -60,6 +58,9 @@ public:
 
 	bool LoadModuleFromFile(const std::wstring& path) {
 		File pe(path, std::ios::in | std::ios::binary);
+		if (!pe.Ok()) {
+			return false;
+		}
 		auto buf = pe.Read();
 		IMAGE_SECTION_HEADER* sectionHeaderTable;
 		if (!CopyPEHeader(buf.data(), &sectionHeaderTable)) {
@@ -78,16 +79,26 @@ public:
 
 	bool SaveModuleToFile(const std::wstring& path) {
 		File pe(path, std::ios::out | std::ios::binary | std::ios::trunc);
+		if (!pe.Ok()) {
+			return false;
+		}
 
+		auto buf = SaveModuleToFileBuf();
+
+		return pe.Write(buf);
+	}
+
+	std::vector<char> SaveModuleToFileBuf() {
 		std::vector<char> buf(GetFileSize(), 0);
-
 		int offset = 0;
 
 		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
-		offset = m_dos_header.e_lfanew;
+		offset += sizeof(m_dos_header);
 
 		memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
 		offset += m_dos_stub.size();
+
+		offset = m_dos_header.e_lfanew;
 
 		if (m_nt_header->OptionalHeader.Magic == 0x10b) {
 			memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
@@ -97,7 +108,7 @@ public:
 			memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
 			offset += sizeof(IMAGE_NT_HEADERS64);
 		}
-		
+
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
 			offset += sizeof(m_section_header_table[i]);
@@ -106,8 +117,7 @@ public:
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			memcpy(&buf[m_section_header_table[i].PointerToRawData], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
 		}
-
-		return pe.Write(buf);
+		return buf;
 	}
 
 	uint32_t GetFileSize() {
@@ -140,6 +150,29 @@ public:
 		SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
 	}
 
+	uint32_t GetEntryPoint() {
+		uint32_t entry_point;
+		GET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point);
+		return entry_point;
+	}
+
+	void SetEntryPoint(uint32_t entry_point) {
+		SET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point);
+	}
+
+	IMAGE_DATA_DIRECTORY* GetDataDirectory() {
+		IMAGE_DATA_DIRECTORY* dataDirectory;
+		GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory);
+		return dataDirectory;
+	}
+
+	void* RVAToPoint(uint32_t rva) {
+		auto i = GetSectionIndexByRVA(rva);
+		if (i == -1) {
+			return nullptr;
+		}
+		return &m_section_list[i][rva - m_section_header_table[i].VirtualAddress];
+	}
 
 	uint32_t GetExportRVAByName(const std::string& func_name) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
@@ -240,6 +273,49 @@ public:
 		}
 	}
 
+private:
+	// https://www.likecs.com/show-306676949.html
+	uint32_t calc_checksum(uint32_t checksum, const void* data, int length) {
+		if (length && data != nullptr) {
+			uint32_t sum = 0;
+			do {
+				sum = *(uint16_t*)data + checksum;
+				checksum = (uint16_t)sum + (sum >> 16);
+				data = (char*)data + 2;
+			} while (--length);
+		}
+		return checksum + (checksum >> 16);
+	}
+	uint32_t generate_pe_checksum(const void* file_base, uint32_t file_size) {
+		uint32_t file_checksum = 0;
+		if (m_nt_header) {
+			file_checksum = calc_checksum(0, file_base, file_size >> 1);
+			if (file_size & 1) {
+				file_checksum += (uint16_t) * ((char*)file_base + file_size - 1);
+			}
+		}
+		return (file_size + file_checksum);
+	}
+public:
+	bool CheckSum() {
+		uint32_t old_check_sum;
+		GET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
+		SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
+		auto buf = SaveModuleToFileBuf();
+		uint32_t check_sum = generate_pe_checksum(buf.data(), buf.size());
+		SET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
+
+		return old_check_sum == check_sum;
+	}
+
+	void RepairCheckSum() {
+		// https://blog.csdn.net/iiprogram/article/details/1585940/
+		SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
+		auto buf = SaveModuleToFileBuf();
+		uint32_t check_sum = generate_pe_checksum(buf.data(), buf.size());
+		SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum);
+	}
+
 	bool CheckDigitalSignature() {
 
 	}
@@ -333,14 +409,6 @@ private:
 		return i;
 	}
 
-	void* RVAToPoint(uint32_t rva) {
-		auto i = GetSectionIndexByRVA(rva);
-		if (i == -1) {
-			return nullptr;
-		}
-		return &m_section_list[i][rva - m_section_header_table[i].VirtualAddress];
-	}
-
 	uint32_t RVAToRAW(uint32_t rva) {
 		auto i = GetSectionIndexByRVA(rva);
 		if (i == -1) {
@@ -356,13 +424,6 @@ private:
 		}
 		return raw - m_section_header_table[i].PointerToRawData + m_section_header_table[i].VirtualAddress;
 	}
-
-	IMAGE_DATA_DIRECTORY* GetDataDirectory() {
-		IMAGE_DATA_DIRECTORY* dataDirectory;
-		GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory);
-		return dataDirectory;
-	}
-
 
 
 	std::vector<uint8_t> CalculationAuthHashCalc() {
