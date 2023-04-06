@@ -21,6 +21,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wow64ext", "wow64ext\wow64e
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Thread", "Thread\Thread.vcxproj", "{EDAED3AC-A77C-4513-B9B6-8B0F0DD23C65}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Module", "Module\Module.vcxproj", "{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -101,6 +103,14 @@ Global
 		{EDAED3AC-A77C-4513-B9B6-8B0F0DD23C65}.Release|x64.Build.0 = Release|x64
 		{EDAED3AC-A77C-4513-B9B6-8B0F0DD23C65}.Release|x86.ActiveCfg = Release|Win32
 		{EDAED3AC-A77C-4513-B9B6-8B0F0DD23C65}.Release|x86.Build.0 = Release|Win32
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Debug|x64.ActiveCfg = Debug|x64
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Debug|x64.Build.0 = Debug|x64
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Debug|x86.ActiveCfg = Debug|Win32
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Debug|x86.Build.0 = Debug|Win32
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Release|x64.ActiveCfg = Release|x64
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Release|x64.Build.0 = Release|x64
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Release|x86.ActiveCfg = Release|Win32
+		{D61546E6-6EB4-47FB-8DE7-8A887BC83ABD}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

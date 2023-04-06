@@ -524,124 +524,113 @@ public:
 	/*
 	* Module
 	*/
-		
-	std::vector<LDR_DATA_TABLE_ENTRY32> GetModuleList32() {
+	
+	std::vector<Module> GetModuleList() {
 		/*
 		* https://blog.csdn.net/wh445306/article/details/107867375
 		*/
 
-		std::vector<LDR_DATA_TABLE_ENTRY32> moduleList;
-		do {
-			HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-			pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
-
-			PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
-
-			if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
-				break;
-			}
-
-			DWORD Ldr32 = 0;
-			LIST_ENTRY32 ListEntry32 = { 0 };
-			LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
-			wchar_t ProPath32[256];
-
-			if (!ReadProcessMemory(Get(), (PVOID)(pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32), NULL)) {
-				break;
-			}
-			if (!ReadProcessMemory(Get(), (PVOID)(Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32), NULL)) {
-				break;
-			}
-			if (!ReadProcessMemory(Get(), (PVOID)(ListEntry32.Flink), &LDTE32, sizeof(LDTE32), NULL)) {
-				break;
-			}
-			while (1) {
-				if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
-				if (ReadProcessMemory(Get(), (PVOID)LDTE32.FullDllName.Buffer, ProPath32, sizeof(ProPath32), NULL)) {
-					// printf("模块基址:0x%X\t模块大小:0x%X\t模块路径:%ls\n", LDTE32.DllBase, LDTE32.SizeOfImage, ProPath32);
-					moduleList.push_back(LDTE32);
-				}
-				if (!ReadProcessMemory(Get(), (PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32), NULL)) break;
-			}
-		} while (false);
-		return moduleList;
-	}
-
-	std::vector<LDR_DATA_TABLE_ENTRY64> GetModuleList64() {
-		/*
-		* https://blog.csdn.net/wh445306/article/details/107867375
-		*/
-		std::vector<LDR_DATA_TABLE_ENTRY64> moduleList;
-		do {
-			HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-			PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
-			if (ms_wow64.Wow64Operation(Get())) {
-				pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
-				if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
-					break;
-				}
-			}
-			else {
+		std::vector<Module> moduleList;
+		if (IsX86()) {
+			do {
+				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
 				pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
-				if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
+
+				PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
+
+				if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
 					break;
 				}
-			}
 
-			DWORD64 Ldr64 = 0;
-			LIST_ENTRY64 ListEntry64 = { 0 };
-			LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
-			wchar_t ProPath64[256];
+				DWORD Ldr32 = 0;
+				LIST_ENTRY32 ListEntry32 = { 0 };
+				LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
 
-			if (!ReadMemory((PVOID64)(pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
-				break;
-			}
-			if (!ReadMemory((PVOID64)(Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
-				break;
-			}
-			if (!ReadMemory((PVOID64)(ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
-				break;
-			}
-
-			while (1) {
-				if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
-				if (ReadMemory((PVOID64)LDTE64.FullDllName.Buffer, ProPath64, sizeof(ProPath64))) {
-					// printf("模块基址:0x%llX\t模块大小:0x%X\t模块路径:%ls\n", LDTE64.DllBase, LDTE64.SizeOfImage, ProPath64);
-					moduleList.push_back(LDTE64);
+				if (!ReadMemory((PVOID)(pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32))) {
+					break;
 				}
-				if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
-			}
-				
-		} while (false);
+				if (!ReadMemory((PVOID)(Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32))) {
+					break;
+				}
+				if (!ReadMemory((PVOID)(ListEntry32.Flink), &LDTE32, sizeof(LDTE32))) {
+					break;
+				}
+
+				while (true) {
+					if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
+					std::wstring full_name(LDTE32.FullDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID)LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
+						continue;
+					}
+					std::wstring base_name(LDTE32.BaseDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID)LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
+						continue;
+					}
+					Module module(LDTE32, base_name, full_name);
+					moduleList.push_back(module);
+					if (!ReadMemory((PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
+				}
+			} while (false);
+		}
+		else {
+			do {
+				HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
+				PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
+				if (ms_wow64.Wow64Operation(Get())) {
+					pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
+					if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
+						break;
+					}
+				}
+				else {
+					pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
+					if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
+						break;
+					}
+				}
+
+				DWORD64 Ldr64 = 0;
+				LIST_ENTRY64 ListEntry64 = { 0 };
+				LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
+				wchar_t ProPath64[256];
+
+				if (!ReadMemory((PVOID64)(pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
+					break;
+				}
+				if (!ReadMemory((PVOID64)(Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
+					break;
+				}
+				if (!ReadMemory((PVOID64)(ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
+					break;
+				}
+
+				while (true) {
+					if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
+					std::wstring full_name(LDTE64.FullDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID)LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
+						continue;
+					}
+					std::wstring base_name(LDTE64.BaseDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID)LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
+						continue;
+					}
+					Module module(LDTE64, base_name, full_name);
+					moduleList.push_back(module);
+					if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+				}
+
+			} while (false);
+		}
 		return moduleList;
 	}
 
-	bool FindModlueByModuleName32(const WCHAR* name, LDR_DATA_TABLE_ENTRY32* entry) {
-		std::wstring name_ = name;
-		for (auto& it : GetModuleList32()) {
-			std::vector<char> buf;
-			ReadMemory((PVOID64)it.BaseDllName.Buffer, &buf, it.BaseDllName.Length);
-			WCHAR* dllName = (WCHAR*)buf.data();
-			auto dllName_uppercase = CppUtils::String::ToUppercase(std::wstring(dllName));
-			auto name__uppercase = CppUtils::String::ToUppercase(name_);
-			if (!wcscmp(dllName, (LPWSTR)name_.c_str())) {
-				if (entry) memcpy(entry, &it, sizeof(it));
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool FindModlueByModuleName64(const WCHAR* name, LDR_DATA_TABLE_ENTRY64* entry) {
-		std::wstring name_ = name;
-		auto moduleList = GetModuleList64();
-		for (auto& it : moduleList) {
-			auto buf = ReadMemory((PVOID64)it.BaseDllName.Buffer, it.BaseDllName.Length + 2);
-			WCHAR* dllName = (WCHAR*)buf.data();
-			auto dllName_str = CppUtils::String::ToUppercase(std::wstring(dllName));
-			name_ = CppUtils::String::ToUppercase(name_);
-			if (dllName_str == name_) {
-				if (entry) memcpy(entry, &it, sizeof(it));
+	bool FindModlueByModuleName(const WCHAR* name, Module* module = nullptr) {
+		std::wstring find_name = name;
+		for (auto& it : GetModuleList()) {
+			auto base_name_up = CppUtils::String::ToUppercase(it.base_name);
+			find_name = CppUtils::String::ToUppercase(find_name);
+			if (base_name_up == find_name) {
+				if (module) memcpy(module, &it, sizeof(it));
 				return true;
 			}
 		}
@@ -706,12 +695,9 @@ public:
 
 	}
 
-
-
 	/*
 	* other
 	*/
-
 
 
 public:

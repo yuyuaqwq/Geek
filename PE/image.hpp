@@ -1,5 +1,5 @@
-#ifndef GEEK_PE_MODULE_H_
-#define GEEK_PE_MODULE_H_
+#ifndef GEEK_PE_IMAGE_H_
+#define GEEK_PE_IMAGE_H_
 
 #include <string>
 #include <vector>
@@ -19,13 +19,13 @@ namespace Geek {
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
 	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
 
-class Module {
+class Image {
 public:
-	Module() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
+	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
 
 	}
 
-	~Module() {
+	~Image() {
 		if (m_nt_header) {
 			if (m_nt_header->OptionalHeader.Magic == 0x10b) {
 				delete m_nt_header;
@@ -39,7 +39,7 @@ public:
 
 
 public:
-	bool LoadModuleFromImage(void* buf_) {
+	bool LoadFromImage(void* buf_) {
 		IMAGE_SECTION_HEADER* sectionHeaderTable;
 		if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
 			return false;
@@ -56,7 +56,7 @@ public:
 		return true;
 	}
 
-	bool LoadModuleFromFile(const std::wstring& path) {
+	bool LoadFromFile(const std::wstring& path) {
 		File pe(path, std::ios::in | std::ios::binary);
 		if (!pe.Ok()) {
 			return false;
@@ -77,18 +77,18 @@ public:
 		return true;
 	}
 
-	bool SaveModuleToFile(const std::wstring& path) {
+	bool SaveToFile(const std::wstring& path) {
 		File pe(path, std::ios::out | std::ios::binary | std::ios::trunc);
 		if (!pe.Ok()) {
 			return false;
 		}
 
-		auto buf = SaveModuleToFileBuf();
+		auto buf = SaveToFileBuf();
 
 		return pe.Write(buf);
 	}
 
-	std::vector<char> SaveModuleToFileBuf() {
+	std::vector<char> SaveToFileBuf() {
 		std::vector<char> buf(GetFileSize(), 0);
 		int offset = 0;
 
@@ -257,8 +257,8 @@ public:
 			}
 			IMAGE_THUNK_DATA* import_name_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->OriginalFirstThunk);
 			IMAGE_THUNK_DATA* import_address_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->FirstThunk);
-			Module import_module;
-			import_module.LoadModuleFromImage((void*)import_module_base);
+			Image import_module;
+			import_module.LoadFromImage((void*)import_module_base);
 			for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
 				uint32_t export_rva;
 				if (import_name_table->u1.Ordinal >> 31 == 1) {
@@ -301,7 +301,7 @@ public:
 		uint32_t old_check_sum;
 		GET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
 		SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
-		auto buf = SaveModuleToFileBuf();
+		auto buf = SaveToFileBuf();
 		uint32_t check_sum = generate_pe_checksum(buf.data(), buf.size());
 		SET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
 
@@ -311,7 +311,7 @@ public:
 	void RepairCheckSum() {
 		// https://blog.csdn.net/iiprogram/article/details/1585940/
 		SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
-		auto buf = SaveModuleToFileBuf();
+		auto buf = SaveToFileBuf();
 		uint32_t check_sum = generate_pe_checksum(buf.data(), buf.size());
 		SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum);
 	}
@@ -442,4 +442,4 @@ private:
 
 } // namespace Geek
 
-#endif // GEEK_PE_MODULE_H_
+#endif // GEEK_PE_IMAGE_H_

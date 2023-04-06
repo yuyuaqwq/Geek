@@ -15,8 +15,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="image.hpp">
-      <Filter>头文件</Filter>
+    <ClInclude Include="module.hpp">
+      <Filter>源文件</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
