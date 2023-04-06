@@ -14,6 +14,9 @@
 
 namespace Geek {
 
+static HANDLE ms_heap = NULL;
+static BOOL ms_is_wow64 = FALSE;
+
 class Wow64 {
 public:
     static bool Wow64Operation(HANDLE hProcess) {
@@ -578,8 +581,8 @@ public:
     }
 
 private:
-    inline static HANDLE ms_heap = NULL;
-    inline static BOOL ms_is_wow64 = FALSE;
+    //inline static HANDLE ms_heap = NULL;
+    //inline static BOOL ms_is_wow64 = FALSE;
 };
 
 }

@@ -233,7 +233,7 @@ public:
 				}
 				else {
 					IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-					export_rva = import_module.GetExportRVAByName(func_name->Name);
+					export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
 				}
 				import_address_table->u1.Function = import_module_base + export_rva;
 			}
