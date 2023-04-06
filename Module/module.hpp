@@ -11,6 +11,12 @@ namespace Geek {
 
 class Module {
 public:
+	Module() {
+		base = 0;
+		size = 0;
+		entry_point = 0;
+	}
+
 	Module(const LDR_DATA_TABLE_ENTRY64& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
 		base = entry.DllBase;
 		size = entry.SizeOfImage;

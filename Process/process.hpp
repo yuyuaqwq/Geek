@@ -9,6 +9,7 @@
 
 #include <Geek/Process/ntinc.h>
 #include <Geek/Handle/handle.hpp>
+#include <Geek/Module/module.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
 #include <CppUtils/String/string.hpp>
@@ -558,15 +559,15 @@ public:
 
 				while (true) {
 					if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
-					std::wstring full_name(LDTE32.FullDllName.Length + 1, 0);
+					std::vector<wchar_t>  full_name(LDTE32.FullDllName.Length + 1, 0);
 					if (!ReadMemory((PVOID)LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
 						continue;
 					}
-					std::wstring base_name(LDTE32.BaseDllName.Length + 1, 0);
+					std::vector<wchar_t>  base_name(LDTE32.BaseDllName.Length + 1, 0);
 					if (!ReadMemory((PVOID)LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
 						continue;
 					}
-					Module module(LDTE32, base_name, full_name);
+					Module module(LDTE32, base_name.data(), full_name.data());
 					moduleList.push_back(module);
 					if (!ReadMemory((PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
 				}
@@ -606,15 +607,17 @@ public:
 
 				while (true) {
 					if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
-					std::wstring full_name(LDTE64.FullDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID)LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
+					std::vector<wchar_t> full_name(LDTE64.FullDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID64)LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
+						if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 						continue;
 					}
-					std::wstring base_name(LDTE64.BaseDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID)LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
+					std::vector<wchar_t> base_name(LDTE64.BaseDllName.Length + 1, 0);
+					if (!ReadMemory((PVOID64)LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
+						if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 						continue;
 					}
-					Module module(LDTE64, base_name, full_name);
+					Module module(LDTE64, base_name.data(), full_name.data());
 					moduleList.push_back(module);
 					if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 				}
@@ -624,11 +627,10 @@ public:
 		return moduleList;
 	}
 
-	bool FindModlueByModuleName(const WCHAR* name, Module* module = nullptr) {
-		std::wstring find_name = name;
+	bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
+		std::wstring find_name = CppUtils::String::ToUppercase(name);
 		for (auto& it : GetModuleList()) {
 			auto base_name_up = CppUtils::String::ToUppercase(it.base_name);
-			find_name = CppUtils::String::ToUppercase(find_name);
 			if (base_name_up == find_name) {
 				if (module) memcpy(module, &it, sizeof(it));
 				return true;
