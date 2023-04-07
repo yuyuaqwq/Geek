@@ -632,7 +632,7 @@ public:
 		for (auto& it : GetModuleList()) {
 			auto base_name_up = CppUtils::String::ToUppercase(it.base_name);
 			if (base_name_up == find_name) {
-				if (module) memcpy(module, &it, sizeof(it));
+				if (module) *module = it;
 				return true;
 			}
 		}

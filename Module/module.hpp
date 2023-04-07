@@ -32,6 +32,10 @@ public:
 		entry_point = entry.EntryPoint;
 	}
 
+	~Module() {
+
+	}
+
 	uint64_t entry_point;
 	uint64_t base;
 	uint32_t size;
