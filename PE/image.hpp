@@ -18,10 +18,10 @@ namespace Geek {
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; } 
+	else /* (m_nt_header->OptionalHeader.Magic == 0x20b)*/ var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; } 
 #define SET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
+	else/* (m_nt_header->OptionalHeader.Magic == 0x20b)*/ ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
 
 class Image {
 public:
@@ -124,6 +124,38 @@ public:
 		return buf;
 	}
 
+	std::vector<char> SaveToImageBuf() {
+		std::vector<char> buf(GetImageSize(), 0);
+		int offset = 0;
+
+		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
+		offset += sizeof(m_dos_header);
+
+		memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
+		offset += m_dos_stub.size();
+
+		offset = m_dos_header.e_lfanew;
+
+		if (m_nt_header->OptionalHeader.Magic == 0x10b) {
+			memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
+			offset += sizeof(*m_nt_header);
+		}
+		else {
+			memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
+			offset += sizeof(IMAGE_NT_HEADERS64);
+		}
+
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
+			offset += sizeof(m_section_header_table[i]);
+		}
+
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			memcpy(&buf[m_section_header_table[i].VirtualAddress], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
+		}
+		return buf;
+	}
+
 	uint32_t GetFileSize() {
 		int sum = GetPEHeaderSize();
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
@@ -212,6 +244,10 @@ public:
 		return addressOfFunctions[funcIdx];
 	}
 
+	bool IsPE32() {
+		return m_nt_header->OptionalHeader.Magic == 0x10b;
+	}
+
 	bool RepairRepositionTable(uint64_t newImageBase) {
 		auto relocationTable = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 		if (relocationTable == nullptr) {
@@ -237,7 +273,7 @@ public:
 					auto addr = (uint32_t*)RVAToPoint(RVA);
 					*addr = *addr - imageBase + newImageBase;
 				}
-				if (offsetType == IMAGE_REL_BASED_DIR64) {
+				else if (offsetType == IMAGE_REL_BASED_DIR64) {
 					auto addr = (uint64_t*)RVAToPoint(RVA);
 					*addr = *addr - imageBase + newImageBase;
 				}
@@ -248,31 +284,60 @@ public:
 	}
 
 	bool RepairImportAddressTable() {
-		auto import_table = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-		if (import_table == nullptr) {
+		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+		if (import_descriptor == nullptr) {
 			return false;
 		}
-		IMAGE_IMPORT_DESCRIPTOR* import_descriptor = (IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(import_table->VirtualAddress);
 		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
 			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
 			uint64_t import_module_base = (uint64_t)LoadLibraryA(import_module_name);
-			if (import_module_base) {
-				continue;
+			if (IsPE32()) {
+				IMAGE_THUNK_DATA32* import_name_table = (IMAGE_THUNK_DATA32*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+				IMAGE_THUNK_DATA32* import_address_table = (IMAGE_THUNK_DATA32*)RVAToPoint(import_descriptor->FirstThunk);
+				Image import_module;
+				if (import_module_base) {
+					import_module.LoadFromImage((void*)import_module_base);
+				}
+				for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+					if (import_module_base) {
+						uint32_t export_rva;
+						if (import_name_table->u1.Ordinal >> 31 == 1) {
+							export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+						}
+						else {
+							IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+							export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
+						}
+						import_address_table->u1.Function = import_module_base + export_rva;
+					}
+					else {
+						import_address_table->u1.Function = import_address_table->u1.Function = 0x12345678;
+					}
+				}
 			}
-			IMAGE_THUNK_DATA* import_name_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->OriginalFirstThunk);
-			IMAGE_THUNK_DATA* import_address_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->FirstThunk);
-			Image import_module;
-			import_module.LoadFromImage((void*)import_module_base);
-			for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
-				uint32_t export_rva;
-				if (import_name_table->u1.Ordinal >> 31 == 1) {
-					export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+			else {
+				IMAGE_THUNK_DATA64* import_name_table = (IMAGE_THUNK_DATA64*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+				IMAGE_THUNK_DATA64* import_address_table = (IMAGE_THUNK_DATA64*)RVAToPoint(import_descriptor->FirstThunk);
+				Image import_module;
+				if (import_module_base) {
+					import_module.LoadFromImage((void*)import_module_base);
 				}
-				else {
-					IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-					export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
+				for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+					if (import_module_base) {
+						uint32_t export_rva;
+						if (import_name_table->u1.Ordinal >> 63 == 1) {
+							export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+						}
+						else {
+							IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+							export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
+						}
+						import_address_table->u1.Function = import_module_base + export_rva;
+					}
+					else {
+						import_address_table->u1.Function = 0x1234567812345678;
+					}
 				}
-				import_address_table->u1.Function = import_module_base + export_rva;
 			}
 		}
 	}
