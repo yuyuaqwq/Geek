@@ -75,8 +75,20 @@ public:
 		// 保存节区和头节区
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			m_section_header_table[i] = sectionHeaderTable[i];
-			m_section_list[i].resize(m_section_header_table[i].SizeOfRawData, 0);
-			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], m_section_header_table[i].SizeOfRawData);
+			
+
+			size_t size = m_section_header_table[i].SizeOfRawData;
+			
+			if (size == 0) {
+				// dll中没有数据的区段？
+				GET_OPTIONAL_HEADER_FIELD(SectionAlignment, size);
+				m_section_list[i].resize(size, 0);
+			}
+			else {
+				m_section_list[i].resize(size, 0);
+				memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], size);
+			}
+			
 		}
 		return true;
 	}
@@ -144,7 +156,7 @@ public:
 			memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
 			offset += sizeof(IMAGE_NT_HEADERS64);
 		}
-
+		
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
 			offset += sizeof(m_section_header_table[i]);
@@ -283,7 +295,37 @@ public:
 		return true;
 	}
 
-	bool RepairImportAddressTable() {
+private:
+	template<typename IMAGE_THUNK_DATA_T>
+	bool RepairImportAddressTableFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, uint64_t import_module_base, bool skip_not_loaded) {
+		IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
+		Image import_module;
+		if (import_module_base) {
+			import_module.LoadFromImage((void*)import_module_base);
+		}
+		else if (!skip_not_loaded) {
+			return false;
+		}
+		for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+			if (!import_module_base) {
+				import_address_table->u1.Function = import_address_table->u1.Function = 0x1234567887654321;
+				continue;
+			}
+			uint32_t export_rva;
+			if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
+				export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+			}
+			else {
+				IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+				export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
+			}
+			import_address_table->u1.Function = import_module_base + export_rva;
+		}
+		return true;
+	}
+public:
+	bool RepairImportAddressTable(bool skip_not_loaded = false) {
 		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 		if (import_descriptor == nullptr) {
 			return false;
@@ -292,51 +334,14 @@ public:
 			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
 			uint64_t import_module_base = (uint64_t)LoadLibraryA(import_module_name);
 			if (IsPE32()) {
-				IMAGE_THUNK_DATA32* import_name_table = (IMAGE_THUNK_DATA32*)RVAToPoint(import_descriptor->OriginalFirstThunk);
-				IMAGE_THUNK_DATA32* import_address_table = (IMAGE_THUNK_DATA32*)RVAToPoint(import_descriptor->FirstThunk);
-				Image import_module;
-				if (import_module_base) {
-					import_module.LoadFromImage((void*)import_module_base);
-				}
-				for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
-					if (import_module_base) {
-						uint32_t export_rva;
-						if (import_name_table->u1.Ordinal >> 31 == 1) {
-							export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
-						}
-						else {
-							IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-							export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
-						}
-						import_address_table->u1.Function = import_module_base + export_rva;
-					}
-					else {
-						import_address_table->u1.Function = import_address_table->u1.Function = 0x12345678;
-					}
+				IMAGE_THUNK_DATA32 a;
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(import_descriptor, import_module_base, skip_not_loaded)) {
+					return false;
 				}
 			}
 			else {
-				IMAGE_THUNK_DATA64* import_name_table = (IMAGE_THUNK_DATA64*)RVAToPoint(import_descriptor->OriginalFirstThunk);
-				IMAGE_THUNK_DATA64* import_address_table = (IMAGE_THUNK_DATA64*)RVAToPoint(import_descriptor->FirstThunk);
-				Image import_module;
-				if (import_module_base) {
-					import_module.LoadFromImage((void*)import_module_base);
-				}
-				for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
-					if (import_module_base) {
-						uint32_t export_rva;
-						if (import_name_table->u1.Ordinal >> 63 == 1) {
-							export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
-						}
-						else {
-							IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-							export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
-						}
-						import_address_table->u1.Function = import_module_base + export_rva;
-					}
-					else {
-						import_address_table->u1.Function = 0x1234567812345678;
-					}
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA64>(import_descriptor, import_module_base, skip_not_loaded)) {
+					return false;
 				}
 			}
 		}
