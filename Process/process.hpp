@@ -10,6 +10,7 @@
 #include <Geek/Process/ntinc.h>
 #include <Geek/Handle/handle.hpp>
 #include <Geek/Module/module.hpp>
+#include <Geek/PE/image.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
 #include <CppUtils/String/string.hpp>
@@ -338,8 +339,8 @@ public:
 		MEMORY_BASIC_INFORMATION  memInfo = { 0 };
 		while (p < sysInfo.lpMaximumApplicationAddress) {
 			// 获取进程虚拟内存块缓冲区字节数
-			size_t size = VirtualQueryEx(Get(), p, &memInfo, sizeof(MEMORY_BASIC_INFORMATION32));
-			if (size != sizeof(MEMORY_BASIC_INFORMATION32)) { break; }
+			size_t size = VirtualQueryEx(Get(), p, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
+			if (size != sizeof(MEMORY_BASIC_INFORMATION)) { break; }
 
 			// 将内存块信息追加到 vector 数组尾部
 			memoryBlockList.push_back(memInfo);
@@ -395,7 +396,7 @@ public:
 					continue;
 				}
 				std::vector<char> tempBuff(vec[i].RegionSize);
-				DWORD readCount = 0;
+				SIZE_T readCount = 0;
 				if (!ReadProcessMemory(Get(), vec[i].BaseAddress, tempBuff.data(), vec[i].RegionSize, &readCount)) {
 					//printf("%d\n", GetLastError());
 					continue;
@@ -521,6 +522,28 @@ public:
 		}
 		return context;
 	}
+
+	/*
+	* Image
+	*/
+	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true) {
+		auto image_base = AllocMemory(NULL, image->GetImageSize(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+		image->RepairRepositionTable((uint64_t)image_base);
+		image->RepairImportAddressTable();
+		auto image_buf = image->SaveToImageBuf();
+		WriteMemory(image_base, image_buf.data(), image_buf.size());
+		if (call_dll_entry) {
+			if (IsCur()) {
+				image->CallEntryPoint((HINSTANCE)image_base);
+			}
+			else {
+
+			}
+		}
+		return image_base;
+	}
+
+
 
 	/*
 	* Module
