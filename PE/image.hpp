@@ -399,6 +399,11 @@ public:
 	/*
 	* TLS
 	*/
+private:
+	// PIMAGE_TLS_CALLBACK
+	typedef VOID (NTAPI* PIMAGE_TLS_CALLBACK32)(uint32_t DllHandle, DWORD Reason, PVOID Reserved);
+	typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK64)(uint64_t DllHandle, DWORD Reason, PVOID Reserved);
+public:
 	bool ExecuteTls(uint64_t ImageBase) {
 		auto tls_dir = (IMAGE_TLS_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 		if (tls_dir == nullptr) {
@@ -407,7 +412,14 @@ public:
 		PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
 		if (callback) {
 			while (*callback) {
-				(*callback)((LPVOID)ImageBase, DLL_PROCESS_ATTACH, NULL);
+				if (IsPE32()) {
+					PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+					callback32((uint32_t)ImageBase, DLL_PROCESS_ATTACH, NULL);
+				}
+				else {
+					PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+					callback64(ImageBase, DLL_PROCESS_ATTACH, NULL);
+				}
 				callback++;
 			}
 		}
@@ -418,14 +430,21 @@ public:
 	* Running
 	*/
 private:
-	typedef BOOL(WINAPI* DllEntryProc)(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved);
+	typedef BOOL(WINAPI* DllEntryProc32)(uint32_t hinstDLL, DWORD fdwReason, LPVOID lpReserved);
+	typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, LPVOID lpReserved);
 	typedef int (WINAPI* ExeEntryProc)(void);
 public:
-	void CallEntryPoint(HINSTANCE ImageBase) {
+	void CallEntryPoint(uint64_t ImageBase) {
 		uint32_t rva = GetEntryPoint();
 		if (m_file_header->Characteristics & IMAGE_FILE_DLL) {
-			DllEntryProc DllEntry = (DllEntryProc)(LPVOID)((uint64_t)ImageBase + rva);
-			DllEntry((HINSTANCE)ImageBase, DLL_PROCESS_ATTACH, NULL);
+			if (IsPE32()) {
+				DllEntryProc32 DllEntry = (DllEntryProc32)(ImageBase + rva);
+				DllEntry((uint32_t)ImageBase, DLL_PROCESS_ATTACH, NULL);
+			}
+			else {
+				DllEntryProc64 DllEntry = (DllEntryProc64)(ImageBase + rva);
+				DllEntry(ImageBase, DLL_PROCESS_ATTACH, NULL);
+			}
 		}
 		else {
 			ExeEntryProc ExeEntry = (ExeEntryProc)(LPVOID)(ImageBase + rva);

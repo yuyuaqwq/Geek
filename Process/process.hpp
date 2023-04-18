@@ -202,14 +202,14 @@ public:
 	/*
 	* Memory
 	*/
-	PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+	PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
 		if (ms_wow64.Wow64Operation(Get())) {
 			return (PVOID64)ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
 		}
 		return VirtualAllocEx(Get(), addr, len, type, protect);
 	}
 
-	PVOID64 AllocMemory(size_t len, DWORD type = MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+	PVOID64 AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
 		return AllocMemory(NULL, len, type, protect);
 	}
 
@@ -527,18 +527,39 @@ public:
 	* Image
 	*/
 	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true) {
-		auto image_base = AllocMemory(NULL, image->GetImageSize(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-		image->RepairRepositionTable((uint64_t)image_base);
-		image->RepairImportAddressTable();
-		auto image_buf = image->SaveToImageBuf();
-		WriteMemory(image_base, image_buf.data(), image_buf.size());
-		if (call_dll_entry) {
-			if (IsCur()) {
-				image->CallEntryPoint((HINSTANCE)image_base);
+		if (IsX86() != image->IsPE32()) {
+			return nullptr;
+		}
+		auto image_base = AllocMemory(NULL, image->GetImageSize(), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		bool success = false;
+		do {
+			if (!image_base) {
+				break;
 			}
-			else {
+			if (!image->RepairRepositionTable((uint64_t)image_base)) {
+				break;
+			}
+			if (!image->RepairImportAddressTable()) {
+				break;
+			}
+			auto image_buf = image->SaveToImageBuf();
+			if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+				break;
+			}
+			if (call_dll_entry) {
+				image->ExecuteTls((uint64_t)image_base);
 
+				if (IsCur()) {
+					image->CallEntryPoint((uint64_t)image_base);
+				}
+				else {
+
+				}
 			}
+			success = true;
+		} while (false);
+		if (success == false && image_base) {
+			FreeMemory(image_base);
 		}
 		return image_base;
 	}
