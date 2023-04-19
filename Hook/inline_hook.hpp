@@ -49,7 +49,7 @@ public:
 		uint32_t ecx;
 		uint32_t eax;
 
-		uint32_t c;
+		uint32_t forward_page_base;
 		uint32_t ret_addr;
 		uint32_t esp;
 		uint32_t stack[];
@@ -81,7 +81,7 @@ public:
 		* callback中指定 ret_addr = stack[0]
 		* callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
 		* 
-	* 16位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
+	* 64位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
 	*/
 	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
@@ -443,8 +443,10 @@ public:
 		return jmp_addr_ - instr_addr_ - instr_size;
 	}
 
-#define EMITASM_GET_CURRENT_ADDR() 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05, 		// call next;    next: pop eax/rax;    add eax/rax, 5;
+#define GET_CURRENT_ADDR { 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05 } 		// call next;    next: pop eax/rax;    add eax/rax, 5;
 
+
+#define GET_KERNEL32_IMAGE_BASE { 0x64, 0xA1, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x0C, 0x8B, 0x40, 0x0C, 0x8B, 0x00, 0x8B, 0x00, 0x8B, 0x40, 0x18 }
 	/* 定位kernel32
 	mov eax, dword ptr fs : [30h]   ;指向PEB结构
     mov eax, dword ptr[eax + 0Ch]   ;指向LDR Ptr32 _PEB_LDR_DATA
@@ -452,7 +454,7 @@ public:
     mov eax, dword ptr[eax]         ;移动_LIST_ENTRY
     mov eax, dword ptr[eax]         ;指向Kernel32
     mov eax, dword ptr[eax + 18h]   ;指向DllBase基址
-    ret
+    ;ret
 	*/
 
 };

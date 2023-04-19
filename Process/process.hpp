@@ -48,8 +48,8 @@ public:
 		return true;
 	}
 
-	bool Open(const wchar_t* process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
-		DWORD pid = GetProcessIdByProcessName(process_name);
+	bool Open(const wchar_t* process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS, int count = 1) {
+		DWORD pid = GetProcessIdByProcessName(process_name, count);
 		if (pid == 0) {
 			return false;
 		}
@@ -439,7 +439,7 @@ public:
 	/*
 	* Thread
 	*/
-	Thread CreateThread(PTHREAD_START_ROUTINE start_routine, LPVOID parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
+	Thread CreateThread(PTHREAD_START_ROUTINE start_routine, PVOID64 parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
 		DWORD thread_id = 0;
 		HANDLE thread_handle = NULL;
 		if (IsCur()) {
@@ -449,13 +449,15 @@ public:
 			thread_handle = ::CreateRemoteThread(Get(), NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
 		}
 		if (thread_handle != NULL) {
-			Thread(thread_handle);
+			Thread thread;
+			thread.Open(UniqueHandle(thread_handle));
+			return thread;
 		}
 		return Thread();
 	}
 
 	uint16_t BlockThread(Thread* thread) {
-		if (!thread->SuspendThread()) {
+		if (!thread->Suspend()) {
 			return 0;
 		}
 		unsigned char jmpSelf[] = { 0xeb, 0xfe };
@@ -471,12 +473,12 @@ public:
 			ip = (PVOID64)context->Rip;
 		}
 		auto oldInstr = LockAddress(ip);
-		thread->ResumeThread();
+		thread->Resume();
 		return oldInstr;
 	}
 
 	bool ResumeBlockedThread(Thread* thread, uint16_t instr) {
-		if (!thread->SuspendThread()) {
+		if (!thread->Suspend()) {
 			return false;
 		}
 		uint16_t oldInstr;
@@ -492,7 +494,7 @@ public:
 			ip = (PVOID64)context->Rip;
 		}
 		auto success = UnlockAddress(ip, instr);
-		thread->ResumeThread();
+		thread->Resume();
 		return success;
 	}
 
@@ -537,8 +539,35 @@ public:
 	/*
 	* Image
 	*/
+	static void* LoadLibraryDefault(Process* process, const char* lib_name) {
+		if (process->IsCur()) {
+			return LoadLibraryA(lib_name);
+		}
+		void* addr = NULL;
+		auto len = strlen(lib_name) + 1;
+		auto lib_name_buf = process->AllocMemory(len);
 
-	// 当前注入未支持不同基址的dll的注入
+		do {
+			if (!lib_name_buf) {
+				break;
+			}
+			if (!process->WriteMemory((PVOID64)lib_name_buf, lib_name, len)) {
+				break;
+			}
+			auto thread = process->CreateThread((PTHREAD_START_ROUTINE)LoadLibraryA, (PVOID64)lib_name_buf);
+			if (thread.IsCur()) {
+				break;
+			}
+			thread.WaitExit(INFINITE);
+			addr = (void*)thread.GetExitCode();
+		} while (false);
+		if (lib_name_buf) {
+			process->FreeMemory(lib_name_buf);
+		}
+		return addr;
+	}
+
+
 	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
 		if (IsX86() != image->IsPE32()) {
 			return nullptr;
@@ -552,7 +581,7 @@ public:
 			if (!image->RepairRepositionTable((uint64_t)image_base)) {
 				break;
 			}
-			if (!image->RepairImportAddressTable()) {
+			if (!image->RepairImportAddressTable((Image::LoadLibraryFunc)LoadLibraryDefault, this)) {
 				break;
 			}
 			auto image_buf = image->SaveToImageBuf((uint64_t)image_base, true);
@@ -602,8 +631,6 @@ public:
 						image_buf[offset++] = 0xec;
 						image_buf[offset++] = 0x28;
 
-
-
 						// 传递参数
 						image_buf[offset++] = 0x48;		// mov rcx, image_base
 						image_buf[offset++] = 0xb9;
@@ -642,7 +669,6 @@ public:
 						break;
 					}
 
-					
 					CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
 				}
 			}
@@ -654,8 +680,7 @@ public:
 		return image_base;
 	}
 
-
-
+	
 	/*
 	* Module
 	*/
@@ -830,6 +855,7 @@ public:
 
 	}
 
+	
 	/*
 	* other
 	*/
@@ -870,17 +896,22 @@ public:
 		return processEntryList;
 	}
 
-	static DWORD GetProcessIdByProcessName(const std::wstring& processName) {
+	static DWORD GetProcessIdByProcessName(const std::wstring& processName, int count = 1) {
 		auto processEntryList = GetProcessList();
 		std::wstring processName_ = processName;
 		if (processEntryList.empty()) {
 			return NULL;
 		}
+		int i = 0;
 		for (auto& entry : processEntryList) {
 			auto exeFile_str = CppUtils::String::ToUppercase(std::wstring(entry.szExeFile));
 			processName_ = CppUtils::String::ToUppercase(processName_);
-			if (exeFile_str == processName_)
+			if (exeFile_str == processName_) {
+				if (++i < count) {
+					continue;
+				}
 				return entry.th32ProcessID;
+			}
 		}
 		return NULL;
 	}

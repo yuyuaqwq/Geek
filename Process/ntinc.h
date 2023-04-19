@@ -4,6 +4,7 @@
 #define NT_SUCCESS(x) ((x) >= 0)
 #define ProcessBasicInformation 0
 
+#define NTSTATUS int
 
 typedef NTSTATUS(NTAPI* pfnNtWow64QueryInformationProcess64)(
     IN HANDLE ProcessHandle,
@@ -57,7 +58,7 @@ typedef struct _PROCESS_BASIC_INFORMATION64 {
     UINT64 InheritedFromUniqueProcessId;
 } PROCESS_BASIC_INFORMATION64;
 
-
+//#undef NTSTATUS
 
 
 #endif // GEEK_PROCESS_NTINC_H_

@@ -27,11 +27,11 @@ namespace Geek {
 
 class Image {
 public:
-	typedef void* (*LoadLibraryFromRunningEnvironmentFunc)(const char* lib_name);
+	typedef void* (*LoadLibraryFunc)(void* process, const char* lib_name);
 
 public:
 	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
-		m_LoadLibraryFromRunningEnvironment = LoadLibraryFromRunningEnvironmentDefault;
+		
 	}
 
 	~Image() {
@@ -241,15 +241,7 @@ public:
 	/*
 	* library
 	*/
-	static void* LoadLibraryFromRunningEnvironmentDefault(const char* lib_name) {
-		return (void*)LoadLibraryA(lib_name);
-	}
-
-	void SetLoadLibraryFromRunningEnvironmentFunc(LoadLibraryFromRunningEnvironmentFunc func) {
-		m_LoadLibraryFromRunningEnvironment = func;
-	}
-
-	void* GetProcAddressFromImage(const char* func_name) {
+	void* GetProcAddressFromImage(LoadLibraryFunc load_library, void* process, const char* func_name) {
 		uint32_t export_rva;
 		if ((uintptr_t)func_name <= 0xffff) {
 			export_rva = GetExportRVAByOrdinal((uint16_t)func_name);
@@ -269,10 +261,10 @@ public:
 			auto dll_name = full_name.substr(0, offset);
 			auto func_name = full_name.substr(offset + 1);
 			if (!dll_name.empty() && !func_name.empty()) {
-				auto image_base = m_LoadLibraryFromRunningEnvironment(dll_name.c_str());
+				auto image_base = load_library(process, dll_name.c_str());
 				Image import_image;
 				import_image.LoadFromImageBuf(image_base);
-				va = (uintptr_t)import_image.GetProcAddressFromImage(func_name.c_str());
+				va = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, func_name.c_str());
 			}
 		}
 		return (void*)va;
@@ -358,7 +350,7 @@ public:
 	*/
 private:
 	template<typename IMAGE_THUNK_DATA_T>
-	bool RepairImportAddressTableFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* import_image_base, bool skip_not_loaded) {
+	bool RepairImportAddressTableFromDll(LoadLibraryFunc load_library, void* process, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* import_image_base, bool skip_not_loaded) {
 		IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->OriginalFirstThunk);
 		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
 		Image import_image;
@@ -375,32 +367,32 @@ private:
 			}
 			uint32_t export_rva;
 			if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
-				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage((char*)((import_name_table->u1.Ordinal << 1) >> 1));
+				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
 			}
 			else {
 				IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage((char*)func_name->Name);
+				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, (char*)func_name->Name);
 			}
 			//import_address_table->u1.Function = import_module_base + export_rva;
 		}
 		return true;
 	}
 public:
-	bool RepairImportAddressTable(bool skip_not_loaded = false) {
+	bool RepairImportAddressTable(LoadLibraryFunc load_library, void* process, bool skip_not_loaded = false) {
 		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 		if (import_descriptor == nullptr) {
 			return false;
 		}
 		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
 			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
-			void* import_module_base = m_LoadLibraryFromRunningEnvironment(import_module_name);
+			void* import_module_base = load_library(process, import_module_name);
 			if (IsPE32()) {
-				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(import_descriptor, import_module_base, skip_not_loaded)) {
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(load_library, process, import_descriptor, import_module_base, skip_not_loaded)) {
 					return false;
 				}
 			}
 			else {
-				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA64>(import_descriptor, import_module_base, skip_not_loaded)) {
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA64>(load_library, process, import_descriptor, import_module_base, skip_not_loaded)) {
 					return false;
 				}
 			}
@@ -669,7 +661,6 @@ private:
 	std::vector<std::vector<uint8_t>> m_section_list;
 
 	void* m_memory_image_base;
-	LoadLibraryFromRunningEnvironmentFunc m_LoadLibraryFromRunningEnvironment;
 };
 
 } // namespace Geek

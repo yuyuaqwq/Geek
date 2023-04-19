@@ -43,14 +43,28 @@ public:
 	}
 
 
-	bool SuspendThread() {
+	bool Suspend() {
 		return ::SuspendThread(Get());
 	}
 
-	bool ResumeThread() {
+	bool Resume() {
 		return ::ResumeThread(Get());
 	}
 
+	bool WaitExit(DWORD dwMilliseconds) {
+		if (IsCur()) {
+			return false;
+		}
+		return WaitForSingleObject(Get(), dwMilliseconds) == WAIT_OBJECT_0;
+	}
+
+	DWORD GetExitCode() {
+		DWORD code;
+		if (!::GetExitCodeThread(Get(), &code)) {
+			return 0;
+		}
+		return code;
+	}
 	
 
 private:
