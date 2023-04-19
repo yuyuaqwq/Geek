@@ -27,8 +27,11 @@ namespace Geek {
 
 class Image {
 public:
-	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
+	typedef void* (*LoadLibraryFromRunningEnvironmentFunc)(const char* lib_name);
 
+public:
+	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
+		m_LoadLibraryFromRunningEnvironment = LoadLibraryFromRunningEnvironmentDefault;
 	}
 
 	~Image() {
@@ -238,8 +241,12 @@ public:
 	/*
 	* library
 	*/
-	void* LoadLibraryFromRunningEnvironment(const char* lib_name) {
+	static void* LoadLibraryFromRunningEnvironmentDefault(const char* lib_name) {
 		return (void*)LoadLibraryA(lib_name);
+	}
+
+	void SetLoadLibraryFromRunningEnvironmentFunc(LoadLibraryFromRunningEnvironmentFunc func) {
+		m_LoadLibraryFromRunningEnvironment = func;
 	}
 
 	void* GetProcAddressFromImage(const char* func_name) {
@@ -262,7 +269,7 @@ public:
 			auto dll_name = full_name.substr(0, offset);
 			auto func_name = full_name.substr(offset + 1);
 			if (!dll_name.empty() && !func_name.empty()) {
-				auto image_base = LoadLibraryFromRunningEnvironment(dll_name.c_str());
+				auto image_base = m_LoadLibraryFromRunningEnvironment(dll_name.c_str());
 				Image import_image;
 				import_image.LoadFromImageBuf(image_base);
 				va = (uintptr_t)import_image.GetProcAddressFromImage(func_name.c_str());
@@ -386,7 +393,7 @@ public:
 		}
 		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
 			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
-			void* import_module_base = LoadLibraryFromRunningEnvironment(import_module_name);
+			void* import_module_base = m_LoadLibraryFromRunningEnvironment(import_module_name);
 			if (IsPE32()) {
 				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(import_descriptor, import_module_base, skip_not_loaded)) {
 					return false;
@@ -435,20 +442,20 @@ public:
 	* Running
 	*/
 private:
-	typedef BOOL(WINAPI* DllEntryProc32)(uint32_t hinstDLL, DWORD fdwReason, LPVOID lpReserved);
-	typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, LPVOID lpReserved);
+	typedef BOOL(WINAPI* DllEntryProc32)(uint32_t hinstDLL, DWORD fdwReason, uint32_t lpReserved);
+	typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
 	typedef int (WINAPI* ExeEntryProc)(void);
 public:
-	void CallEntryPoint(uint64_t ImageBase) {
+	void CallEntryPoint(uint64_t ImageBase, uint64_t init_parameter = 0) {
 		uint32_t rva = GetEntryPoint();
 		if (m_file_header->Characteristics & IMAGE_FILE_DLL) {
 			if (IsPE32()) {
 				DllEntryProc32 DllEntry = (DllEntryProc32)(ImageBase + rva);
-				DllEntry((uint32_t)ImageBase, DLL_PROCESS_ATTACH, NULL);
+				DllEntry((uint32_t)ImageBase, DLL_PROCESS_ATTACH, (uint32_t)init_parameter);
 			}
 			else {
 				DllEntryProc64 DllEntry = (DllEntryProc64)(ImageBase + rva);
-				DllEntry(ImageBase, DLL_PROCESS_ATTACH, NULL);
+				DllEntry(ImageBase, DLL_PROCESS_ATTACH, init_parameter);
 			}
 		}
 		else {
@@ -662,6 +669,7 @@ private:
 	std::vector<std::vector<uint8_t>> m_section_list;
 
 	void* m_memory_image_base;
+	LoadLibraryFromRunningEnvironmentFunc m_LoadLibraryFromRunningEnvironment;
 };
 
 } // namespace Geek

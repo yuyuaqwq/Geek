@@ -537,7 +537,9 @@ public:
 	/*
 	* Image
 	*/
-	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true) {
+
+	// 当前注入未支持不同基址的dll的注入
+	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
 		if (IsX86() != image->IsPE32()) {
 			return nullptr;
 		}
@@ -560,14 +562,15 @@ public:
 						break;
 					}
 					image->ExecuteTls((uint64_t)image_base);
-					image->CallEntryPoint((uint64_t)image_base);
+					image->CallEntryPoint((uint64_t)image_base, init_parameter);
 				}
 				else {
 					uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
 					if (image->IsPE32()) {
 						int offset = 0;
-						image_buf[offset++] = 0x6a;		// push 0
-						image_buf[offset++] = 0x00;
+						image_buf[offset++] = 0x68;		// push 0
+						*(uint32_t*)&image_buf[offset] = (uint32_t)init_parameter;
+						offset += 4;
 
 						image_buf[offset++] = 0x68;		// push DLL_PROCESS_ATTACH
 						*(uint32_t*)&image_buf[offset] = DLL_PROCESS_ATTACH;
@@ -578,7 +581,7 @@ public:
 						offset += 4;
 
 						image_buf[offset++] = 0xb8;		// mov eax, entry_point
-						*(uint32_t*)&image_buf[offset] = entry_point;
+						*(uint32_t*)&image_buf[offset] = (uint32_t)entry_point;
 						offset += 4;
 
 						image_buf[offset++] = 0xff;		// call eax
@@ -591,6 +594,7 @@ public:
 					else {
 						/*
 						* 64位下，栈需要16字节对齐，来避免一些指令异常(如movaps)
+						* 因为会有一个call压入的返回地址，所以-28
 						*/
 						int offset = 0;
 						image_buf[offset++] = 0x48;		// sub rsp, 28
@@ -609,18 +613,18 @@ public:
 						image_buf[offset++] = 0x48;		// mov rdx, DLL_PROCESS_ATTACH
 						image_buf[offset++] = 0xc7;
 						image_buf[offset++] = 0xc2;
-						*(uint32_t*)&image_buf[offset] = (uint32_t)1;
+						*(uint32_t*)&image_buf[offset] = 1;
 						offset += 4;
 
-						image_buf[offset++] = 0x41;		// mov r8, 0
+						image_buf[offset++] = 0x49;		// mov r8, init_parameter
 						image_buf[offset++] = 0xb8;
-						*(uint32_t*)&image_buf[offset] = (uint32_t)0;
-						offset += 4;
+						*(uint64_t*)&image_buf[offset] = init_parameter;
+						offset += 8;
 
 
 						image_buf[offset++] = 0x48;		// mov rax, entry_point
 						image_buf[offset++] = 0xb8;
-						*(uint64_t*)&image_buf[offset] = (uint64_t)entry_point;
+						*(uint64_t*)&image_buf[offset] = entry_point;
 						offset += 8;
 
 						image_buf[offset++] = 0xff;		// call rax
