@@ -642,6 +642,7 @@ public:
 						break;
 					}
 
+					
 					CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
 				}
 			}

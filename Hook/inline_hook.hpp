@@ -81,7 +81,7 @@ public:
 		* callback中指定 ret_addr = stack[0]
 		* callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
 		* 
-	* 16位下需要注意栈以16字节对齐，否则部分指令可能会异常
+	* 16位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
 	*/
 	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
@@ -272,7 +272,7 @@ public:
 
 
 			// 遵循x64调用约定，为当前函数的使用提前分配栈空间
-			forward_page_temp[i++] = 0x48;		// sub rsp, 20
+			forward_page_temp[i++] = 0x48;		// sub rsp, 28
 			forward_page_temp[i++] = 0x83;
 			forward_page_temp[i++] = 0xec;
 			forward_page_temp[i++] = 0x20;
@@ -297,7 +297,7 @@ public:
 			forward_page_temp[i++] = 0xd0;
 
 			// 回收栈空间
-			forward_page_temp[i++] = 0x48;		// add rsp, 20
+			forward_page_temp[i++] = 0x48;		// add rsp, 28
 			forward_page_temp[i++] = 0x83;
 			forward_page_temp[i++] = 0xc4;
 			forward_page_temp[i++] = 0x20;
