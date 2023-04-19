@@ -80,6 +80,8 @@ public:
 		* exec_old_instr = false
 		* callback中指定 ret_addr = stack[0]
 		* callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
+		* 
+	* 16位下需要注意栈以16字节对齐，否则部分指令可能会异常
 	*/
 	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
@@ -274,6 +276,8 @@ public:
 			forward_page_temp[i++] = 0x83;
 			forward_page_temp[i++] = 0xec;
 			forward_page_temp[i++] = 0x20;
+
+
 
 			// 传递参数
 			forward_page_temp[i++] = 0x48;		// lea rcx, [rsp+20]

@@ -11,6 +11,7 @@
 #include <Geek/Handle/handle.hpp>
 #include <Geek/Module/module.hpp>
 #include <Geek/PE/image.hpp>
+#include <Geek/Thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 
 #include <CppUtils/String/string.hpp>
@@ -438,16 +439,23 @@ public:
 	/*
 	* Thread
 	*/
-	bool SuspendThread(HANDLE thread) {
-		return ::SuspendThread(thread);
+	Thread CreateThread(PTHREAD_START_ROUTINE start_routine, LPVOID parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
+		DWORD thread_id = 0;
+		HANDLE thread_handle = NULL;
+		if (IsCur()) {
+			thread_handle = ::CreateThread(NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+		}
+		else {
+			thread_handle = ::CreateRemoteThread(Get(), NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+		}
+		if (thread_handle != NULL) {
+			Thread(thread_handle);
+		}
+		return Thread();
 	}
 
-	bool ResumeThread(HANDLE thread) {
-		return ::ResumeThread(thread);
-	}
-
-	uint16_t BlockThread(HANDLE thread) {
-		if (!SuspendThread(thread)) {
+	uint16_t BlockThread(Thread* thread) {
+		if (!thread->SuspendThread()) {
 			return 0;
 		}
 		unsigned char jmpSelf[] = { 0xeb, 0xfe };
@@ -457,17 +465,18 @@ public:
 		if (isX86) {
 			auto context = (_CONTEXT32*)contextBuf.data();
 			ip = (PVOID64)context->Eip;
-		} else {
+		}
+		else {
 			auto context = (_CONTEXT64*)contextBuf.data();
 			ip = (PVOID64)context->Rip;
 		}
 		auto oldInstr = LockAddress(ip);
-		ResumeThread(thread);
+		thread->ResumeThread();
 		return oldInstr;
 	}
 
-	bool ResumeBlockedThread(HANDLE thread, uint16_t instr) {
-		if (!SuspendThread(thread)) {
+	bool ResumeBlockedThread(Thread* thread, uint16_t instr) {
+		if (!thread->SuspendThread()) {
 			return false;
 		}
 		uint16_t oldInstr;
@@ -483,15 +492,15 @@ public:
 			ip = (PVOID64)context->Rip;
 		}
 		auto success = UnlockAddress(ip, instr);
-		ResumeThread(thread);
+		thread->ResumeThread();
 		return success;
 	}
-		
-	bool IsTheOwningThread(HANDLE thread) {
+
+	bool IsTheOwningThread(Thread* thread) {
 		return GetProcessIdOfThread(thread) == GetId();
 	}
 
-	std::vector<char> GetThreadContext(HANDLE thread, bool* isX86 = nullptr, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
+	std::vector<char> GetThreadContext(Thread* thread, bool* isX86 = nullptr, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
 		std::vector<char> context;
 		bool success;
 		if (!IsTheOwningThread(thread)) {
@@ -500,7 +509,7 @@ public:
 		if (ms_wow64.Wow64Operation(Get())) {
 			context.resize(sizeof(_CONTEXT64));
 			((_CONTEXT64*)context.data())->ContextFlags = flags;
-			success = ms_wow64.GetThreadContext64(thread, (_CONTEXT64*)context.data());
+			success = ms_wow64.GetThreadContext64(thread->Get(), (_CONTEXT64*)context.data());
 			if (isX86) *isX86 = false;
 		}
 		else {
@@ -508,13 +517,13 @@ public:
 				if (isX86) *isX86 = true;
 				context.resize(sizeof(WOW64_CONTEXT));
 				((WOW64_CONTEXT*)context.data())->ContextFlags = flags;
-				success = ::Wow64GetThreadContext(thread, (PWOW64_CONTEXT)context.data());
+				success = ::Wow64GetThreadContext(thread->Get(), (PWOW64_CONTEXT)context.data());
 			}
 			else {
 				if (isX86) *isX86 = false;
 				context.resize(sizeof(CONTEXT));
 				((CONTEXT*)context.data())->ContextFlags = flags;
-				success = ::GetThreadContext(thread, (LPCONTEXT)context.data());
+				success = ::GetThreadContext(thread->Get(), (LPCONTEXT)context.data());
 			}
 		}
 		if (!success) {
@@ -522,6 +531,8 @@ public:
 		}
 		return context;
 	}
+
+
 
 	/*
 	* Image
@@ -542,18 +553,92 @@ public:
 			if (!image->RepairImportAddressTable()) {
 				break;
 			}
-			auto image_buf = image->SaveToImageBuf();
-			if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-				break;
-			}
+			auto image_buf = image->SaveToImageBuf((uint64_t)image_base, true);
 			if (call_dll_entry) {
-				image->ExecuteTls((uint64_t)image_base);
-
 				if (IsCur()) {
+					if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+						break;
+					}
+					image->ExecuteTls((uint64_t)image_base);
 					image->CallEntryPoint((uint64_t)image_base);
 				}
 				else {
+					uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
+					if (image->IsPE32()) {
+						int offset = 0;
+						image_buf[offset++] = 0x6a;		// push 0
+						image_buf[offset++] = 0x00;
 
+						image_buf[offset++] = 0x68;		// push DLL_PROCESS_ATTACH
+						*(uint32_t*)&image_buf[offset] = DLL_PROCESS_ATTACH;
+						offset += 4;
+
+						image_buf[offset++] = 0x68;		// push image_base
+						*(uint32_t*)&image_buf[offset] = (uint32_t)image_base;
+						offset += 4;
+
+						image_buf[offset++] = 0xb8;		// mov eax, entry_point
+						*(uint32_t*)&image_buf[offset] = entry_point;
+						offset += 4;
+
+						image_buf[offset++] = 0xff;		// call eax
+						image_buf[offset++] = 0xd0;
+
+						image_buf[offset++] = 0xc2;		// ret 4
+						*(uint16_t*)&image_buf[offset] = 4;
+						offset += 2;
+					}
+					else {
+						/*
+						* 64位下，栈需要16字节对齐，来避免一些指令异常(如movaps)
+						*/
+						int offset = 0;
+						image_buf[offset++] = 0x48;		// sub rsp, 28
+						image_buf[offset++] = 0x83;
+						image_buf[offset++] = 0xec;
+						image_buf[offset++] = 0x28;
+
+
+
+						// 传递参数
+						image_buf[offset++] = 0x48;		// mov rcx, image_base
+						image_buf[offset++] = 0xb9;
+						*(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
+						offset += 8;
+
+						image_buf[offset++] = 0x48;		// mov rdx, DLL_PROCESS_ATTACH
+						image_buf[offset++] = 0xc7;
+						image_buf[offset++] = 0xc2;
+						*(uint32_t*)&image_buf[offset] = (uint32_t)1;
+						offset += 4;
+
+						image_buf[offset++] = 0x41;		// mov r8, 0
+						image_buf[offset++] = 0xb8;
+						*(uint32_t*)&image_buf[offset] = (uint32_t)0;
+						offset += 4;
+
+
+						image_buf[offset++] = 0x48;		// mov rax, entry_point
+						image_buf[offset++] = 0xb8;
+						*(uint64_t*)&image_buf[offset] = (uint64_t)entry_point;
+						offset += 8;
+
+						image_buf[offset++] = 0xff;		// call rax
+						image_buf[offset++] = 0xd0;
+
+						// 回收栈空间
+						image_buf[offset++] = 0x48;		// add rsp, 28
+						image_buf[offset++] = 0x83;
+						image_buf[offset++] = 0xc4;
+						image_buf[offset++] = 0x28;
+
+						image_buf[offset++] = 0xc3;		// ret
+					}
+					if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+						break;
+					}
+
+					CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
 				}
 			}
 			success = true;
@@ -569,7 +654,6 @@ public:
 	/*
 	* Module
 	*/
-	
 	std::vector<Module> GetModuleList() {
 		/*
 		* https://blog.csdn.net/wh445306/article/details/107867375
@@ -762,8 +846,8 @@ public:
 		return process.IsX86();
 	}
 
-	static DWORD GetProcessIdOfThread(HANDLE thread) {
-		return ::GetProcessIdOfThread(thread);
+	static DWORD GetProcessIdOfThread(Thread* thread) {
+		return ::GetProcessIdOfThread(thread->Get());
 	}
 
 	static std::vector<PROCESSENTRY32W> GetProcessList() {

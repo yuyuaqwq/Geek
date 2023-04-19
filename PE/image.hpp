@@ -105,8 +105,8 @@ public:
 		return pe.Write(buf);
 	}
 
-	std::vector<char> SaveToFileBuf() {
-		std::vector<char> buf(GetFileSize(), 0);
+	std::vector<uint8_t> SaveToFileBuf() {
+		std::vector<uint8_t> buf(GetFileSize(), 0);
 		int offset = 0;
 
 		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
@@ -137,32 +137,37 @@ public:
 		return buf;
 	}
 
-	std::vector<char> SaveToImageBuf() {
-		std::vector<char> buf(GetImageSize(), 0);
+	std::vector<uint8_t> SaveToImageBuf(uint64_t image_base = 0, bool zero_pe_header = false) {
+		std::vector<uint8_t> buf(GetImageSize(), 0);
 		int offset = 0;
+		if (zero_pe_header == false) {
+			memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
+			offset += sizeof(m_dos_header);
 
-		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
-		offset += sizeof(m_dos_header);
+			memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
+			offset += m_dos_stub.size();
 
-		memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
-		offset += m_dos_stub.size();
+			offset = m_dos_header.e_lfanew;
+			if (image_base == 0) {
+				image_base = (uint64_t)buf.data();
+			}
+			uint64_t old_image_base = GetImageBase();
+			SetImageBase(image_base);
+			if (m_nt_header->OptionalHeader.Magic == 0x10b) {
+				memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
+				offset += sizeof(*m_nt_header);
+			}
+			else {
+				memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
+				offset += sizeof(IMAGE_NT_HEADERS64);
+			}
+			SetImageBase(old_image_base);
 
-		offset = m_dos_header.e_lfanew;
-
-		if (m_nt_header->OptionalHeader.Magic == 0x10b) {
-			memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
-			offset += sizeof(*m_nt_header);
+			for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+				memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
+				offset += sizeof(m_section_header_table[i]);
+			}
 		}
-		else {
-			memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
-			offset += sizeof(IMAGE_NT_HEADERS64);
-		}
-		
-		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
-			memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
-			offset += sizeof(m_section_header_table[i]);
-		}
-
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			memcpy(&buf[m_section_header_table[i].VirtualAddress], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
 		}
