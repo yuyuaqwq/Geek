@@ -27,7 +27,7 @@ namespace Geek {
 
 class Image {
 public:
-	typedef void* (*LoadLibraryFunc)(void* process, const char* lib_name);
+	typedef uint64_t (*LoadLibraryFunc)(void* process, const char* lib_name);
 
 public:
 	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
@@ -241,7 +241,7 @@ public:
 	/*
 	* library
 	*/
-	void* GetProcAddressFromImage(LoadLibraryFunc load_library, void* process, const char* func_name) {
+	void* GetExportProcAddress(LoadLibraryFunc load_library, void* process, const char* func_name) {
 		uint32_t export_rva;
 		if ((uintptr_t)func_name <= 0xffff) {
 			export_rva = GetExportRVAByOrdinal((uint16_t)func_name);
@@ -263,8 +263,8 @@ public:
 			if (!dll_name.empty() && !func_name.empty()) {
 				auto image_base = load_library(process, dll_name.c_str());
 				Image import_image;
-				import_image.LoadFromImageBuf(image_base);
-				va = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, func_name.c_str());
+				import_image.LoadFromImageBuf((void*)image_base);
+				va = (uintptr_t)import_image.GetExportProcAddress(load_library, process, func_name.c_str());
 			}
 		}
 		return (void*)va;
@@ -367,11 +367,11 @@ private:
 			}
 			uint32_t export_rva;
 			if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
-				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+				import_address_table->u1.Function = (uintptr_t)import_image.GetExportProcAddress(load_library, process, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
 			}
 			else {
 				IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-				import_address_table->u1.Function = (uintptr_t)import_image.GetProcAddressFromImage(load_library, process, (char*)func_name->Name);
+				import_address_table->u1.Function = (uintptr_t)import_image.GetExportProcAddress(load_library, process, (char*)func_name->Name);
 			}
 			//import_address_table->u1.Function = import_module_base + export_rva;
 		}
@@ -385,7 +385,7 @@ public:
 		}
 		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
 			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
-			void* import_module_base = load_library(process, import_module_name);
+			void* import_module_base = (void*)load_library(process, import_module_name);
 			if (IsPE32()) {
 				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(load_library, process, import_descriptor, import_module_base, skip_not_loaded)) {
 					return false;

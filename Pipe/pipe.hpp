@@ -12,8 +12,9 @@ namespace Geek {
 
 class Pipe {
 public:
-	bool Create(const wchar_t* name, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
-		m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, 4096, 4096, 0, NULL));
+	bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
+		m_buf_size = buf_size;
+		m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
 		return m_pipe_handle.Valid();
 	}
 
@@ -76,6 +77,7 @@ public:
 
 private:
 	UniqueHandle m_pipe_handle;
+	size_t m_buf_size;
 };
 
 }

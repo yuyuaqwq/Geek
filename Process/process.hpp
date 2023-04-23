@@ -221,7 +221,7 @@ public:
 		return VirtualFreeEx(Get(), addr, size, type);
 	}
 
-	bool ReadMemory(PVOID64 addr, void* buf, size_t len) {
+	bool ReadMemory(PVOID64 addr, void* buf, size_t len) const {
 		if (this == nullptr) {
 			memcpy(buf, (void*)addr, len);
 			return true;
@@ -244,7 +244,7 @@ public:
 		return true;
 	}
 
-	std::vector<char> ReadMemory(PVOID64 addr, size_t len) {
+	std::vector<char> ReadMemory(PVOID64 addr, size_t len) const {
 		std::vector<char> buf;
 		buf.resize(len);
 		if (!ReadMemory(addr, buf.data(), len)) {
@@ -304,8 +304,7 @@ public:
 		return success;
 	}
 
-
-	std::vector<MEMORY_BASIC_INFORMATION> EnumAllMemoryBlocks() const {
+	std::vector<MEMORY_BASIC_INFORMATION> EnumMemoryBlocks() const {
 		std::vector<MEMORY_BASIC_INFORMATION> memoryBlockList;
 
 		// 初始化 vector 容量
@@ -352,43 +351,19 @@ public:
 		return memoryBlockList;
 	}
 
-	std::vector<MODULEENTRY32W> EnumAllProcessModules() const {
-		std::vector<MODULEENTRY32W> moduleList;
-		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetId());
-		if (hSnapshot == INVALID_HANDLE_VALUE) {
-			return moduleList;
-		}
-
-		MODULEENTRY32 mi = { 0 };
-		mi.dwSize = sizeof(MODULEENTRY32); //第一次使用必须初始化成员
-		BOOL bRet = Module32First(hSnapshot, &mi);
-		do {
-			if (bRet == false) {
-				break;
-			}
-			do {
-				moduleList.push_back(mi);
-				bRet = Module32Next(hSnapshot, &mi);
-			} while (bRet);
-		} while (false);
-
-		CloseHandle(hSnapshot);
-		return moduleList;
-	}
-
-	bool MemoryEnum(bool(*callback)(char* addr, size_t size, void* arg), void* arg) const {
+	bool TraverseMemoryBlocks(bool(*callback)(char* addr, size_t size, void* arg), void* arg) const {
 		bool success = false;
 		std::vector<char> buf;
 		do {
-			std::vector<MODULEENTRY32> modulelist = EnumAllProcessModules();
-			std::vector<MEMORY_BASIC_INFORMATION> vec = EnumAllMemoryBlocks();
+			auto modulelist = EnumModulesEx();
+			std::vector<MEMORY_BASIC_INFORMATION> vec = EnumMemoryBlocks();
 
 			// 遍历该进程的内存块
 			size_t sizeSum = 0;
 			for (int i = 0; i < vec.size(); i++) {
 				bool isModule = false;
 				for (int j = 0; j < modulelist.size(); j++) {
-					if (vec[i].BaseAddress >= modulelist[j].modBaseAddr && vec[i].BaseAddress < modulelist[j].modBaseAddr + modulelist[j].modBaseSize) {
+					if ((uint64_t)vec[i].BaseAddress >= modulelist[j].base && (uint64_t)vec[i].BaseAddress < modulelist[j].base + modulelist[j].base) {
 						isModule = true;
 						break;
 					}
@@ -539,11 +514,16 @@ public:
 	/*
 	* Image
 	*/
-	static void* LoadLibraryDefault(Process* process, const char* lib_name) {
+	static uint64_t LoadLibraryDefault(Process* process, const char* lib_name) {
 		if (process->IsCur()) {
-			return LoadLibraryA(lib_name);
+			return (uint64_t)LoadLibraryA(lib_name);
 		}
-		void* addr = NULL;
+		Module module;
+		if (process->FindModlueByModuleName(CppUtils::String::AnsiToUtf16le(lib_name), &module)) {
+			return module.base;
+		}
+
+		uint64_t addr = NULL;
 		auto len = strlen(lib_name) + 1;
 		auto lib_name_buf = process->AllocMemory(len);
 
@@ -559,7 +539,7 @@ public:
 				break;
 			}
 			thread.WaitExit(INFINITE);
-			addr = (void*)thread.GetExitCode();
+			addr = thread.GetExitCode();
 		} while (false);
 		if (lib_name_buf) {
 			process->FreeMemory(lib_name_buf);
@@ -567,7 +547,7 @@ public:
 		return addr;
 	}
 
-
+	/* 跨进程内存注入还需要解决image中调用LoadLibraryDefault，返回的模块基址不是当前进程模块基址的问题 */
 	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
 		if (IsX86() != image->IsPE32()) {
 			return nullptr;
@@ -684,7 +664,7 @@ public:
 	/*
 	* Module
 	*/
-	std::vector<Module> GetModuleList() {
+	std::vector<Module> EnumModulesEx() const {
 		/*
 		* https://blog.csdn.net/wh445306/article/details/107867375
 		*/
@@ -787,7 +767,7 @@ public:
 
 	bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
 		std::wstring find_name = CppUtils::String::ToUppercase(name);
-		for (auto& it : GetModuleList()) {
+		for (auto& it : EnumModulesEx()) {
 			auto base_name_up = CppUtils::String::ToUppercase(it.base_name);
 			if (base_name_up == find_name) {
 				if (module) *module = it;
@@ -853,6 +833,30 @@ public:
 		}
 		return success;
 
+	}
+
+	std::vector<MODULEENTRY32W> EnumModules() const {
+		std::vector<MODULEENTRY32W> moduleList;
+		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetId());
+		if (hSnapshot == INVALID_HANDLE_VALUE) {
+			return moduleList;
+		}
+
+		MODULEENTRY32 mi = { 0 };
+		mi.dwSize = sizeof(MODULEENTRY32); //第一次使用必须初始化成员
+		BOOL bRet = Module32First(hSnapshot, &mi);
+		do {
+			if (bRet == false) {
+				break;
+			}
+			do {
+				moduleList.push_back(mi);
+				bRet = Module32Next(hSnapshot, &mi);
+			} while (bRet);
+		} while (false);
+
+		CloseHandle(hSnapshot);
+		return moduleList;
 	}
 
 	
