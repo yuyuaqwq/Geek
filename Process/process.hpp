@@ -203,25 +203,25 @@ public:
 	/*
 	* Memory
 	*/
-	PVOID64 AllocMemory(PVOID64 addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+	uint64_t AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
 		if (ms_wow64.Wow64Operation(Get())) {
-			return (PVOID64)ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
+			return (uint64_t)ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
 		}
-		return VirtualAllocEx(Get(), addr, len, type, protect);
+		return (uint64_t)VirtualAllocEx(Get(), (LPVOID)addr, len, type, protect);
 	}
 
-	PVOID64 AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+	uint64_t AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
 		return AllocMemory(NULL, len, type, protect);
 	}
 
-	bool FreeMemory(PVOID64 addr, size_t size = 0, DWORD type = MEM_RELEASE) {
+	bool FreeMemory(uint64_t addr, size_t size = 0, DWORD type = MEM_RELEASE) {
 		if (ms_wow64.Wow64Operation(Get())) {
 			return ms_wow64.VirtualFreeEx64(Get(), (DWORD64)addr, size, type);
 		}
-		return VirtualFreeEx(Get(), addr, size, type);
+		return VirtualFreeEx(Get(), (LPVOID)addr, size, type);
 	}
 
-	bool ReadMemory(PVOID64 addr, void* buf, size_t len) const {
+	bool ReadMemory(uint64_t addr, void* buf, size_t len) const {
 		if (this == nullptr) {
 			memcpy(buf, (void*)addr, len);
 			return true;
@@ -244,7 +244,7 @@ public:
 		return true;
 	}
 
-	std::vector<char> ReadMemory(PVOID64 addr, size_t len) const {
+	std::vector<char> ReadMemory(uint64_t addr, size_t len) const {
 		std::vector<char> buf;
 		buf.resize(len);
 		if (!ReadMemory(addr, buf.data(), len)) {
@@ -253,7 +253,7 @@ public:
 		return buf;
 	}
 
-	bool WriteMemory(PVOID64 addr, const void* buf, size_t len, bool force = false) {
+	bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false) {
 		DWORD oldProtect;
 		if (force) {
 			if (!SetMemoryProtect(addr, len, PAGE_EXECUTE_READWRITE, &oldProtect)) {
@@ -272,9 +272,9 @@ public:
 		}
 		else {
 			if (Get() == kCurrentProcess) {
-				memcpy(addr, buf, len);
+				memcpy((void*)addr, buf, len);
 			}
-			else if (!::WriteProcessMemory(Get(), addr, buf, len, &readByte)) {
+			else if (!::WriteProcessMemory(Get(), (void*)addr, buf, len, &readByte)) {
 				success = false;
 			}
 		}
@@ -284,22 +284,22 @@ public:
 		return true;
 	}
 
-	PVOID64 WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
+	uint64_t WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
 		auto mem = AllocMemory(len, MEM_COMMIT, protect);
 		if (!mem) {
-			return nullptr;
+			return 0;
 		}
 		WriteMemory(mem, buf, len);
 		return mem;
 	}
 
-	bool SetMemoryProtect(PVOID64 addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
+	bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) {
 		bool success = false;
 		if (ms_wow64.Wow64Operation(Get())) {
 			success = ms_wow64.VirtualProtectEx64(Get(), (DWORD64)addr, len, newProtect, oldProtect);
 		}
 		else {
-			success = ::VirtualProtectEx(Get(), addr, len, newProtect, oldProtect);
+			success = ::VirtualProtectEx(Get(), (LPVOID)addr, len, newProtect, oldProtect);
 		}
 		return success;
 	}
@@ -395,7 +395,7 @@ public:
 	/*
 	* Run
 	*/
-	uint16_t LockAddress(PVOID64 addr) {
+	uint16_t LockAddress(uint64_t addr) {
 		uint16_t instr;
 		if (!ReadMemory(addr, &instr, 2)) {
 			return 0;
@@ -407,7 +407,7 @@ public:
 		return instr;
 	}
 
-	bool UnlockAddress(PVOID64 addr, uint16_t instr) {
+	bool UnlockAddress(uint64_t addr, uint16_t instr) {
 		return WriteMemory(addr, &instr, 2, true);
 	}
 
@@ -438,14 +438,14 @@ public:
 		unsigned char jmpSelf[] = { 0xeb, 0xfe };
 		bool isX86;
 		auto contextBuf = GetThreadContext(thread, &isX86);
-		PVOID64 ip;
+		uint64_t ip;
 		if (isX86) {
 			auto context = (_CONTEXT32*)contextBuf.data();
-			ip = (PVOID64)context->Eip;
+			ip = context->Eip;
 		}
 		else {
 			auto context = (_CONTEXT64*)contextBuf.data();
-			ip = (PVOID64)context->Rip;
+			ip = context->Rip;
 		}
 		auto oldInstr = LockAddress(ip);
 		thread->Resume();
@@ -459,14 +459,14 @@ public:
 		uint16_t oldInstr;
 		bool isX86;
 		auto contextBuf = GetThreadContext(thread, &isX86);
-		PVOID64 ip;
+		uint64_t ip;
 		if (isX86) {
 			auto context = (_CONTEXT32*)contextBuf.data();
-			ip = (PVOID64)context->Eip;
+			ip = context->Eip;
 		}
 		else {
 			auto context = (_CONTEXT64*)contextBuf.data();
-			ip = (PVOID64)context->Rip;
+			ip = context->Rip;
 		}
 		auto success = UnlockAddress(ip, instr);
 		thread->Resume();
@@ -531,7 +531,7 @@ public:
 			if (!lib_name_buf) {
 				break;
 			}
-			if (!process->WriteMemory((PVOID64)lib_name_buf, lib_name, len)) {
+			if (!process->WriteMemory(lib_name_buf, lib_name, len)) {
 				break;
 			}
 			auto thread = process->CreateThread((PTHREAD_START_ROUTINE)LoadLibraryA, (PVOID64)lib_name_buf);
@@ -547,10 +547,24 @@ public:
 		return addr;
 	}
 
+	static void FreeLibraryDefault(Process* process, uint64_t module_base) {
+		if (process->IsCur()) {
+			FreeLibrary((HMODULE)module_base);
+			return;
+		}
+		do {
+			auto thread = process->CreateThread((PTHREAD_START_ROUTINE)FreeLibrary, (PVOID64)module_base);
+			if (thread.IsCur()) {
+				break;
+			}
+			thread.WaitExit(INFINITE);
+		} while (false);
+	}
+
 	/* 跨进程内存注入还需要解决image中调用LoadLibraryDefault，返回的模块基址不是当前进程模块基址的问题 */
-	void* LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
+	uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
 		if (IsX86() != image->IsPE32()) {
-			return nullptr;
+			return 0;
 		}
 		auto image_base = AllocMemory(NULL, image->GetImageSize(), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		bool success = false;
@@ -685,29 +699,29 @@ public:
 				LIST_ENTRY32 ListEntry32 = { 0 };
 				LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
 
-				if (!ReadMemory((PVOID)(pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32))) {
+				if (!ReadMemory((pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32))) {
 					break;
 				}
-				if (!ReadMemory((PVOID)(Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32))) {
+				if (!ReadMemory((Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32))) {
 					break;
 				}
-				if (!ReadMemory((PVOID)(ListEntry32.Flink), &LDTE32, sizeof(LDTE32))) {
+				if (!ReadMemory((ListEntry32.Flink), &LDTE32, sizeof(LDTE32))) {
 					break;
 				}
 
 				while (true) {
 					if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
 					std::vector<wchar_t>  full_name(LDTE32.FullDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID)LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
+					if (!ReadMemory(LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
 						continue;
 					}
 					std::vector<wchar_t>  base_name(LDTE32.BaseDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID)LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
+					if (!ReadMemory(LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
 						continue;
 					}
 					Module module(LDTE32, base_name.data(), full_name.data());
 					moduleList.push_back(module);
-					if (!ReadMemory((PVOID)LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
+					if (!ReadMemory(LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
 				}
 			} while (false);
 		}
@@ -733,31 +747,31 @@ public:
 				LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
 				wchar_t ProPath64[256];
 
-				if (!ReadMemory((PVOID64)(pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
+				if (!ReadMemory((pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
 					break;
 				}
-				if (!ReadMemory((PVOID64)(Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
+				if (!ReadMemory((Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
 					break;
 				}
-				if (!ReadMemory((PVOID64)(ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
+				if (!ReadMemory((ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
 					break;
 				}
 
 				while (true) {
 					if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
 					std::vector<wchar_t> full_name(LDTE64.FullDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID64)LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
-						if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+					if (!ReadMemory(LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
+						if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 						continue;
 					}
 					std::vector<wchar_t> base_name(LDTE64.BaseDllName.Length + 1, 0);
-					if (!ReadMemory((PVOID64)LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
-						if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+					if (!ReadMemory(LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
+						if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 						continue;
 					}
 					Module module(LDTE64, base_name.data(), full_name.data());
 					moduleList.push_back(module);
-					if (!ReadMemory((PVOID64)LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+					if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
 				}
 
 			} while (false);

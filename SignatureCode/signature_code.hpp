@@ -38,22 +38,22 @@ public:
 	/*
 	* 限定大小查找特征码
 	*/
-	PVOID64 Search(PVOID64 start_address, size_t size, const std::string& hex_string_data) {
+	uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
 		std::vector<SignatureElement> signature;
 		size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 
 		size_t signature_size = signature.size();
-		if (!signature_size) return nullptr;
+		if (!signature_size) return 0;
 
 		std::vector<char> buf;
-		int64_t base = 0;
+		uint64_t base = 0;
 		if (!m_process->IsCur()) {
 			buf = m_process->ReadMemory(start_address, size);
 			if (buf.empty()) {
-				return nullptr;
+				return 0;
 			}
-			PVOID64 new_start_address = buf.data();
-			base = ((int64_t)start_address - (int64_t)new_start_address);
+			uint64_t new_start_address = (uint64_t)buf.data();
+			base = ((uint64_t)start_address - (uint64_t)new_start_address);
 			start_address = new_start_address;
 		}
 
@@ -65,35 +65,27 @@ public:
 
 			for (size_t j = 0; j < signature_size; ++j) {
 				size_t length = signature[j].length;
-
 				if (signature[j].type == SignatureElementType::kWhole) {
 					int ret = memcmp_ex((void*)cur_pos, signature[j].data.data(), length);
-					if (ret == 1) {
+					if (ret == -2) {
+						return 0;
+					}
+					else if (ret != -1) {
 						match = false;
 						break;
 					}
-					else if (ret == 2) {
-						return nullptr;
-					}
-
 				}
 				cur_pos = cur_pos + length;
 			}
 			if (match) {
-				return (PVOID64)(base + ret_pos + offset);
+				return (base + ret_pos + offset);
 			}
 
 		}
-		return nullptr;
+		return 0;
 
 	}
 
-	/*
-	* 限定范围查找特征码
-	*/
-	PVOID64 Search(PVOID64 start_address, PVOID64 end_address, const std::string& hex_string_data) {
-		return Search(start_address, (uint64_t)end_address - (uint64_t)start_address + 1, hex_string_data);
-	}
 
 private:
 
@@ -122,18 +114,20 @@ private:
 		return sum;
 	}
 
-	static int __cdecl memcmp_ex(void const* buf1, void const* buf2, size_t size) {
+	static int __cdecl memcmp_ex(const void* buf1, const void* buf2, size_t size) {
+		const char* buf1_ = (const char*)buf1;
+		const char* buf2_ = (const char*)buf2;
 		__try {
-			if (memcmp(buf1, buf2, size)) {
-				return 1;
+			for (int i = 0; i < size; i++) {
+				if (buf1_[i] != buf2_[i]) {
+					return i;
+				}
 			}
-			else {
-				return 0;
-			}
+			return -1;
 
 		}
 		__except (1) {
-			return 2;
+			return -2;
 		}
 	}
 
@@ -158,16 +152,16 @@ private:
 		for (size_t i = 0; i < hex_string_data.length(); ++i) {
 			unsigned char c = hex_string_data[i];
 			bool validChar = true;
-			if (c >= 0x30 && c <= 0x39) {
-				c -= 0x30;
+			if (c >= '0' && c <= '9') {
+				c -= '0';
 				newType = SignatureElementType::kWhole;
 			}
-			else if (c >= 0x41 && c <= 0x46) {
-				c = c - 0x37;
+			else if (c >= 'a' && c <= 'f') {
+				c = c - 'a' + 10;
 				newType = SignatureElementType::kWhole;
 			}
-			else if (c >= 0x61 && c <= 0x66) {
-				c = c - 0x57;
+			else if (c >= 'A' && c <= 'F') {
+				c = c - 'A' + 10;
 				newType = SignatureElementType::kWhole;
 			}
 			else if (c == '?') {

@@ -59,7 +59,7 @@ public:
 	typedef void (*HookCallback64)(uint64_t context);
 
 public:
-	explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ nullptr }, m_jmp_addr{ nullptr }, m_forward_page{ nullptr }{
+	explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ 0 }, m_jmp_addr{ 0 }, m_forward_page{ 0 }{
 		
 	}
 	~InlineHook() {
@@ -83,7 +83,7 @@ public:
 		* 
 	* 64位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
 	*/
-	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
+	bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
 		if (forward_page_size < 0x1000) {
 			forward_page_size = 0x1000;
@@ -135,7 +135,7 @@ public:
 			forward_page_temp[i++] = 0x54;		// push esp
 
 			forward_page_temp[i++] = 0xe8;		// call callback
-			*(uint32_t*)&forward_page_temp[i] = GetJmpOffset((PVOID64)(forward_page_uint + i - 1), 5, callback);
+			*(uint32_t*)&forward_page_temp[i] = GetJmpOffset((forward_page_uint + i - 1), 5, callback);
 			i += 4;
 
 			forward_page_temp[i++] = 0x5c;		// pop esp
@@ -425,22 +425,20 @@ public:
 		}
 	}
 
-	PVOID64 GetForwardPage() {
+	uint64_t GetForwardPage() {
 		return m_forward_page;
 	}
 
 private:
 	Process* m_process;
-	PVOID64 m_hook_addr;
-	PVOID64 m_jmp_addr;
-	PVOID64 m_forward_page;
+	uint64_t m_hook_addr;
+	uint64_t m_jmp_addr;
+	uint64_t m_forward_page;
 	std::vector<char> m_old_instr;
 
 public:
-	static uint64_t GetJmpOffset(PVOID64 instr_addr, size_t instr_size, PVOID64 jmp_addr) {
-		uint64_t instr_addr_ = (uint64_t)instr_addr;;
-		uint64_t jmp_addr_ = (uint64_t)jmp_addr;
-		return jmp_addr_ - instr_addr_ - instr_size;
+	static uint64_t GetJmpOffset(uint64_t instr_addr, size_t instr_size, uint64_t jmp_addr) {
+		return jmp_addr - instr_addr - instr_size;
 	}
 
 #define GET_CURRENT_ADDR { 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05 } 		// call next;    next: pop eax/rax;    add eax/rax, 5;

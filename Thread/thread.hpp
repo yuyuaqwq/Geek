@@ -18,6 +18,10 @@ public:
 		Open(UniqueHandle(kCurrentThread));
 	}
 
+	void Create(LPTHREAD_START_ROUTINE routine, LPVOID par = nullptr) {
+		m_handle.Reset(::CreateThread(NULL, 0, routine, par, 0, NULL));
+	}
+
 	void Open(UniqueHandle hThread) {
 		m_handle = std::move(hThread);
 	}

@@ -16,7 +16,7 @@ typedef NTSTATUS(NTAPI* pfnNtWow64QueryInformationProcess64)(
 
 typedef NTSTATUS(NTAPI* pfnNtWow64ReadVirtualMemory64)(
     IN HANDLE ProcessHandle,
-    IN PVOID64 BaseAddress,
+    IN uint64_t BaseAddress,
     OUT PVOID Buffer,
     IN ULONG64 Size,
     OUT PULONG64 NumberOfBytesRead
@@ -24,7 +24,7 @@ typedef NTSTATUS(NTAPI* pfnNtWow64ReadVirtualMemory64)(
 
 typedef NTSTATUS(NTAPI* pfnNtWow64WriteVirtualMemory64)(
     IN HANDLE ProcessHandle,
-    IN PVOID64 BaseAddress,
+    IN uint64_t BaseAddress,
     OUT PVOID Buffer,
     IN ULONG64 Size,
     OUT PULONG64 NumberOfBytesRead
