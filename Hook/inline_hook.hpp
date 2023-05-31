@@ -49,7 +49,7 @@ public:
 		uint32_t ecx;
 		uint32_t eax;
 
-		uint32_t c;
+		uint32_t forward_page_base;
 		uint32_t ret_addr;
 		uint32_t esp;
 		uint32_t stack[];
@@ -59,7 +59,7 @@ public:
 	typedef void (*HookCallback64)(uint64_t context);
 
 public:
-	explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ nullptr }, m_jmp_addr{ nullptr }, m_forward_page{ nullptr }{
+	explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ 0 }, m_jmp_addr{ 0 }, m_forward_page{ 0 }{
 		
 	}
 	~InlineHook() {
@@ -80,8 +80,10 @@ public:
 		* exec_old_instr = false
 		* callback中指定 ret_addr = stack[0]
 		* callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
+		* 
+	* 64位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
 	*/
-	bool Install(PVOID64 hook_addr, size_t instr_size, PVOID64 callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
+	bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
 		Uninstall();
 		if (forward_page_size < 0x1000) {
 			forward_page_size = 0x1000;
@@ -133,7 +135,7 @@ public:
 			forward_page_temp[i++] = 0x54;		// push esp
 
 			forward_page_temp[i++] = 0xe8;		// call callback
-			*(uint32_t*)&forward_page_temp[i] = GetJmpOffset((PVOID64)(forward_page_uint + i - 1), 5, callback);
+			*(uint32_t*)&forward_page_temp[i] = GetJmpOffset((forward_page_uint + i - 1), 5, callback);
 			i += 4;
 
 			forward_page_temp[i++] = 0x5c;		// pop esp
@@ -270,10 +272,12 @@ public:
 
 
 			// 遵循x64调用约定，为当前函数的使用提前分配栈空间
-			forward_page_temp[i++] = 0x48;		// sub rsp, 20
+			forward_page_temp[i++] = 0x48;		// sub rsp, 28
 			forward_page_temp[i++] = 0x83;
 			forward_page_temp[i++] = 0xec;
 			forward_page_temp[i++] = 0x20;
+
+
 
 			// 传递参数
 			forward_page_temp[i++] = 0x48;		// lea rcx, [rsp+20]
@@ -293,7 +297,7 @@ public:
 			forward_page_temp[i++] = 0xd0;
 
 			// 回收栈空间
-			forward_page_temp[i++] = 0x48;		// add rsp, 20
+			forward_page_temp[i++] = 0x48;		// add rsp, 28
 			forward_page_temp[i++] = 0x83;
 			forward_page_temp[i++] = 0xc4;
 			forward_page_temp[i++] = 0x20;
@@ -421,26 +425,26 @@ public:
 		}
 	}
 
-	PVOID64 GetForwardPage() {
+	uint64_t GetForwardPage() {
 		return m_forward_page;
 	}
 
 private:
 	Process* m_process;
-	PVOID64 m_hook_addr;
-	PVOID64 m_jmp_addr;
-	PVOID64 m_forward_page;
+	uint64_t m_hook_addr;
+	uint64_t m_jmp_addr;
+	uint64_t m_forward_page;
 	std::vector<char> m_old_instr;
 
 public:
-	static uint64_t GetJmpOffset(PVOID64 instr_addr, size_t instr_size, PVOID64 jmp_addr) {
-		uint64_t instr_addr_ = (uint64_t)instr_addr;;
-		uint64_t jmp_addr_ = (uint64_t)jmp_addr;
-		return jmp_addr_ - instr_addr_ - instr_size;
+	static uint64_t GetJmpOffset(uint64_t instr_addr, size_t instr_size, uint64_t jmp_addr) {
+		return jmp_addr - instr_addr - instr_size;
 	}
 
-#define EMITASM_GET_CURRENT_ADDR() 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05, 		// call next;    next: pop eax/rax;    add eax/rax, 5;
+#define GET_CURRENT_ADDR { 0xe8, 0x00, 0x00, 0x00, 0x00, 0x58, 0x48, 0x8c, 0xc0, 0x05 } 		// call next;    next: pop eax/rax;    add eax/rax, 5;
 
+
+#define GET_KERNEL32_IMAGE_BASE { 0x64, 0xA1, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x0C, 0x8B, 0x40, 0x0C, 0x8B, 0x00, 0x8B, 0x00, 0x8B, 0x40, 0x18 }
 	/* 定位kernel32
 	mov eax, dword ptr fs : [30h]   ;指向PEB结构
     mov eax, dword ptr[eax + 0Ch]   ;指向LDR Ptr32 _PEB_LDR_DATA
@@ -448,7 +452,7 @@ public:
     mov eax, dword ptr[eax]         ;移动_LIST_ENTRY
     mov eax, dword ptr[eax]         ;指向Kernel32
     mov eax, dword ptr[eax + 18h]   ;指向DllBase基址
-    ret
+    ;ret
 	*/
 
 };

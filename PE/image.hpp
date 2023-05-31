@@ -12,21 +12,26 @@
 
 #include <Geek/File/file.hpp>
 
+/*
+* 部分代码参考项目：MemoryModule
+*/
+
 namespace Geek {
-
-
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; } 
+	else /* (m_nt_header->OptionalHeader.Magic == 0x20b)*/ var = ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field; } 
 #define SET_OPTIONAL_HEADER_FIELD(field, var) \
 	{ if (m_nt_header->OptionalHeader.Magic == 0x10b) m_nt_header->OptionalHeader.##field = var; \
-	else if (m_nt_header->OptionalHeader.Magic == 0x20b) ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
+	else/* (m_nt_header->OptionalHeader.Magic == 0x20b)*/ ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
 
 class Image {
 public:
-	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
+	typedef uint64_t (*LoadLibraryFunc)(void* process, const char* lib_name);
 
+public:
+	Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
+		
 	}
 
 	~Image() {
@@ -43,12 +48,13 @@ public:
 
 
 public:
-	bool LoadFromImage(void* buf_) {
+	bool LoadFromImageBuf(void* buf_) {
 		IMAGE_SECTION_HEADER* sectionHeaderTable;
 		if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
 			return false;
 		}
 		auto buf = (char*)buf_;
+		m_memory_image_base = buf;
 		m_section_header_table.resize(m_file_header->NumberOfSections);
 		m_section_list.resize(m_file_header->NumberOfSections);
 		// 保存节区和头节区
@@ -75,9 +81,19 @@ public:
 		// 保存节区和头节区
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			m_section_header_table[i] = sectionHeaderTable[i];
-			m_section_list[i].resize(m_section_header_table[i].SizeOfRawData, 0);
-			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], m_section_header_table[i].SizeOfRawData);
+			size_t size = m_section_header_table[i].SizeOfRawData;
+			if (size == 0) {
+				// dll中没有数据的区段？
+				GET_OPTIONAL_HEADER_FIELD(SectionAlignment, size);
+				m_section_list[i].resize(size, 0);
+			}
+			else {
+				m_section_list[i].resize(size, 0);
+				memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], size);
+			}
+			
 		}
+		m_memory_image_base = NULL;
 		return true;
 	}
 
@@ -92,8 +108,8 @@ public:
 		return pe.Write(buf);
 	}
 
-	std::vector<char> SaveToFileBuf() {
-		std::vector<char> buf(GetFileSize(), 0);
+	std::vector<uint8_t> SaveToFileBuf() {
+		std::vector<uint8_t> buf(GetFileSize(), 0);
 		int offset = 0;
 
 		memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
@@ -122,6 +138,50 @@ public:
 			memcpy(&buf[m_section_header_table[i].PointerToRawData], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
 		}
 		return buf;
+	}
+
+	std::vector<uint8_t> SaveToImageBuf(uint64_t image_base = 0, bool zero_pe_header = false) {
+		std::vector<uint8_t> buf(GetImageSize(), 0);
+		int offset = 0;
+		if (zero_pe_header == false) {
+			memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
+			offset += sizeof(m_dos_header);
+
+			memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
+			offset += m_dos_stub.size();
+
+			offset = m_dos_header.e_lfanew;
+			if (image_base == 0) {
+				image_base = (uint64_t)buf.data();
+			}
+			uint64_t old_image_base = GetImageBase();
+			SetImageBase(image_base);
+			if (m_nt_header->OptionalHeader.Magic == 0x10b) {
+				memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
+				offset += sizeof(*m_nt_header);
+			}
+			else {
+				memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
+				offset += sizeof(IMAGE_NT_HEADERS64);
+			}
+			SetImageBase(old_image_base);
+
+			for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+				memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
+				offset += sizeof(m_section_header_table[i]);
+			}
+		}
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			memcpy(&buf[m_section_header_table[i].VirtualAddress], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
+		}
+		return buf;
+	}
+
+	/*
+	* field
+	*/
+	bool IsPE32() {
+		return m_nt_header->OptionalHeader.Magic == 0x10b;
 	}
 
 	uint32_t GetFileSize() {
@@ -178,6 +238,79 @@ public:
 		return &m_section_list[i][rva - m_section_header_table[i].VirtualAddress];
 	}
 
+	/*
+	* library
+	*/
+	void* GetExportProcAddress(LoadLibraryFunc load_library, void* process, const char* func_name) {
+		uint32_t export_rva;
+		if ((uintptr_t)func_name <= 0xffff) {
+			export_rva = GetExportRVAByOrdinal((uint16_t)func_name);
+		}
+		else {
+			export_rva = GetExportRVAByName(func_name);
+		}
+		// 可能返回一个字符串，需要二次加载
+		// 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
+		uintptr_t va = (uintptr_t)m_memory_image_base + export_rva;
+		auto export_directory = (uintptr_t)m_memory_image_base + GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+		auto export_directory_size = GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+		// 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
+		if (va > export_directory && va < export_directory + export_directory_size) {
+			std::string full_name = (char*)va;
+			auto offset = full_name.find(".");
+			auto dll_name = full_name.substr(0, offset);
+			auto func_name = full_name.substr(offset + 1);
+			if (!dll_name.empty() && !func_name.empty()) {
+				auto image_base = load_library(process, dll_name.c_str());
+				Image import_image;
+				import_image.LoadFromImageBuf((void*)image_base);
+				va = (uintptr_t)import_image.GetExportProcAddress(load_library, process, func_name.c_str());
+			}
+		}
+		return (void*)va;
+	}
+
+	/*
+	* RepositionTable
+	*/
+	bool RepairRepositionTable(uint64_t newImageBase) {
+		auto relocationTable = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+		if (relocationTable == nullptr) {
+			return false;
+		}
+		auto imageBase = GetImageBase();
+		do {
+			auto blockRVA = relocationTable->VirtualAddress;
+			auto blockSize = relocationTable->SizeOfBlock;
+			if (blockRVA == 0 && blockSize == 0) {
+				break;
+			}
+			uint16_t* fieldTable = (uint16_t*)((char*)relocationTable + sizeof(*relocationTable));
+			relocationTable  = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
+			auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
+			for (int i = 0; i < fieldCount; i++) {
+				auto offsetType = fieldTable[i] >> 12;
+				if (offsetType == IMAGE_REL_BASED_ABSOLUTE) {
+					continue;
+				}
+				auto RVA = blockRVA + (fieldTable[i] & 0xfff);
+				if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
+					auto addr = (uint32_t*)RVAToPoint(RVA);
+					*addr = *addr - imageBase + newImageBase;
+				}
+				else if (offsetType == IMAGE_REL_BASED_DIR64) {
+					auto addr = (uint64_t*)RVAToPoint(RVA);
+					*addr = *addr - imageBase + newImageBase;
+				}
+			}
+		} while (true);
+		SetImageBase(newImageBase);
+		return true;
+	}
+
+	/*
+	* ExportTable
+	*/
 	uint32_t GetExportRVAByName(const std::string& func_name) {
 		auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 		if (exportDirectory == nullptr) {
@@ -212,71 +345,120 @@ public:
 		return addressOfFunctions[funcIdx];
 	}
 
-	bool RepairRepositionTable(uint64_t newImageBase) {
-		auto relocationTable = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-		if (relocationTable == nullptr) {
+	/*
+	* ImportTable
+	*/
+private:
+	template<typename IMAGE_THUNK_DATA_T>
+	bool RepairImportAddressTableFromDll(LoadLibraryFunc load_library, void* process, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* import_image_base, bool skip_not_loaded) {
+		IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
+		Image import_image;
+		if (import_image_base) {
+			import_image.LoadFromImageBuf((void*)import_image_base);
+		}
+		else if (!skip_not_loaded) {
 			return false;
 		}
-		auto imageBase = GetImageBase();
-		do {
-			auto blockRVA = relocationTable->VirtualAddress;
-			auto blockSize = relocationTable->SizeOfBlock;
-			if (blockRVA == 0 && blockSize == 0) {
-				break;
+		for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+			if (!import_image_base) {
+				import_address_table->u1.Function = import_address_table->u1.Function = 0x1234567887654321;
+				continue;
 			}
-			uint16_t* fieldTable = (uint16_t*)((char*)relocationTable + sizeof(*relocationTable));
-			relocationTable  = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
-			auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
-			for (int i = 0; i < fieldCount; i++) {
-				auto offsetType = fieldTable[i] >> 12;
-				if (offsetType == IMAGE_REL_BASED_ABSOLUTE) {
-					continue;
-				}
-				auto RVA = blockRVA + (fieldTable[i] & 0xfff);
-				if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
-					auto addr = (uint32_t*)RVAToPoint(RVA);
-					*addr = *addr - imageBase + newImageBase;
-				}
-				if (offsetType == IMAGE_REL_BASED_DIR64) {
-					auto addr = (uint64_t*)RVAToPoint(RVA);
-					*addr = *addr - imageBase + newImageBase;
+			uint32_t export_rva;
+			if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
+				import_address_table->u1.Function = (uintptr_t)import_image.GetExportProcAddress(load_library, process, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+			}
+			else {
+				IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+				import_address_table->u1.Function = (uintptr_t)import_image.GetExportProcAddress(load_library, process, (char*)func_name->Name);
+			}
+			//import_address_table->u1.Function = import_module_base + export_rva;
+		}
+		return true;
+	}
+public:
+	bool RepairImportAddressTable(LoadLibraryFunc load_library, void* process, bool skip_not_loaded = false) {
+		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+		if (import_descriptor == nullptr) {
+			return false;
+		}
+		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
+			void* import_module_base = (void*)load_library(process, import_module_name);
+			if (IsPE32()) {
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA32>(load_library, process, import_descriptor, import_module_base, skip_not_loaded)) {
+					return false;
 				}
 			}
-		} while (true);
-		SetImageBase(newImageBase);
+			else {
+				if (!RepairImportAddressTableFromDll<IMAGE_THUNK_DATA64>(load_library, process, import_descriptor, import_module_base, skip_not_loaded)) {
+					return false;
+				}
+			}
+		}
 		return true;
 	}
 
-	bool RepairImportAddressTable() {
-		auto import_table = (IMAGE_BASE_RELOCATION*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-		if (import_table == nullptr) {
+	/*
+	* TLS
+	*/
+private:
+	// PIMAGE_TLS_CALLBACK
+	typedef VOID (NTAPI* PIMAGE_TLS_CALLBACK32)(uint32_t DllHandle, DWORD Reason, PVOID Reserved);
+	typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK64)(uint64_t DllHandle, DWORD Reason, PVOID Reserved);
+public:
+	bool ExecuteTls(uint64_t ImageBase) {
+		auto tls_dir = (IMAGE_TLS_DIRECTORY*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+		if (tls_dir == nullptr) {
 			return false;
 		}
-		IMAGE_IMPORT_DESCRIPTOR* import_descriptor = (IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(import_table->VirtualAddress);
-		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
-			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
-			uint64_t import_module_base = (uint64_t)LoadLibraryA(import_module_name);
-			if (import_module_base) {
-				continue;
-			}
-			IMAGE_THUNK_DATA* import_name_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->OriginalFirstThunk);
-			IMAGE_THUNK_DATA* import_address_table = (IMAGE_THUNK_DATA*)RVAToPoint(import_descriptor->FirstThunk);
-			Image import_module;
-			import_module.LoadFromImage((void*)import_module_base);
-			for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
-				uint32_t export_rva;
-				if (import_name_table->u1.Ordinal >> 31 == 1) {
-					export_rva = import_module.GetExportRVAByOrdinal(import_name_table->u1.Ordinal);
+		PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
+		if (callback) {
+			while (*callback) {
+				if (IsPE32()) {
+					PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+					callback32((uint32_t)ImageBase, DLL_PROCESS_ATTACH, NULL);
 				}
 				else {
-					IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-					export_rva = import_module.GetExportRVAByName((char*)func_name->Name);
+					PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+					callback64(ImageBase, DLL_PROCESS_ATTACH, NULL);
 				}
-				import_address_table->u1.Function = import_module_base + export_rva;
+				callback++;
 			}
+		}
+		return true;
+	}
+
+	/*
+	* Running
+	*/
+private:
+	typedef BOOL(WINAPI* DllEntryProc32)(uint32_t hinstDLL, DWORD fdwReason, uint32_t lpReserved);
+	typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
+	typedef int (WINAPI* ExeEntryProc)(void);
+public:
+	void CallEntryPoint(uint64_t ImageBase, uint64_t init_parameter = 0) {
+		uint32_t rva = GetEntryPoint();
+		if (m_file_header->Characteristics & IMAGE_FILE_DLL) {
+			if (IsPE32()) {
+				DllEntryProc32 DllEntry = (DllEntryProc32)(ImageBase + rva);
+				DllEntry((uint32_t)ImageBase, DLL_PROCESS_ATTACH, (uint32_t)init_parameter);
+			}
+			else {
+				DllEntryProc64 DllEntry = (DllEntryProc64)(ImageBase + rva);
+				DllEntry(ImageBase, DLL_PROCESS_ATTACH, init_parameter);
+			}
+		}
+		else {
+			ExeEntryProc ExeEntry = (ExeEntryProc)(LPVOID)(ImageBase + rva);
+			// exe不执行
 		}
 	}
 
+	/*
+	* CheckSum
+	*/
 private:
 	// https://www.likecs.com/show-306676949.html
 	uint32_t calc_checksum(uint32_t checksum, const void* data, int length) {
@@ -320,10 +502,51 @@ public:
 		SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum);
 	}
 
+	/*
+	* Signature
+	*/
 	bool CheckDigitalSignature() {
 
 	}
 
+	std::vector<uint8_t> CalculationAuthHashCalc() {
+
+	}
+
+	/*
+	* Resource
+	*/
+	static std::vector<uint8_t> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type) {
+		//查找资源
+		std::vector<uint8_t> buf;
+		HGLOBAL hRes = NULL;
+		do {
+			HRSRC hResID = FindResourceW(handle_module, MAKEINTRESOURCEW(resource_id), type);
+			if (!hResID) {
+				break;
+			}
+			//加载资源  
+			hRes = LoadResource(handle_module, hResID);
+			if (!hRes) {
+				break;
+			}
+			//锁定资源
+			LPVOID pRes = LockResource(hRes);
+			if (pRes == NULL) {
+				break;
+			}
+			DWORD dwResSize = SizeofResource(handle_module, hResID);
+			buf.resize(dwResSize);
+			memcpy(buf.data(), pRes, dwResSize);
+		} while (false);
+
+		if (hRes) {
+			UnlockResource(hRes);
+			FreeResource(hRes);
+			hRes = NULL;
+		}
+		return buf;
+	}
 
 private:
 
@@ -429,12 +652,6 @@ private:
 		return raw - m_section_header_table[i].PointerToRawData + m_section_header_table[i].VirtualAddress;
 	}
 
-
-	std::vector<uint8_t> CalculationAuthHashCalc() {
-
-	}
-
-
 private:
 	IMAGE_DOS_HEADER m_dos_header;
 	std::vector<uint8_t> m_dos_stub;
@@ -442,6 +659,8 @@ private:
 	IMAGE_FILE_HEADER* m_file_header;
 	std::vector<IMAGE_SECTION_HEADER> m_section_header_table;
 	std::vector<std::vector<uint8_t>> m_section_list;
+
+	void* m_memory_image_base;
 };
 
 } // namespace Geek
