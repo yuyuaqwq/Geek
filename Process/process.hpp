@@ -4,8 +4,14 @@
 #include <string>
 #include <vector>
 
+
+#ifndef WINNT
 #include <Windows.h>
 #include <tlhelp32.h>
+#else
+#include <ntifs.h>
+#endif
+
 
 #include <Geek/Process/ntinc.h>
 #include <Geek/Handle/handle.hpp>

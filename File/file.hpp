@@ -1,8 +1,13 @@
 #ifndef GEEK_FILE_FILE_H_
 #define GEEK_FILE_FILE_H_
 
-#include <fstream>
+#include <string>
 #include <vector>
+#include <fstream>
+
+#ifndef GEEK_STD
+#define GEEK_STD std::
+#endif // GEEK_STD
 
 namespace Geek {
 
@@ -14,7 +19,7 @@ public:
 	};
 
 public:
-	File(const std::wstring& path, std::ios_base::openmode mode = std::ios::in | std::ios::out) {
+	File(const GEEK_STD wstring& path, GEEK_STD ios_base::openmode mode = GEEK_STD ios_base::in | GEEK_STD ios_base::out) {
 		m_fs.open(path.c_str(), mode);
 		if (!m_fs.is_open()) {
 			m_status = Status::kInvalidPath;
@@ -22,32 +27,31 @@ public:
 		}
 		m_status = Status::kNormal;
 	}
-
 	~File() {
 		m_fs.close();
 	}
 
 public:
-	std::vector<char> Read(uint32_t offset = 0, uint32_t len = 0) {
-		std::vector<char> ret;
+	GEEK_STD vector<char> Read(uint32_t offset = 0, uint32_t len = 0) {
+		GEEK_STD vector<char> ret;
 		if (m_status != Status::kNormal) {
 			return ret;
 		}
 		if (len == 0) {
-			m_fs.seekg(offset, std::ios::end);
+			m_fs.seekg(offset, GEEK_STD ios_base::end);
 			len = m_fs.tellg();
 		}
-		m_fs.seekg(offset, std::ios::beg);
+		m_fs.seekg(offset, GEEK_STD ios_base::beg);
 		ret.resize(len);
 		m_fs.read(ret.data(), len);
 		return ret;
 	}
 
-	bool Write(const std::vector<char>& buf, uint32_t offset = 0) {
+	bool Write(const GEEK_STD vector<char>& buf, uint32_t offset = 0) {
 		if (m_status != Status::kNormal) {
 			return false;
 		}
-		m_fs.seekg(offset, std::ios::beg);
+		m_fs.seekg(offset, GEEK_STD ios_base::beg);
 		m_fs.write(buf.data(), buf.size());
 		return true;
 	}
@@ -58,7 +62,7 @@ public:
 
 private:
 	Status m_status;
-	std::fstream m_fs;
+	GEEK_STD fstream m_fs;
 };
 
 } // namespace Geek

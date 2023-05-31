@@ -1,7 +1,6 @@
 #ifndef GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
 #define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
 
-
 #include <string>
 #include <vector>
 
