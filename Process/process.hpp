@@ -285,7 +285,7 @@ public:
 	}
 
 	uint64_t WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
-		auto mem = AllocMemory(len, MEM_COMMIT, protect);
+		auto mem = AllocMemory(len, (DWORD)MEM_COMMIT, protect);
 		if (!mem) {
 			return 0;
 		}
@@ -351,7 +351,7 @@ public:
 		return memoryBlockList;
 	}
 
-	bool TraverseMemoryBlocks(bool(*callback)(char* addr, size_t size, void* arg), void* arg) const {
+	bool ScanMemoryBlocks(bool(*callback)(char* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
 		bool success = false;
 		std::vector<char> buf;
 		do {
@@ -361,15 +361,17 @@ public:
 			// 遍历该进程的内存块
 			size_t sizeSum = 0;
 			for (int i = 0; i < vec.size(); i++) {
-				bool isModule = false;
-				for (int j = 0; j < modulelist.size(); j++) {
-					if ((uint64_t)vec[i].BaseAddress >= modulelist[j].base && (uint64_t)vec[i].BaseAddress < modulelist[j].base + modulelist[j].base) {
-						isModule = true;
-						break;
+				if (include_module == false) {
+					bool isModule = false;
+					for (int j = 0; j < modulelist.size(); j++) {
+						if ((uint64_t)vec[i].BaseAddress >= modulelist[j].base && (uint64_t)vec[i].BaseAddress < modulelist[j].base + modulelist[j].base) {
+							isModule = true;
+							break;
+						}
 					}
-				}
-				if (!(!isModule && vec[i].AllocationProtect & PAGE_READWRITE && vec[i].State & MEM_COMMIT)) {
-					continue;
+					if (!(!isModule && vec[i].AllocationProtect & PAGE_READWRITE && vec[i].State & MEM_COMMIT)) {
+						continue;
+					}
 				}
 				std::vector<char> tempBuff(vec[i].RegionSize);
 				SIZE_T readCount = 0;
