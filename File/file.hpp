@@ -47,12 +47,12 @@ public:
 		return ret;
 	}
 
-	bool Write(const GEEK_STD vector<char>& buf, uint32_t offset = 0) {
+	bool Write(const GEEK_STD vector<uint8_t>& buf, uint32_t offset = 0) {
 		if (m_status != Status::kNormal) {
 			return false;
 		}
 		m_fs.seekg(offset, GEEK_STD ios_base::beg);
-		m_fs.write(buf.data(), buf.size());
+		m_fs.write((char*)buf.data(), buf.size());
 		return true;
 	}
 

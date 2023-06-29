@@ -80,7 +80,7 @@ public:
 	/*
 	* L"explorer.exe"
 	*/
-	bool CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+	bool CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread = NULL, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
 		HANDLE hToken_ = NULL;
 		std::wstring tokenProcessName_ = tokenProcessName;
 		DWORD pid = GetProcessIdByProcessName(tokenProcessName);
@@ -517,7 +517,18 @@ public:
 		return context;
 	}
 
+	bool WaitExit(DWORD dwMilliseconds = INFINITE) {
+		if (IsCur()) {
+			return false;
+		}
+		return WaitForSingleObject(Get(), dwMilliseconds) == WAIT_OBJECT_0;
+	}
 
+	DWORD GetExitCode() {
+		DWORD code;
+		GetExitCodeProcess(Get(), &code);
+		return code;
+	}
 
 	/*
 	* Image
@@ -546,7 +557,7 @@ public:
 			if (thread.IsCur()) {
 				break;
 			}
-			thread.WaitExit(INFINITE);
+			thread.WaitExit();
 			addr = thread.GetExitCode();
 		} while (false);
 		if (lib_name_buf) {
@@ -570,7 +581,7 @@ public:
 	}
 
 	/* 跨进程内存注入还需要解决image中调用LoadLibraryDefault，返回的模块基址不是当前进程模块基址的问题 */
-	uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0) {
+	uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false) {
 		if (IsX86() != image->IsPE32()) {
 			return 0;
 		}
@@ -583,96 +594,95 @@ public:
 			if (!image->RepairRepositionTable((uint64_t)image_base)) {
 				break;
 			}
-			if (!image->RepairImportAddressTable((Image::LoadLibraryFunc)LoadLibraryDefault, this)) {
+			if (!image->RepairImportAddressTable((Image::LoadLibraryFunc)LoadLibraryDefault, this, skip_not_loaded)) {
 				break;
 			}
 			auto image_buf = image->SaveToImageBuf((uint64_t)image_base, true);
-			if (call_dll_entry) {
-				if (IsCur()) {
-					if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-						break;
-					}
-					image->ExecuteTls((uint64_t)image_base);
+			if (IsCur()) {
+				if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+					break;
+				}
+				image->ExecuteTls((uint64_t)image_base);
+				if (call_dll_entry) {
 					image->CallEntryPoint((uint64_t)image_base, init_parameter);
 				}
-				else {
-					uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-					if (image->IsPE32()) {
-						int offset = 0;
-						image_buf[offset++] = 0x68;		// push 0
-						*(uint32_t*)&image_buf[offset] = (uint32_t)init_parameter;
-						offset += 4;
+			}
+			else {
+				uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
+				if (image->IsPE32()) {
+					int offset = 0;
+					image_buf[offset++] = 0x68;		// push 0
+					*(uint32_t*)&image_buf[offset] = (uint32_t)init_parameter;
+					offset += 4;
 
-						image_buf[offset++] = 0x68;		// push DLL_PROCESS_ATTACH
-						*(uint32_t*)&image_buf[offset] = DLL_PROCESS_ATTACH;
-						offset += 4;
+					image_buf[offset++] = 0x68;		// push DLL_PROCESS_ATTACH
+					*(uint32_t*)&image_buf[offset] = DLL_PROCESS_ATTACH;
+					offset += 4;
 
-						image_buf[offset++] = 0x68;		// push image_base
-						*(uint32_t*)&image_buf[offset] = (uint32_t)image_base;
-						offset += 4;
+					image_buf[offset++] = 0x68;		// push image_base
+					*(uint32_t*)&image_buf[offset] = (uint32_t)image_base;
+					offset += 4;
 
-						image_buf[offset++] = 0xb8;		// mov eax, entry_point
-						*(uint32_t*)&image_buf[offset] = (uint32_t)entry_point;
-						offset += 4;
+					image_buf[offset++] = 0xb8;		// mov eax, entry_point
+					*(uint32_t*)&image_buf[offset] = (uint32_t)entry_point;
+					offset += 4;
 
-						image_buf[offset++] = 0xff;		// call eax
-						image_buf[offset++] = 0xd0;
+					image_buf[offset++] = 0xff;		// call eax
+					image_buf[offset++] = 0xd0;
 
-						image_buf[offset++] = 0xc2;		// ret 4
-						*(uint16_t*)&image_buf[offset] = 4;
-						offset += 2;
-					}
-					else {
-						/*
-						* 64位下，栈需要16字节对齐，来避免一些指令异常(如movaps)
-						* 因为会有一个call压入的返回地址，所以-28
-						*/
-						int offset = 0;
-						image_buf[offset++] = 0x48;		// sub rsp, 28
-						image_buf[offset++] = 0x83;
-						image_buf[offset++] = 0xec;
-						image_buf[offset++] = 0x28;
-
-						// 传递参数
-						image_buf[offset++] = 0x48;		// mov rcx, image_base
-						image_buf[offset++] = 0xb9;
-						*(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
-						offset += 8;
-
-						image_buf[offset++] = 0x48;		// mov rdx, DLL_PROCESS_ATTACH
-						image_buf[offset++] = 0xc7;
-						image_buf[offset++] = 0xc2;
-						*(uint32_t*)&image_buf[offset] = 1;
-						offset += 4;
-
-						image_buf[offset++] = 0x49;		// mov r8, init_parameter
-						image_buf[offset++] = 0xb8;
-						*(uint64_t*)&image_buf[offset] = init_parameter;
-						offset += 8;
-
-
-						image_buf[offset++] = 0x48;		// mov rax, entry_point
-						image_buf[offset++] = 0xb8;
-						*(uint64_t*)&image_buf[offset] = entry_point;
-						offset += 8;
-
-						image_buf[offset++] = 0xff;		// call rax
-						image_buf[offset++] = 0xd0;
-
-						// 回收栈空间
-						image_buf[offset++] = 0x48;		// add rsp, 28
-						image_buf[offset++] = 0x83;
-						image_buf[offset++] = 0xc4;
-						image_buf[offset++] = 0x28;
-
-						image_buf[offset++] = 0xc3;		// ret
-					}
-					if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-						break;
-					}
-
-					CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+					image_buf[offset++] = 0xc2;		// ret 4
+					*(uint16_t*)&image_buf[offset] = 4;
+					offset += 2;
 				}
+				else {
+					/*
+					* 64位下，栈需要16字节对齐，来避免一些指令异常(如movaps)
+					* 因为会有一个call压入的返回地址，所以-28
+					*/
+					int offset = 0;
+					image_buf[offset++] = 0x48;		// sub rsp, 28
+					image_buf[offset++] = 0x83;
+					image_buf[offset++] = 0xec;
+					image_buf[offset++] = 0x28;
+
+					// 传递参数
+					image_buf[offset++] = 0x48;		// mov rcx, image_base
+					image_buf[offset++] = 0xb9;
+					*(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
+					offset += 8;
+
+					image_buf[offset++] = 0x48;		// mov rdx, DLL_PROCESS_ATTACH
+					image_buf[offset++] = 0xc7;
+					image_buf[offset++] = 0xc2;
+					*(uint32_t*)&image_buf[offset] = 1;
+					offset += 4;
+
+					image_buf[offset++] = 0x49;		// mov r8, init_parameter
+					image_buf[offset++] = 0xb8;
+					*(uint64_t*)&image_buf[offset] = init_parameter;
+					offset += 8;
+
+
+					image_buf[offset++] = 0x48;		// mov rax, entry_point
+					image_buf[offset++] = 0xb8;
+					*(uint64_t*)&image_buf[offset] = entry_point;
+					offset += 8;
+
+					image_buf[offset++] = 0xff;		// call rax
+					image_buf[offset++] = 0xd0;
+
+					// 回收栈空间
+					image_buf[offset++] = 0x48;		// add rsp, 28
+					image_buf[offset++] = 0x83;
+					image_buf[offset++] = 0xc4;
+					image_buf[offset++] = 0x28;
+
+					image_buf[offset++] = 0xc3;		// ret
+				}
+				if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+					break;
+				}
+				CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
 			}
 			success = true;
 		} while (false);

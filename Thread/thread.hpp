@@ -55,7 +55,7 @@ public:
 		return ::ResumeThread(Get());
 	}
 
-	bool WaitExit(DWORD dwMilliseconds) {
+	bool WaitExit(DWORD dwMilliseconds = INFINITE) {
 		if (IsCur()) {
 			return false;
 		}

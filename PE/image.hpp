@@ -60,9 +60,49 @@ public:
 		// 保存节区和头节区
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
 			m_section_header_table[i] = sectionHeaderTable[i];
-			m_section_list[i].resize(m_section_header_table[i].SizeOfRawData, 0);
-			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].VirtualAddress], m_section_header_table[i].SizeOfRawData);
+			auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+			uint32_t SectionAlignment;
+			GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
+			
+			if (virtual_size % SectionAlignment) {
+				virtual_size += SectionAlignment - virtual_size % SectionAlignment;
+			}
+			m_section_list[i].resize(virtual_size, 0);
+			memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].VirtualAddress], virtual_size);
 		}
+		return true;
+	}
+
+	bool LoadFromFileBuf(void* buf_) {
+		IMAGE_SECTION_HEADER* sectionHeaderTable;
+		if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
+			return false;
+		}
+		auto buf = (char*)buf_;
+		m_memory_image_base = nullptr;
+		m_section_header_table.resize(m_file_header->NumberOfSections);
+		m_section_list.resize(m_file_header->NumberOfSections);
+		// 保存节区和头节区
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			m_section_header_table[i] = sectionHeaderTable[i];
+			auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+			uint32_t SectionAlignment;
+			GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
+			if (virtual_size % SectionAlignment) {
+				virtual_size += SectionAlignment - virtual_size % SectionAlignment;
+			}
+
+			if (virtual_size == 0) {
+				// dll中没有数据的区段？
+				GET_OPTIONAL_HEADER_FIELD(SectionAlignment, virtual_size);
+				m_section_list[i].resize(virtual_size, 0);
+			}
+			else {
+				m_section_list[i].resize(virtual_size, 0);
+				memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], m_section_header_table[i].SizeOfRawData);
+			}
+		}
+		m_memory_image_base = NULL;
 		return true;
 	}
 
@@ -72,29 +112,7 @@ public:
 			return false;
 		}
 		auto buf = pe.Read();
-		IMAGE_SECTION_HEADER* sectionHeaderTable;
-		if (!CopyPEHeader(buf.data(), &sectionHeaderTable)) {
-			return false;
-		}
-		m_section_header_table.resize(m_file_header->NumberOfSections);
-		m_section_list.resize(m_file_header->NumberOfSections);
-		// 保存节区和头节区
-		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
-			m_section_header_table[i] = sectionHeaderTable[i];
-			size_t size = m_section_header_table[i].SizeOfRawData;
-			if (size == 0) {
-				// dll中没有数据的区段？
-				GET_OPTIONAL_HEADER_FIELD(SectionAlignment, size);
-				m_section_list[i].resize(size, 0);
-			}
-			else {
-				m_section_list[i].resize(size, 0);
-				memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].PointerToRawData], size);
-			}
-			
-		}
-		m_memory_image_base = NULL;
-		return true;
+		return LoadFromFileBuf(buf.data());
 	}
 
 	bool SaveToFile(const std::wstring& path) {
