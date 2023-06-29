@@ -581,7 +581,7 @@ public:
 	}
 
 	/* 跨进程内存注入还需要解决image中调用LoadLibraryDefault，返回的模块基址不是当前进程模块基址的问题 */
-	uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false) {
+	uint64_t LoadLibraryFromImage(Image* image, Image::LoadLibraryFunc load_library_func, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
 		if (IsX86() != image->IsPE32()) {
 			return 0;
 		}
@@ -594,10 +594,10 @@ public:
 			if (!image->RepairRepositionTable((uint64_t)image_base)) {
 				break;
 			}
-			if (!image->RepairImportAddressTable((Image::LoadLibraryFunc)LoadLibraryDefault, this, skip_not_loaded)) {
+			if (!image->RepairImportAddressTable(load_library_func, this, skip_not_loaded)) {
 				break;
 			}
-			auto image_buf = image->SaveToImageBuf((uint64_t)image_base, true);
+			auto image_buf = image->SaveToImageBuf((uint64_t)image_base, zero_pe_header);
 			if (IsCur()) {
 				if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
 					break;
@@ -688,6 +688,7 @@ public:
 		} while (false);
 		if (success == false && image_base) {
 			FreeMemory(image_base);
+			image_base = 0;
 		}
 		return image_base;
 	}

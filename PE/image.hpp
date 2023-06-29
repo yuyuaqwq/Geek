@@ -158,40 +158,44 @@ public:
 		return buf;
 	}
 
-	std::vector<uint8_t> SaveToImageBuf(uint64_t image_base = 0, bool zero_pe_header = false) {
-		std::vector<uint8_t> buf(GetImageSize(), 0);
+	void SaveToImageBuf(uint8_t* save_buf = nullptr, uint64_t image_base = 0, bool zero_pe_header = false) {
 		int offset = 0;
 		if (zero_pe_header == false) {
-			memcpy(&buf[offset], &m_dos_header, sizeof(m_dos_header));
+			memcpy(&save_buf[offset], &m_dos_header, sizeof(m_dos_header));
 			offset += sizeof(m_dos_header);
 
-			memcpy(&buf[offset], m_dos_stub.data(), m_dos_stub.size());
+			memcpy(&save_buf[offset], m_dos_stub.data(), m_dos_stub.size());
 			offset += m_dos_stub.size();
 
 			offset = m_dos_header.e_lfanew;
 			if (image_base == 0) {
-				image_base = (uint64_t)buf.data();
+				image_base = (uint64_t)save_buf;
 			}
 			uint64_t old_image_base = GetImageBase();
 			SetImageBase(image_base);
 			if (m_nt_header->OptionalHeader.Magic == 0x10b) {
-				memcpy(&buf[offset], m_nt_header, sizeof(*m_nt_header));
+				memcpy(&save_buf[offset], m_nt_header, sizeof(*m_nt_header));
 				offset += sizeof(*m_nt_header);
 			}
 			else {
-				memcpy(&buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
+				memcpy(&save_buf[offset], m_nt_header, sizeof(IMAGE_NT_HEADERS64));
 				offset += sizeof(IMAGE_NT_HEADERS64);
 			}
 			SetImageBase(old_image_base);
 
 			for (int i = 0; i < m_file_header->NumberOfSections; i++) {
-				memcpy(&buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
+				memcpy(&save_buf[offset], &m_section_header_table[i], sizeof(m_section_header_table[i]));
 				offset += sizeof(m_section_header_table[i]);
 			}
 		}
 		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
-			memcpy(&buf[m_section_header_table[i].VirtualAddress], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
+			memcpy(&save_buf[m_section_header_table[i].VirtualAddress], m_section_list[i].data(), m_section_header_table[i].SizeOfRawData);
 		}
+	}
+
+	std::vector<uint8_t> SaveToImageBuf(uint64_t image_base = 0, bool zero_pe_header = false) {
+		std::vector<uint8_t> buf(GetImageSize(), 0);
+		SaveToImageBuf(buf.data(), image_base, zero_pe_header);
 		return buf;
 	}
 
@@ -366,6 +370,69 @@ public:
 	/*
 	* ImportTable
 	*/
+
+
+	/* ImportAddressTable */
+private:
+	template<typename IMAGE_THUNK_DATA_T>
+	void** GetImportAddressPointByNameFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, const char* lib_name, const char* func_name) {
+		IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
+		for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+			if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
+				continue;
+			}
+			else {
+				IMAGE_IMPORT_BY_NAME* cur_func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
+				if (cur_func_name->Name == func_name) {
+					return (void**)&import_address_table->u1.Function;
+				}
+			}
+		}
+		return nullptr;
+	}
+	template<typename IMAGE_THUNK_DATA_T>
+	void** GetImportAddressPointByAddressFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* address) {
+		IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->OriginalFirstThunk);
+		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
+		for (; import_name_table->u1.Function; import_name_table++, import_address_table++) {
+			if ((void*)import_address_table->u1.Function == address) {
+				auto offset = VaToOffset(&import_address_table->u1.Function);
+				if (offset == 0) return nullptr;
+				return (void**)((uintptr_t)m_memory_image_base + offset);
+			}
+		}
+		return nullptr;
+	}
+public:
+	void** GetImportAddressPointByName(const char* lib_name, const char* func_name) {
+		if (!m_memory_image_base) return nullptr;
+		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+			char* import_module_name = (char*)RVAToPoint(import_descriptor->Name);
+			if (import_module_name != lib_name) {
+				continue;
+			}
+			if (IsPE32()) {
+				return GetImportAddressPointByNameFromDll<IMAGE_THUNK_DATA32>(import_descriptor, lib_name, func_name);
+			} else {
+				return GetImportAddressPointByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, lib_name, func_name);
+			}
+		}
+	}
+	void** GetImportAddressPointByAddr(void* address) {
+		if (!m_memory_image_base) return nullptr;
+		auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RVAToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+		for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+			if (IsPE32()) {
+				return GetImportAddressPointByAddressFromDll<IMAGE_THUNK_DATA32>(import_descriptor, address);
+			} else {
+				return GetImportAddressPointByAddressFromDll<IMAGE_THUNK_DATA64>(import_descriptor, address);
+			}
+		}
+		return nullptr;
+	}
+
 private:
 	template<typename IMAGE_THUNK_DATA_T>
 	bool RepairImportAddressTableFromDll(LoadLibraryFunc load_library, void* process, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* import_image_base, bool skip_not_loaded) {
@@ -373,7 +440,9 @@ private:
 		IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RVAToPoint(import_descriptor->FirstThunk);
 		Image import_image;
 		if (import_image_base) {
-			import_image.LoadFromImageBuf((void*)import_image_base);
+			if (!import_image.LoadFromImageBuf((void*)import_image_base)) {
+				return false;
+			}
 		}
 		else if (!skip_not_loaded) {
 			return false;
@@ -654,7 +723,17 @@ private:
 		return i;
 	}
 
-	uint32_t RVAToRAW(uint32_t rva) {
+	uint32_t VaToOffset(void* va) {
+		for (int i = 0; i < m_file_header->NumberOfSections; i++) {
+			auto addr = &m_section_list[i][0];
+			if ((uint8_t*)va >= addr && (uint8_t*)va < &m_section_list[i][m_section_list[i].size()]) {
+				return m_section_header_table[i].VirtualAddress + ((uintptr_t)va - (uintptr_t)m_section_list[i].data());
+			}
+		}
+		return 0;
+	}
+
+	uint32_t RvaToRaw(uint32_t rva) {
 		auto i = GetSectionIndexByRVA(rva);
 		if (i == -1) {
 			return 0;
@@ -662,7 +741,7 @@ private:
 		return rva - m_section_header_table[i].VirtualAddress + m_section_header_table[i].PointerToRawData;
 	}
 
-	uint32_t RAWToRVA(uint32_t raw) {
+	uint32_t RawToRva(uint32_t raw) {
 		auto i = GetSectionIndexByRAW(raw);
 		if (i == -1) {
 			return 0;
