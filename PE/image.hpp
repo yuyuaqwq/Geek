@@ -384,7 +384,7 @@ private:
 			}
 			else {
 				IMAGE_IMPORT_BY_NAME* cur_func_name = (IMAGE_IMPORT_BY_NAME*)RVAToPoint(import_name_table->u1.AddressOfData);
-				if (cur_func_name->Name == func_name) {
+				if (std::string((char*)cur_func_name->Name) == func_name) {
 					return (void**)&import_address_table->u1.Function;
 				}
 			}
