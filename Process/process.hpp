@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 
 #ifndef WINNT
@@ -19,8 +20,7 @@
 #include <Geek/PE/image.hpp>
 #include <Geek/Thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
-
-#include <CppUtils/String/string.hpp>
+#include <Geek/String/string.hpp>
 
 namespace Geek {
 
@@ -63,7 +63,7 @@ public:
 	}
 
 	/*
-	* CREATE_SUSPENDED:´´½¨¹ÒÆð½ø³Ì
+	* CREATE_SUSPENDED:ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	*/
 	Status Create(const std::wstring& command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
 		std::wstring command_ = command;
@@ -143,7 +143,7 @@ public:
 		}
 		TOKEN_PRIVILEGES TokenPrivileges;
 		memset(&TokenPrivileges, 0, sizeof(TOKEN_PRIVILEGES));
-		LUID v1;//È¨ÏÞÀàÐÍ£¬±¾µØ¶ÀÓÐ±êÊ¶
+		LUID v1;//È¨ï¿½ï¿½ï¿½ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½Ø¶ï¿½ï¿½Ð±ï¿½Ê¶
 		if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &v1))
 		{
 			LastError = GetLastError();
@@ -191,11 +191,11 @@ public:
 		}
 
 		::SYSTEM_INFO SystemInfo = { 0 };
-		::GetNativeSystemInfo(&SystemInfo);		//»ñµÃÏµÍ³ÐÅÏ¢
-		if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {		//µÃµ½ÏµÍ³Î»Êý64
+		::GetNativeSystemInfo(&SystemInfo);		//ï¿½ï¿½ï¿½ÏµÍ³ï¿½ï¿½Ï¢
+		if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {		//ï¿½Ãµï¿½ÏµÍ³Î»ï¿½ï¿½64
 			return false;
 		}
-		else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {		// µÃµ½ÏµÍ³Î»Êý32
+		else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {		// ï¿½Ãµï¿½ÏµÍ³Î»ï¿½ï¿½32
 			return true;
 		}
 		return true;
@@ -313,45 +313,45 @@ public:
 	std::vector<MEMORY_BASIC_INFORMATION> EnumMemoryBlocks() const {
 		std::vector<MEMORY_BASIC_INFORMATION> memoryBlockList;
 
-		// ³õÊ¼»¯ vector ÈÝÁ¿
+		// ï¿½ï¿½Ê¼ï¿½ï¿½ vector ï¿½ï¿½ï¿½ï¿½
 		memoryBlockList.reserve(200);
 
-		// »ñÈ¡ PageSize ºÍµØÖ·Á£¶È
+		// ï¿½ï¿½È¡ PageSize ï¿½Íµï¿½Ö·ï¿½ï¿½ï¿½ï¿½
 		SYSTEM_INFO sysInfo = { 0 };
 		GetSystemInfo(&sysInfo);
 		/*
 		typedef struct _SYSTEM_INFO {
 		union {
-		DWORD dwOemId;							// ¼æÈÝÐÔ±£Áô
+		DWORD dwOemId;							// ï¿½ï¿½ï¿½ï¿½ï¿½Ô±ï¿½ï¿½ï¿½
 		struct {
-		WORD wProcessorArchitecture;			// ²Ù×÷ÏµÍ³´¦ÀíÆ÷ÌåÏµ½á¹¹
-		WORD wReserved;						// ±£Áô
+		WORD wProcessorArchitecture;			// ï¿½ï¿½ï¿½ï¿½ÏµÍ³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½á¹¹
+		WORD wReserved;						// ï¿½ï¿½ï¿½ï¿½
 		} DUMMYSTRUCTNAME;
 		} DUMMYUNIONNAME;
-		DWORD     dwPageSize;						// Ò³Ãæ´óÐ¡ºÍÒ³Ãæ±£»¤ºÍ³ÐÅµµÄÁ£¶È
-		LPVOID    lpMinimumApplicationAddress;	// Ö¸ÏòÓ¦ÓÃ³ÌÐòºÍdll¿É·ÃÎÊµÄ×îµÍÄÚ´æµØÖ·µÄÖ¸Õë
-		LPVOID    lpMaximumApplicationAddress;	// Ö¸ÏòÓ¦ÓÃ³ÌÐòºÍdll¿É·ÃÎÊµÄ×î¸ßÄÚ´æµØÖ·µÄÖ¸Õë
-		DWORD_PTR dwActiveProcessorMask;			// ´¦ÀíÆ÷ÑÚÂë
-		DWORD     dwNumberOfProcessors;			// µ±Ç°×éÖÐÂß¼­´¦ÀíÆ÷µÄÊýÁ¿
-		DWORD     dwProcessorType;				// ´¦ÀíÆ÷ÀàÐÍ£¬¼æÈÝÐÔ±£Áô
-		DWORD     dwAllocationGranularity;		// ÐéÄâÄÚ´æµÄÆðÊ¼µØÖ·µÄÁ£¶È
-		WORD      wProcessorLevel;				// ´¦ÀíÆ÷¼¶±ð
-		WORD      wProcessorRevision;				// ´¦ÀíÆ÷ÐÞ¶©
+		DWORD     dwPageSize;						// Ò³ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½Ò³ï¿½æ±£ï¿½ï¿½ï¿½Í³ï¿½Åµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		LPVOID    lpMinimumApplicationAddress;	// Ö¸ï¿½ï¿½Ó¦ï¿½Ã³ï¿½ï¿½ï¿½ï¿½dllï¿½É·ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½Ö·ï¿½ï¿½Ö¸ï¿½ï¿½
+		LPVOID    lpMaximumApplicationAddress;	// Ö¸ï¿½ï¿½Ó¦ï¿½Ã³ï¿½ï¿½ï¿½ï¿½dllï¿½É·ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½Ö·ï¿½ï¿½Ö¸ï¿½ï¿½
+		DWORD_PTR dwActiveProcessorMask;			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		DWORD     dwNumberOfProcessors;			// ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		DWORD     dwProcessorType;				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô±ï¿½ï¿½ï¿½
+		DWORD     dwAllocationGranularity;		// ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		WORD      wProcessorLevel;				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		WORD      wProcessorRevision;				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ¶ï¿½
 		} SYSTEM_INFO, *LPSYSTEM_INFO;
 		*/
 
-		//±éÀúÄÚ´æ
+		//ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
 		const char* p = (const char*)sysInfo.lpMinimumApplicationAddress;
 		MEMORY_BASIC_INFORMATION  memInfo = { 0 };
 		while (p < sysInfo.lpMaximumApplicationAddress) {
-			// »ñÈ¡½ø³ÌÐéÄâÄÚ´æ¿é»º³åÇø×Ö½ÚÊý
+			// ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½é»ºï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
 			size_t size = VirtualQueryEx(Get(), p, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
 			if (size != sizeof(MEMORY_BASIC_INFORMATION)) { break; }
 
-			// ½«ÄÚ´æ¿éÐÅÏ¢×·¼Óµ½ vector Êý×éÎ²²¿
+			// ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ï¢×·ï¿½Óµï¿½ vector ï¿½ï¿½ï¿½ï¿½Î²ï¿½ï¿½
 			memoryBlockList.push_back(memInfo);
 
-			// ÒÆ¶¯Ö¸Õë
+			// ï¿½Æ¶ï¿½Ö¸ï¿½ï¿½
 			p += memInfo.RegionSize;
 		}
 		return memoryBlockList;
@@ -364,7 +364,7 @@ public:
 			auto modulelist = EnumModulesEx();
 			std::vector<MEMORY_BASIC_INFORMATION> vec = EnumMemoryBlocks();
 
-			// ±éÀú¸Ã½ø³ÌµÄÄÚ´æ¿é
+			// ï¿½ï¿½ï¿½ï¿½ï¿½Ã½ï¿½ï¿½Ìµï¿½ï¿½Ú´ï¿½ï¿½
 			size_t sizeSum = 0;
 			for (int i = 0; i < vec.size(); i++) {
 				if (include_module == false) {
@@ -538,7 +538,7 @@ public:
 			return (uint64_t)LoadLibraryA(lib_name);
 		}
 		Module module;
-		if (process->FindModlueByModuleName(CppUtils::String::AnsiToUtf16le(lib_name), &module)) {
+		if (process->FindModlueByModuleName(Geek::String::AnsiToUtf16le(lib_name), &module)) {
 			return module.base;
 		}
 
@@ -580,7 +580,7 @@ public:
 		} while (false);
 	}
 
-	/* ¿ç½ø³ÌÄÚ´æ×¢Èë»¹ÐèÒª½â¾öimageÖÐµ÷ÓÃLoadLibraryDefault£¬·µ»ØµÄÄ£¿é»ùÖ·²»ÊÇµ±Ç°½ø³ÌÄ£¿é»ùÖ·µÄÎÊÌâ */
+	/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½×¢ï¿½ë»¹ï¿½ï¿½Òªï¿½ï¿½ï¿½imageï¿½Ðµï¿½ï¿½ï¿½LoadLibraryDefaultï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½Ä£ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½Çµï¿½Ç°ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 	uint64_t LoadLibraryFromImage(Image* image, Image::LoadLibraryFunc load_library_func, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
 		if (IsX86() != image->IsPE32()) {
 			return 0;
@@ -636,8 +636,8 @@ public:
 				}
 				else {
 					/*
-					* 64Î»ÏÂ£¬Õ»ÐèÒª16×Ö½Ú¶ÔÆë£¬À´±ÜÃâÒ»Ð©Ö¸ÁîÒì³£(Èçmovaps)
-					* ÒòÎª»áÓÐÒ»¸öcallÑ¹ÈëµÄ·µ»ØµØÖ·£¬ËùÒÔ-28
+					* 64Î»ï¿½Â£ï¿½Õ»ï¿½ï¿½Òª16ï¿½Ö½Ú¶ï¿½ï¿½ë£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»Ð©Ö¸ï¿½ï¿½ï¿½ì³£(ï¿½ï¿½movaps)
+					* ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½callÑ¹ï¿½ï¿½Ä·ï¿½ï¿½Øµï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½-28
 					*/
 					int offset = 0;
 					image_buf[offset++] = 0x48;		// sub rsp, 28
@@ -645,7 +645,7 @@ public:
 					image_buf[offset++] = 0xec;
 					image_buf[offset++] = 0x28;
 
-					// ´«µÝ²ÎÊý
+					// ï¿½ï¿½ï¿½Ý²ï¿½ï¿½ï¿½
 					image_buf[offset++] = 0x48;		// mov rcx, image_base
 					image_buf[offset++] = 0xb9;
 					*(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
@@ -671,7 +671,7 @@ public:
 					image_buf[offset++] = 0xff;		// call rax
 					image_buf[offset++] = 0xd0;
 
-					// »ØÊÕÕ»¿Õ¼ä
+					// ï¿½ï¿½ï¿½ï¿½Õ»ï¿½Õ¼ï¿½
 					image_buf[offset++] = 0x48;		// add rsp, 28
 					image_buf[offset++] = 0x83;
 					image_buf[offset++] = 0xc4;
@@ -799,9 +799,9 @@ public:
 	}
 
 	bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
-		std::wstring find_name = CppUtils::String::ToUppercase(name);
+		std::wstring find_name = Geek::String::ToUppercase(name);
 		for (auto& it : EnumModulesEx()) {
-			auto base_name_up = CppUtils::String::ToUppercase(it.base_name);
+			auto base_name_up = Geek::String::ToUppercase(it.base_name);
 			if (base_name_up == find_name) {
 				if (module) *module = it;
 				return true;
@@ -816,26 +816,26 @@ public:
 		HRSRC hRes = NULL;
 		HANDLE hResFile = INVALID_HANDLE_VALUE;
 		do {
-			//²éÕÒ×ÊÔ´
+			//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´
 
 			HRSRC hResID = FindResourceW(hModule, MAKEINTRESOURCEW(ResourceID), type);
 			if (!hResID) {
 				break;
 			}
-			//¼ÓÔØ×ÊÔ´  
+			//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´  
 			HGLOBAL hRes = LoadResource(hModule, hResID);
 			if (!hRes) {
 				break;
 			}
-			//Ëø¶¨×ÊÔ´
+			//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´
 			LPVOID pRes = LockResource(hRes);
 			if (pRes == NULL)
 			{
 				break;
 			}
-			//µÃµ½´ýÊÍ·Å×ÊÔ´ÎÄ¼þ´óÐ¡ 
+			//ï¿½Ãµï¿½ï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½Ô´ï¿½Ä¼ï¿½ï¿½ï¿½Ð¡ 
 			unsigned long dwResSize = SizeofResource(hModule, hResID);
-			//´´½¨ÎÄ¼þ 
+			//ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ 
 			hResFile = CreateFileW(saveFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (INVALID_HANDLE_VALUE == hResFile)
 			{
@@ -876,7 +876,7 @@ public:
 		}
 
 		MODULEENTRY32 mi = { 0 };
-		mi.dwSize = sizeof(MODULEENTRY32); //µÚÒ»´ÎÊ¹ÓÃ±ØÐë³õÊ¼»¯³ÉÔ±
+		mi.dwSize = sizeof(MODULEENTRY32); //ï¿½ï¿½Ò»ï¿½ï¿½Ê¹ï¿½Ã±ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½Ô±
 		BOOL bRet = Module32First(hSnapshot, &mi);
 		do {
 			if (bRet == false) {
@@ -933,6 +933,39 @@ public:
 		return processEntryList;
 	}
 
+	static std::map<DWORD, PROCESSENTRY32W> GetProcessIdMap() {
+		PROCESSENTRY32W pe32 = { 0 };
+		pe32.dwSize = sizeof(PROCESSENTRY32W);
+		std::map<DWORD, PROCESSENTRY32W> process_map;
+
+		UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
+		if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
+			return process_map;
+		}
+		do {
+			process_map.insert(std::make_pair(pe32.th32ProcessID, pe32));
+		} while (Process32NextW(hProcessSnap.Get(), &pe32));
+		return process_map;
+	}
+
+	static std::wstring GetProcessNameByProcessId(DWORD pid, std::vector<PROCESSENTRY32W>* cache = nullptr) {
+		std::vector<PROCESSENTRY32W>* process_list = cache;
+		std::vector<PROCESSENTRY32W> copy;
+		if (process_list == nullptr) {
+			copy = GetProcessList();
+			process_list = &copy;
+		}
+		else if(process_list->empty()) {
+			*process_list = GetProcessList();
+		}
+		for (auto& process : *process_list) {
+			if (pid == process.th32ProcessID) {
+				return std::wstring(process.szExeFile);
+			}
+		}
+		return L"";
+	}
+
 	static DWORD GetProcessIdByProcessName(const std::wstring& processName, int count = 1) {
 		auto processEntryList = GetProcessList();
 		std::wstring processName_ = processName;
@@ -941,8 +974,8 @@ public:
 		}
 		int i = 0;
 		for (auto& entry : processEntryList) {
-			auto exeFile_str = CppUtils::String::ToUppercase(std::wstring(entry.szExeFile));
-			processName_ = CppUtils::String::ToUppercase(processName_);
+			auto exeFile_str = Geek::String::ToUppercase(std::wstring(entry.szExeFile));
+			processName_ = Geek::String::ToUppercase(processName_);
 			if (exeFile_str == processName_) {
 				if (++i < count) {
 					continue;
