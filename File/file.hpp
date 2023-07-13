@@ -244,7 +244,7 @@ public:
 
 
 	static bool CopyFolder(const std::wstring& pstrFolder, const std::wstring& pstrDest) {
-		/*检查输入目录是否是合法目录*/
+		/* 检查输入目录是否是合法目录 */
 		if (!IsDirectory(pstrFolder)) {
 			return false;
 		}
@@ -264,8 +264,8 @@ public:
 			strDest.append(L"\\");
 		}
 
-		/*打开文件查找，查看源目录中是否存在匹配的文件*/
-		/*调用FindFile后，必须调用FindNextFile才能获得查找文件的信息*/
+		/* 打开文件查找，查看源目录中是否存在匹配的文件 */
+		/* 调用FindFile后，必须调用FindNextFile才能获得查找文件的信息 */
 		WIN32_FIND_DATA wfd;
 		HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
 		if (hFind == INVALID_HANDLE_VALUE) {
@@ -291,14 +291,14 @@ public:
 			}
 		} while (FindNextFileW(hFind, &wfd));
 
-		/*删除空目录*/
+		/* 删除空目录 */
 		FindClose(hFind);
 		return true;
 	}
 
-	/*删除目录及目录中的所有内容*/
+	/* 删除目录及目录中的所有内容 */
 	static bool DeleteFolder(const std::wstring& pstrFolder, bool recursive) {
-		/*检查输入目录是否是合法目录*/
+		/* 检查输入目录是否是合法目录 */
 		if (!IsDirectory(pstrFolder)) {
 			return false;
 		}
@@ -310,8 +310,8 @@ public:
 		}
 		strFind.append(L"*.*");
 
-		/*打开文件查找，查看源目录中是否存在匹配的文件*/
-		/*调用FindFile后，必须调用FindNextFile才能获得查找文件的信息*/
+		/* 打开文件查找，查看源目录中是否存在匹配的文件 */
+		/* 调用FindFile后，必须调用FindNextFile才能获得查找文件的信息 */
 		WIN32_FIND_DATA wfd;
 		HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
 		if (hFind == INVALID_HANDLE_VALUE) {
@@ -334,7 +334,7 @@ public:
 			}
 		} while (FindNextFileW(hFind, &wfd));
 
-		/*删除空目录*/
+		/* 删除空目录 */
 		FindClose(hFind);
 		return RemoveDirectoryW(pstrFolder.c_str()) == TRUE;
 	}

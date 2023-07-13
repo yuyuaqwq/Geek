@@ -3,8 +3,52 @@
 
 #include <iostream>
 
+#include <Geek/Process/process.hpp>
+
+bool  wxMemory(uint64_t raw_addr, char* addr, size_t size, void* arg)
+{
+	bool ret = false;
+	uint64_t  key_offset = 0;
+	//ooo//C1 50 F7 67 44 AC 4E 63 91 F9 AD 5E A6 5F C3 9A D0 C9 9A 53 2D E2 48 1E AD 6C 48 33 C8 11 E6 1B
+#define FEATURE_LEN 60//, 0x01, 0x00, 0x00, 0x00
+	unsigned char keyFeature[FEATURE_LEN] = {
+		0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+
+	DWORD j = 0, n = 0;
+	int isDiff = 0;
+	for (j = 0; j < size - FEATURE_LEN; j++)
+	{
+		isDiff = 0;
+		for (n = 0; n < FEATURE_LEN; n++) {
+			if (keyFeature[n] != addr[j + n]) {
+				isDiff = 1;
+				break;
+			}
+		}
+		if (isDiff == 0)
+		{
+			printf("match....\n");
+			memcpy(&n, &addr[j + FEATURE_LEN + 12], 4);
+			if (n == 0x20) {
+				//key_offset = (DWORD)MemInfo.BaseAddress + j + FEATURE_LEN + 8 - base;
+				memcpy(&key_offset, &addr[j + FEATURE_LEN + 4], 8);
+				printf("key_offset=%x\n", key_offset);
+				ret = true;
+				break;
+			}
+		}
+	}
+	return ret;
+}
+
 int main()
 {
+	Geek::Process process;
+	process.Open(L"WeChat.exe");
+	process.ScanMemoryBlocks(wxMemory, NULL, true);
+
+
     std::cout << "Hello World!\n";
 }
 

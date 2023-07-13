@@ -15,8 +15,9 @@
 
 
 #include <Geek/Process/ntinc.h>
+#include <Geek/Process/module.hpp>
+#include <Geek/Process/memory_block.hpp>
 #include <Geek/Handle/handle.hpp>
-#include <Geek/Module/module.hpp>
 #include <Geek/PE/image.hpp>
 #include <Geek/Thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
@@ -63,7 +64,7 @@ public:
 	}
 
 	/*
-	* CREATE_SUSPENDED:�����������
+	* CREATE_SUSPENDED:挂起目标进程
 	*/
 	Status Create(const std::wstring& command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
 		std::wstring command_ = command;
@@ -143,7 +144,7 @@ public:
 		}
 		TOKEN_PRIVILEGES TokenPrivileges;
 		memset(&TokenPrivileges, 0, sizeof(TOKEN_PRIVILEGES));
-		LUID v1;//Ȩ�����ͣ����ض��б�ʶ
+		LUID v1;
 		if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &v1))
 		{
 			LastError = GetLastError();
@@ -310,86 +311,94 @@ public:
 		return success;
 	}
 
-	std::vector<MEMORY_BASIC_INFORMATION> EnumMemoryBlocks() const {
-		std::vector<MEMORY_BASIC_INFORMATION> memoryBlockList;
+	std::vector<MemoryBlock> EnumMemoryBlockList() const {
+		std::vector<MemoryBlock> memoryBlockList;
 
-		// ��ʼ�� vector ����
 		memoryBlockList.reserve(200);
-
-		// ��ȡ PageSize �͵�ַ����
-		SYSTEM_INFO sysInfo = { 0 };
-		GetSystemInfo(&sysInfo);
 		/*
 		typedef struct _SYSTEM_INFO {
 		union {
-		DWORD dwOemId;							// �����Ա���
+		DWORD dwOemId;
 		struct {
-		WORD wProcessorArchitecture;			// ����ϵͳ��������ϵ�ṹ
-		WORD wReserved;						// ����
+		WORD wProcessorArchitecture;
+		WORD wReserved;
 		} DUMMYSTRUCTNAME;
 		} DUMMYUNIONNAME;
-		DWORD     dwPageSize;						// ҳ���С��ҳ�汣���ͳ�ŵ������
-		LPVOID    lpMinimumApplicationAddress;	// ָ��Ӧ�ó����dll�ɷ��ʵ�����ڴ��ַ��ָ��
-		LPVOID    lpMaximumApplicationAddress;	// ָ��Ӧ�ó����dll�ɷ��ʵ�����ڴ��ַ��ָ��
-		DWORD_PTR dwActiveProcessorMask;			// ����������
-		DWORD     dwNumberOfProcessors;			// ��ǰ�����߼�������������
-		DWORD     dwProcessorType;				// ���������ͣ������Ա���
-		DWORD     dwAllocationGranularity;		// �����ڴ����ʼ��ַ������
-		WORD      wProcessorLevel;				// ����������
-		WORD      wProcessorRevision;				// �������޶�
+		DWORD     dwPageSize;
+		LPVOID    lpMinimumApplicationAddress;
+		LPVOID    lpMaximumApplicationAddress;
+		DWORD_PTR dwActiveProcessorMask;
+		DWORD     dwNumberOfProcessors;
+		DWORD     dwProcessorType;
+		DWORD     dwAllocationGranularity;
+		WORD      wProcessorLevel;
+		WORD      wProcessorRevision;
 		} SYSTEM_INFO, *LPSYSTEM_INFO;
 		*/
 
-		//�����ڴ�
-		const char* p = (const char*)sysInfo.lpMinimumApplicationAddress;
+		uint64_t p = 0;
 		MEMORY_BASIC_INFORMATION  memInfo = { 0 };
-		while (p < sysInfo.lpMaximumApplicationAddress) {
-			// ��ȡ���������ڴ�黺�����ֽ���
-			size_t size = VirtualQueryEx(Get(), p, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
-			if (size != sizeof(MEMORY_BASIC_INFORMATION)) { break; }
-
-			// ���ڴ����Ϣ׷�ӵ� vector ����β��
-			memoryBlockList.push_back(memInfo);
-
-			// �ƶ�ָ��
-			p += memInfo.RegionSize;
+		MEMORY_BASIC_INFORMATION64  memInfo64 = { 0 };
+		MemoryBlock temp;
+		while (true) {
+			uint64_t size;
+			if (ms_wow64.Wow64Operation(Get())) {
+				size = Geek::Wow64::VirtualQueryEx64(Get(), p, &memInfo64, sizeof(memInfo64));
+				if (size != sizeof(memInfo64)) { break; }
+				memoryBlockList.push_back(memInfo64);
+				p += memInfo64.RegionSize;
+			}
+			else {
+				size_t size = ::VirtualQueryEx(Get(), (PVOID)p, &memInfo, sizeof(memInfo));
+				if (size != sizeof(memInfo)) { break; }
+				if (IsX86()) {
+					memoryBlockList.push_back(*(MEMORY_BASIC_INFORMATION32*)&memInfo);
+				}
+				else {
+					memoryBlockList.push_back(*(MEMORY_BASIC_INFORMATION64*)&memInfo);
+				}
+				p += memInfo.RegionSize;
+			}
+			
 		}
 		return memoryBlockList;
 	}
 
-	bool ScanMemoryBlocks(bool(*callback)(char* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
+	bool ScanMemoryBlocks(bool(*callback)(uint64_t raw_addr, char* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
 		bool success = false;
-		std::vector<char> buf;
 		do {
-			auto modulelist = EnumModulesEx();
-			std::vector<MEMORY_BASIC_INFORMATION> vec = EnumMemoryBlocks();
-
-			// �����ý��̵��ڴ��
+			auto modulelist = EnumModuleListEx();
+			auto vec = EnumMemoryBlockList();
 			size_t sizeSum = 0;
+
 			for (int i = 0; i < vec.size(); i++) {
+				if (vec[i].protect & PAGE_NOACCESS || !vec[i].protect) {
+					continue;
+				}
+
 				if (include_module == false) {
 					bool isModule = false;
 					for (int j = 0; j < modulelist.size(); j++) {
-						if ((uint64_t)vec[i].BaseAddress >= modulelist[j].base && (uint64_t)vec[i].BaseAddress < modulelist[j].base + modulelist[j].base) {
+						if (vec[i].base >= modulelist[j].base && vec[i].base < modulelist[j].base + modulelist[j].base) {
 							isModule = true;
 							break;
 						}
 					}
-					if (!(!isModule && vec[i].AllocationProtect & PAGE_READWRITE && vec[i].State & MEM_COMMIT)) {
+					if (!(!isModule && vec[i].protect & PAGE_READWRITE && vec[i].state & MEM_COMMIT)) {
 						continue;
 					}
 				}
-				std::vector<char> tempBuff(vec[i].RegionSize);
-				SIZE_T readCount = 0;
-				if (!ReadProcessMemory(Get(), vec[i].BaseAddress, tempBuff.data(), vec[i].RegionSize, &readCount)) {
+
+				auto temp_buff = ReadMemory(vec[i].base, vec[i].size);
+				if (temp_buff.empty()) {
 					//printf("%d\n", GetLastError());
 					continue;
 				}
-				//printf("%x/%x\n", vec[i].BaseAddress, vec[i].RegionSize);
-				if (callback(tempBuff.data(), tempBuff.size(), arg)) {
+				
+				if (callback(vec[i].base, temp_buff.data(), temp_buff.size(), arg)) {
 					break;
 				}
-				sizeSum += vec[i].RegionSize;
+				sizeSum += vec[i].size;
 			}
 			success = true;
 		} while (false);
@@ -697,7 +706,7 @@ public:
 	/*
 	* Module
 	*/
-	std::vector<Module> EnumModulesEx() const {
+	std::vector<Module> EnumModuleListEx() const {
 		/*
 		* https://blog.csdn.net/wh445306/article/details/107867375
 		*/
@@ -800,7 +809,7 @@ public:
 
 	bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
 		std::wstring find_name = Geek::String::ToUppercase(name);
-		for (auto& it : EnumModulesEx()) {
+		for (auto& it : EnumModuleListEx()) {
 			auto base_name_up = Geek::String::ToUppercase(it.base_name);
 			if (base_name_up == find_name) {
 				if (module) *module = it;
@@ -816,26 +825,24 @@ public:
 		HRSRC hRes = NULL;
 		HANDLE hResFile = INVALID_HANDLE_VALUE;
 		do {
-			//������Դ
-
 			HRSRC hResID = FindResourceW(hModule, MAKEINTRESOURCEW(ResourceID), type);
 			if (!hResID) {
 				break;
 			}
-			//������Դ  
+
 			HGLOBAL hRes = LoadResource(hModule, hResID);
 			if (!hRes) {
 				break;
 			}
-			//������Դ
+
 			LPVOID pRes = LockResource(hRes);
 			if (pRes == NULL)
 			{
 				break;
 			}
-			//�õ����ͷ���Դ�ļ���С 
+
 			unsigned long dwResSize = SizeofResource(hModule, hResID);
-			//�����ļ� 
+
 			hResFile = CreateFileW(saveFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (INVALID_HANDLE_VALUE == hResFile)
 			{
@@ -849,7 +856,6 @@ public:
 			DWORD dwWrited = 0;
 			if (FALSE == WriteFile(hResFile, pRes, dwResSize, &dwWrited, NULL))
 			{
-				// Log(LogLevel::LOG_ERROR, Cmd::CMD_UPLOAD_ACCOUNTS_INFO, "[KeePass.SaveFileFromResource] WriteFile error:%d\n", GetLastError());
 				break;
 			}
 			success = true;
@@ -868,7 +874,7 @@ public:
 
 	}
 
-	std::vector<MODULEENTRY32W> EnumModules() const {
+	std::vector<MODULEENTRY32W> EnumModuleList() const {
 		std::vector<MODULEENTRY32W> moduleList;
 		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetId());
 		if (hSnapshot == INVALID_HANDLE_VALUE) {

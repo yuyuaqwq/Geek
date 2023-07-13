@@ -1,5 +1,5 @@
-#ifndef GEEK_MODULE_MODULE_H_
-#define GEEK_MODULE_MODULE_H_
+#ifndef GEEK_PROCESS_MODULE_H_
+#define GEEK_PROCESS_MODULE_H_
 
 #include <string>
 
@@ -45,4 +45,4 @@ public:
 
 };
 
-#endif // GEEK_MODULE_MODULE_H_
+#endif // GEEK_PROCESS_MODULE_H_

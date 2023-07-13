@@ -235,7 +235,7 @@ public:
         return funcRet;
     }
 
-    static SIZE_T __cdecl VirtualQueryEx64(HANDLE hProcess, DWORD64 lpAddress, MEMORY_BASIC_INFORMATION64* lpBuffer, SIZE_T dwLength) {
+    static DWORD64 __cdecl VirtualQueryEx64(HANDLE hProcess, DWORD64 lpAddress, MEMORY_BASIC_INFORMATION64* lpBuffer, SIZE_T dwLength) {
         static DWORD64 ntqvm = 0;
         if (0 == ntqvm)
         {
@@ -247,7 +247,7 @@ public:
         DWORD64 status = X64Call(ntqvm, 6, (DWORD64)hProcess, lpAddress, (DWORD64)0, (DWORD64)lpBuffer, (DWORD64)dwLength, (DWORD64)&ret);
         if (STATUS_SUCCESS != status)
             SetLastErrorFromX64Call(status);
-        return (SIZE_T)ret;
+        return (DWORD64)ret;
     }
 
     static DWORD64 __cdecl VirtualAllocEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
