@@ -10,60 +10,60 @@ namespace Geek {
 
 class UniqueHandle {
 public:
-	UniqueHandle() noexcept : m_handle{ INVALID_HANDLE_VALUE } {
+  UniqueHandle() noexcept : m_handle{ INVALID_HANDLE_VALUE } {
 
-	}
-	explicit UniqueHandle(HANDLE handle) noexcept : m_handle{ handle } {
+  }
+  explicit UniqueHandle(HANDLE handle) noexcept : m_handle{ handle } {
 
-	}
-	~UniqueHandle() noexcept {
-		Close();
-	}
-
-public:
-	UniqueHandle(const UniqueHandle&) = delete;
-	void operator=(const UniqueHandle&) = delete;
+  }
+  ~UniqueHandle() noexcept {
+    Close();
+  }
 
 public:
-	UniqueHandle(UniqueHandle&& tUniqueHandle) noexcept {
-		*this = std::move(tUniqueHandle);
-	}
-	void operator=(UniqueHandle&& tUniqueHandle) noexcept {
-		Close();
-		m_handle = tUniqueHandle.m_handle;
-		tUniqueHandle.m_handle = INVALID_HANDLE_VALUE;
-	}
+  UniqueHandle(const UniqueHandle&) = delete;
+  void operator=(const UniqueHandle&) = delete;
 
 public:
-	inline HANDLE Get() const noexcept {
-		return m_handle;
-	}
+  UniqueHandle(UniqueHandle&& tUniqueHandle) noexcept {
+    *this = std::move(tUniqueHandle);
+  }
+  void operator=(UniqueHandle&& tUniqueHandle) noexcept {
+    Close();
+    m_handle = tUniqueHandle.m_handle;
+    tUniqueHandle.m_handle = INVALID_HANDLE_VALUE;
+  }
 
-	inline bool Valid() const noexcept {
-		return m_handle != NULL && m_handle != INVALID_HANDLE_VALUE;
-	}
+public:
+  inline HANDLE Get() const noexcept {
+    return m_handle;
+  }
 
-	inline HANDLE Release() noexcept {
-		auto temp = m_handle;
-		m_handle = INVALID_HANDLE_VALUE;
-		return temp;
-	}
+  inline bool Valid() const noexcept {
+    return m_handle != NULL && m_handle != INVALID_HANDLE_VALUE;
+  }
 
-	inline void Reset(HANDLE handle = INVALID_HANDLE_VALUE) noexcept {
-		Close();
-		auto temp = m_handle;
-		m_handle = handle;
-	}
+  inline HANDLE Release() noexcept {
+    auto temp = m_handle;
+    m_handle = INVALID_HANDLE_VALUE;
+    return temp;
+  }
+
+  inline void Reset(HANDLE handle = INVALID_HANDLE_VALUE) noexcept {
+    Close();
+    auto temp = m_handle;
+    m_handle = handle;
+  }
 
 private:
-	inline void Close() noexcept {
-		if (Valid()) {
-			::CloseHandle(m_handle);
-		}
-	}
+  inline void Close() noexcept {
+    if (Valid()) {
+      ::CloseHandle(m_handle);
+    }
+  }
 
 private:
-	HANDLE m_handle;
+  HANDLE m_handle;
 };
 
 } // namespace Geek

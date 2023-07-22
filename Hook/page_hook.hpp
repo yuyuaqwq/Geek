@@ -9,219 +9,219 @@
 
 namespace Geek {
 
-// ÆôÓÃÔöÁ¿Á´½Ó»áµ¼ÖÂÊµ¼Êº¯ÊýµØÖ·ÓëÍ¨¹ýº¯ÊýÃû»ñÈ¡µÄµØÖ·²»Ò»ÖÂ
-// ¶ÔÊý¾Ý½øÐÐ¶ÁÐ´hookÊ±£¬±£Ö¤ÀàÖÐµÄÄÚÁª¾²Ì¬³ÉÔ±ÓëÍâ²¿±äÁ¿²»ÔÚÍ¬Ò»Ò³Ãæ
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó»áµ¼ï¿½ï¿½Êµï¿½Êºï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½Äµï¿½Ö·ï¿½ï¿½Ò»ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½Ý½ï¿½ï¿½Ð¶ï¿½Ð´hookÊ±ï¿½ï¿½ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¬ï¿½ï¿½Ô±ï¿½ï¿½ï¿½â²¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ò»Ò³ï¿½ï¿½
 class PageHook {
 public:
-	typedef void (*HookCallBack)(LPCONTEXT context);
+  typedef void (*HookCallBack)(LPCONTEXT context);
 
 public:
-	enum class Status {
-		kNormal = 0,
-		kUnhooked,
-		kDuplicateAddress,
-		kSetProtectFailed,
-		kRepeatInstall,
-		kRepeatUninstall,
-	};
-
-
-public:
-	PageHook() {
-		m_status = Status::kNormal;
-		m_hook_addr = nullptr;
-		m_callback = nullptr;
-
-		if (ms_veh_count == 0) {
-			// ×¢²áVEH
-			m_exception_handler_handle = AddVectoredExceptionHandler(TRUE, ExceptionHandler);
-		}
-		++ms_veh_count;
-	}
-
-	~PageHook() {
-		--ms_veh_count;
-		if (ms_veh_count == 0) {
-			// ÒÆ³ýVEH
-			RemoveVectoredExceptionHandler(m_exception_handler_handle);
-		}
-
-		Uninstall();
-	}
+  enum class Status {
+    kNormal = 0,
+    kUnhooked,
+    kDuplicateAddress,
+    kSetProtectFailed,
+    kRepeatInstall,
+    kRepeatUninstall,
+  };
 
 
 public:
-	// °²×°Hook£¬protectÓÃÓÚ¿ØÖÆ±»hookÒ³ÃæµÄ±£»¤ÊôÐÔÒÔ´¥·¢hook
-	bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
-		if (m_status == Status::kNormal) {
-			m_status = Status::kRepeatInstall;
-			return false;
-		}
+  PageHook() {
+    m_status = Status::kNormal;
+    m_hook_addr = nullptr;
+    m_callback = nullptr;
 
-		auto it_addr = ms_page_hook_addr.find(hookAddr);
-		if (it_addr != ms_page_hook_addr.end()) {
-			m_status = Status::kDuplicateAddress;
-			return false;
-		}
+    if (ms_veh_count == 0) {
+      // ×¢ï¿½ï¿½VEH
+      m_exception_handler_handle = AddVectoredExceptionHandler(TRUE, ExceptionHandler);
+    }
+    ++ms_veh_count;
+  }
 
-		LPVOID page_base = PageAlignment(hookAddr);
+  ~PageHook() {
+    --ms_veh_count;
+    if (ms_veh_count == 0) {
+      // ï¿½Æ³ï¿½VEH
+      RemoveVectoredExceptionHandler(m_exception_handler_handle);
+    }
 
-		m_hook_addr = hookAddr;
-		m_callback = callback;
-		m_status = Status::kNormal;
+    Uninstall();
+  }
 
-		ms_page_hook_addr.insert(std::pair<void*, PageHook&>(hookAddr, *this));
-		auto it_base = ms_page_hook_base.find(page_base);
-		if (it_base == ms_page_hook_base.end()) {
-			PageRecord pageRecord;
-			pageRecord.count = 1;
-			pageRecord.page_base = page_base;
-			pageRecord.protect = 0;
-			ms_page_hook_base.insert(std::pair<void*, PageRecord>(page_base, pageRecord));
-			it_base = ms_page_hook_base.find(page_base);
-			if (!VirtualProtect(page_base, 0x1000, protect, &it_base->second.protect)) {
-				Uninstall();
-				m_status = Status::kSetProtectFailed;
-				return false;
-			}
-		}
-		else {
-			++it_base->second.count;
-		}
-		return true;
-	}
 
-	// Ð¶ÔØHook
-	bool Uninstall() noexcept {
-		if (m_status != Status::kNormal) {
-			return true;
-		}
+public:
+  // ï¿½ï¿½×°Hookï¿½ï¿½protectï¿½ï¿½ï¿½Ú¿ï¿½ï¿½Æ±ï¿½hookÒ³ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½hook
+  bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
+    if (m_status == Status::kNormal) {
+      m_status = Status::kRepeatInstall;
+      return false;
+    }
 
-		LPVOID page_base = PageAlignment(m_hook_addr);
-		auto it_base = ms_page_hook_base.find(page_base);
+    auto it_addr = ms_page_hook_addr.find(hookAddr);
+    if (it_addr != ms_page_hook_addr.end()) {
+      m_status = Status::kDuplicateAddress;
+      return false;
+    }
 
-		if (it_base != ms_page_hook_base.end()) {
-			if (it_base->second.count == 1) {
-				if (!VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect)) {
-					m_status = Status::kSetProtectFailed;
-					return false;
-				}
-				ms_page_hook_base.erase(it_base);
-			}
-			else {
-				--it_base->second.count;
-			}
-		}
+    LPVOID page_base = PageAlignment(hookAddr);
 
-		ms_page_hook_addr.erase(m_hook_addr);
+    m_hook_addr = hookAddr;
+    m_callback = callback;
+    m_status = Status::kNormal;
 
-		m_hook_addr = nullptr;
-		m_callback = nullptr;
+    ms_page_hook_addr.insert(std::pair<void*, PageHook&>(hookAddr, *this));
+    auto it_base = ms_page_hook_base.find(page_base);
+    if (it_base == ms_page_hook_base.end()) {
+      PageRecord pageRecord;
+      pageRecord.count = 1;
+      pageRecord.page_base = page_base;
+      pageRecord.protect = 0;
+      ms_page_hook_base.insert(std::pair<void*, PageRecord>(page_base, pageRecord));
+      it_base = ms_page_hook_base.find(page_base);
+      if (!VirtualProtect(page_base, 0x1000, protect, &it_base->second.protect)) {
+        Uninstall();
+        m_status = Status::kSetProtectFailed;
+        return false;
+      }
+    }
+    else {
+      ++it_base->second.count;
+    }
+    return true;
+  }
 
-		m_status = Status::kUnhooked;
-		return true;
-	}
+  // Ð¶ï¿½ï¿½Hook
+  bool Uninstall() noexcept {
+    if (m_status != Status::kNormal) {
+      return true;
+    }
+
+    LPVOID page_base = PageAlignment(m_hook_addr);
+    auto it_base = ms_page_hook_base.find(page_base);
+
+    if (it_base != ms_page_hook_base.end()) {
+      if (it_base->second.count == 1) {
+        if (!VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect)) {
+          m_status = Status::kSetProtectFailed;
+          return false;
+        }
+        ms_page_hook_base.erase(it_base);
+      }
+      else {
+        --it_base->second.count;
+      }
+    }
+
+    ms_page_hook_addr.erase(m_hook_addr);
+
+    m_hook_addr = nullptr;
+    m_callback = nullptr;
+
+    m_status = Status::kUnhooked;
+    return true;
+  }
 
 
 private:
 
-	struct PageRecord {
-		LPVOID page_base;
-		size_t count;
-		DWORD protect;
-	};
+  struct PageRecord {
+    LPVOID page_base;
+    size_t count;
+    DWORD protect;
+  };
 
 private:
-	static LPVOID PageAlignment(LPVOID addr) noexcept {
-		return (LPVOID)((UINT_PTR)addr & (UINT_PTR)(~0xfff));
-	}
+  static LPVOID PageAlignment(LPVOID addr) noexcept {
+    return (LPVOID)((UINT_PTR)addr & (UINT_PTR)(~0xfff));
+  }
 
-	static LONG NTAPI ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
+  static LONG NTAPI ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
 
-		// ÅÐ¶ÏÒì³£ÀàÐÍ
-		if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+    // ï¿½Ð¶ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
-			LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
-			LPVOID page_base = PageAlignment(address);
-			auto it_base = ms_page_hook_base.find(page_base);
-			if (it_base == ms_page_hook_base.end()) {
-				// ²»ÊÇÎÒÃÇÉèÖÃµÄÒ³ÃæÊôÐÔ²úÉúµÄÒì³££¬ºöÂÔ
-				return EXCEPTION_CONTINUE_SEARCH;
-			}
+      LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+      LPVOID page_base = PageAlignment(address);
+      auto it_base = ms_page_hook_base.find(page_base);
+      if (it_base == ms_page_hook_base.end()) {
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½Ò³ï¿½ï¿½ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        return EXCEPTION_CONTINUE_SEARCH;
+      }
 
-			// Ö´ÐÐµÄÖ¸ÁîÓëÎÒÃÇµÄHookÎ»ÓÚÍ¬Ò»Ò³Ãæ£¬»Ö¸´Ô­ÓÐÊôÐÔ
-			VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
+      // Ö´ï¿½Ðµï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Çµï¿½HookÎ»ï¿½ï¿½Í¬Ò»Ò³ï¿½æ£¬ï¿½Ö¸ï¿½Ô­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+      VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
 
-			// »ñÈ¡·¢ÉúÒì³£µÄÏß³ÌµÄÉÏÏÂÎÄ
-			LPCONTEXT context = ExceptionInfo->ContextRecord;
-
-
-			auto it_addr = ms_page_hook_addr.find(address);
-			if (it_addr != ms_page_hook_addr.end()) {
-				// ÊÇ±»hookµÄµØÖ·
-
-				// µ÷ÓÃ»Øµ÷
-				it_addr->second.mCallback(context);
-			}
-
-			// ÉèÖÃµ¥²½´¥·¢ÏÝÚå£¬ÓÃÓÚµ¥²½ºóÖØÐÂÆôÓÃ´ËHook
-			context->EFlags |= 0x100;
-
-			// ÓÃÓÚÊ¶±ðÊÇ·ñÔÛÃÇÉèÖÃµÄµ¥²½
-			ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
-
-			// Òì³£´¦ÀíÍê³É ÈÃ³ÌÐò¼ÌÐøÖ´ÐÐ
-			return EXCEPTION_CONTINUE_EXECUTION;
+      // ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ß³Ìµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+      LPCONTEXT context = ExceptionInfo->ContextRecord;
 
 
-		}
-		else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
-		{
-			LPCONTEXT context = ExceptionInfo->ContextRecord;
+      auto it_addr = ms_page_hook_addr.find(address);
+      if (it_addr != ms_page_hook_addr.end()) {
+        // ï¿½Ç±ï¿½hookï¿½Äµï¿½Ö·
 
-			// ÅÐ¶ÏÊÇ·ñDR¼Ä´æÆ÷´¥·¢µÄÒì³£
-			if (context->Dr6 & 0xf) {
-				// ÅÅ³ýDR¼Ä´æÆ÷´¥·¢µÄµ¥²½Òì³£
-				return EXCEPTION_CONTINUE_SEARCH;
-			}
-			else {
-				// µ¥²½Òì³£
-				auto it = ms_page_hook_step.find(GetCurrentThreadId());
-				if (it == ms_page_hook_step.end()) {
-					//²»ÊÇÔÛÃÇÉèÖÃµÄµ¥²½¶Ïµã£¬²»´¦Àí
-					return EXCEPTION_CONTINUE_SEARCH;
-				}
+        // ï¿½ï¿½ï¿½Ã»Øµï¿½
+        it_addr->second.mCallback(context);
+      }
+
+      // ï¿½ï¿½ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½å£¬ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã´ï¿½Hook
+      context->EFlags |= 0x100;
+
+      // ï¿½ï¿½ï¿½ï¿½Ê¶ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÃµÄµï¿½ï¿½ï¿½
+      ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
+
+      // ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½
+      return EXCEPTION_CONTINUE_EXECUTION;
 
 
-				DWORD uselessProtect;
-				// »Ö¸´Hook
-				VirtualProtect(it->second.page_base, 0x1000, it->second.protect, &it->second.protect);
+    }
+    else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
+    {
+      LPCONTEXT context = ExceptionInfo->ContextRecord;
 
-				ms_page_hook_step.erase(GetCurrentThreadId());
+      // ï¿½Ð¶ï¿½ï¿½Ç·ï¿½DRï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì³£
+      if (context->Dr6 & 0xf) {
+        // ï¿½Å³ï¿½DRï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Äµï¿½ï¿½ï¿½ï¿½ì³£
+        return EXCEPTION_CONTINUE_SEARCH;
+      }
+      else {
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ì³£
+        auto it = ms_page_hook_step.find(GetCurrentThreadId());
+        if (it == ms_page_hook_step.end()) {
+          //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÃµÄµï¿½ï¿½ï¿½ï¿½Ïµã£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+          return EXCEPTION_CONTINUE_SEARCH;
+        }
 
-				// ²»ÐèÒªÖØÉèTF£¬µ¥²½Òì³£×Ô¶¯½«TFÖÃ0
-				// µ¥²½Òì³£ÊÇÏÝÚåÀàÒì³££¬ÎÞÐèÐÞ¸´ip
 
-				// Òì³£´¦ÀíÍê³É ÈÃ³ÌÐò¼ÌÐøÖ´ÐÐ
-				return EXCEPTION_CONTINUE_EXECUTION;
-			}
+        DWORD uselessProtect;
+        // ï¿½Ö¸ï¿½Hook
+        VirtualProtect(it->second.page_base, 0x1000, it->second.protect, &it->second.protect);
 
-		}
+        ms_page_hook_step.erase(GetCurrentThreadId());
 
-		return EXCEPTION_CONTINUE_SEARCH;
-	}
+        // ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½TFï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì³£ï¿½Ô¶ï¿½ï¿½ï¿½TFï¿½ï¿½0
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ¸ï¿½ip
+
+        // ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½
+        return EXCEPTION_CONTINUE_EXECUTION;
+      }
+
+    }
+
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
 
 private:
-	Status m_status;
-	void* m_exception_handler_handle;
-	void* m_hook_addr;
-	HookCallBack m_callback;
+  Status m_status;
+  void* m_exception_handler_handle;
+  void* m_hook_addr;
+  HookCallBack m_callback;
 
-	// C++17
-	inline static int ms_veh_count = 0;
-	inline static std::map<void*, PageRecord> ms_page_hook_base;
-	inline static std::map<void*, PageHook&> ms_page_hook_addr;
-	inline static std::map<DWORD, PageRecord&> ms_page_hook_step;
+  // C++17
+  inline static int ms_veh_count = 0;
+  inline static std::map<void*, PageRecord> ms_page_hook_base;
+  inline static std::map<void*, PageHook&> ms_page_hook_addr;
+  inline static std::map<DWORD, PageRecord&> ms_page_hook_step;
 };
 
 } // namespace PageHook

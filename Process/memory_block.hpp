@@ -11,32 +11,32 @@ namespace Geek {
 
 class MemoryBlock {
 public:
-	MemoryBlock() {
-		base = 0;
-		size = 0;
-	}
+  MemoryBlock() {
+    base = 0;
+    size = 0;
+  }
 
-	MemoryBlock(const MEMORY_BASIC_INFORMATION32& entry) {
-		base = entry.BaseAddress;
-		size = entry.RegionSize;
-		protect = entry.Protect;
-		state = entry.State;
-	}
-	MemoryBlock(const MEMORY_BASIC_INFORMATION64& entry) {
-		base = entry.BaseAddress;
-		size = entry.RegionSize;
-		protect = entry.Protect;
-		state = entry.State;
-	}
+  MemoryBlock(const MEMORY_BASIC_INFORMATION32& entry) {
+    base = entry.BaseAddress;
+    size = entry.RegionSize;
+    protect = entry.Protect;
+    state = entry.State;
+  }
+  MemoryBlock(const MEMORY_BASIC_INFORMATION64& entry) {
+    base = entry.BaseAddress;
+    size = entry.RegionSize;
+    protect = entry.Protect;
+    state = entry.State;
+  }
 
-	~MemoryBlock() {
+  ~MemoryBlock() {
 
-	}
+  }
 
-	uint64_t base;
-	uint64_t size;
-	uint32_t protect;
-	uint32_t state;
+  uint64_t base;
+  uint64_t size;
+  uint32_t protect;
+  uint32_t state;
 
 };
 

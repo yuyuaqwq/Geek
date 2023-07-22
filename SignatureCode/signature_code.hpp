@@ -10,256 +10,256 @@
 namespace Geek{
 
 /*
-* ÌØÕ÷ÂëÀà
+* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 */
 class SignatureCode {
 private:
-	enum class SignatureElementType {
-		kNone,
-		kWhole,
-		kVague
-	};
+  enum class SignatureElementType {
+    kNone,
+    kWhole,
+    kVague
+  };
 
-	struct SignatureElement {
-		SignatureElementType type;
-		size_t length;
-		std::vector<unsigned char> data;
-	};
+  struct SignatureElement {
+    SignatureElementType type;
+    size_t length;
+    std::vector<unsigned char> data;
+  };
 
-
-public:
-	SignatureCode() : m_process { nullptr } { }
-	explicit SignatureCode(Process* process) : m_process{ process } { }
-	~SignatureCode() { }
 
 public:
+  SignatureCode() : m_process { nullptr } { }
+  explicit SignatureCode(Process* process) : m_process{ process } { }
+  ~SignatureCode() { }
 
-	/*
-	* ÏÞ¶¨´óÐ¡²éÕÒÌØÕ÷Âë
-	*/
-	uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
-		std::vector<SignatureElement> signature;
-		size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
+public:
 
-		size_t signature_size = signature.size();
-		if (!signature_size) return 0;
+  /*
+  * ï¿½Þ¶ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  */
+  uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
+    std::vector<SignatureElement> signature;
+    size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 
-		std::vector<char> buf;
-		uint64_t base = 0;
-		if (!m_process->IsCur()) {
-			buf = m_process->ReadMemory(start_address, size);
-			if (buf.empty()) {
-				return 0;
-			}
-			uint64_t new_start_address = (uint64_t)buf.data();
-			base = ((uint64_t)start_address - (uint64_t)new_start_address);
-			start_address = new_start_address;
-		}
+    size_t signature_size = signature.size();
+    if (!signature_size) return 0;
 
-		for (size_t i = 0; i < size; ++i) {
-			uint64_t cur_pos = (uint64_t)start_address + i;
-			uint64_t ret_pos = cur_pos;
-			if (i + total_len > size) break;
-			bool match = true;
+    std::vector<char> buf;
+    uint64_t base = 0;
+    if (!m_process->IsCur()) {
+      buf = m_process->ReadMemory(start_address, size);
+      if (buf.empty()) {
+        return 0;
+      }
+      uint64_t new_start_address = (uint64_t)buf.data();
+      base = ((uint64_t)start_address - (uint64_t)new_start_address);
+      start_address = new_start_address;
+    }
 
-			for (size_t j = 0; j < signature_size; ++j) {
-				size_t length = signature[j].length;
-				if (signature[j].type == SignatureElementType::kWhole) {
-					int ret = memcmp_ex((void*)cur_pos, signature[j].data.data(), length);
-					if (ret == -2) {
-						return 0;
-					}
-					else if (ret != -1) {
-						match = false;
-						break;
-					}
-				}
-				cur_pos = cur_pos + length;
-			}
-			if (match) {
-				return (base + ret_pos + offset);
-			}
+    for (size_t i = 0; i < size; ++i) {
+      uint64_t cur_pos = (uint64_t)start_address + i;
+      uint64_t ret_pos = cur_pos;
+      if (i + total_len > size) break;
+      bool match = true;
 
-		}
-		return 0;
+      for (size_t j = 0; j < signature_size; ++j) {
+        size_t length = signature[j].length;
+        if (signature[j].type == SignatureElementType::kWhole) {
+          int ret = memcmp_ex((void*)cur_pos, signature[j].data.data(), length);
+          if (ret == -2) {
+            return 0;
+          }
+          else if (ret != -1) {
+            match = false;
+            break;
+          }
+        }
+        cur_pos = cur_pos + length;
+      }
+      if (match) {
+        return (base + ret_pos + offset);
+      }
 
-	}
+    }
+    return 0;
+
+  }
 
 
 private:
 
-	static unsigned int DecStringToUInt(const std::string& str, size_t* i = nullptr, const unsigned char* end_char_arr = nullptr, size_t end_char_arr_size = 0) {
-		unsigned int sum = 0;
-		if (!i) {
-			size_t j;
-			i = &j;
-		}
-		for (*i = 0; *i < str.length(); ++ * i) {
-			unsigned char c = str[*i];
-			if (c >= 0x30 && c <= 0x39) {
-				c -= 0x30;
-				sum = sum * 10 + c;
-			}
-			//Èç¹ûÉèÖÃÁË½áÊø×Ö·û£¬³ý¿ª½áÊø×Ö·ûÆäËûµÄÒ»ÂÉ²»¹Ü
-			else if (end_char_arr) {
-				for (size_t j = 0; j < end_char_arr_size; ++j) {
-					if (c == end_char_arr[j]) return sum;
-				}
-			}
-			//²»ÐèÒª-1£¬ÒòÎª¼ÆÊý±¾À´¾ÍÒª±ÈË÷Òý¶à1
-			else break;
+  static unsigned int DecStringToUInt(const std::string& str, size_t* i = nullptr, const unsigned char* end_char_arr = nullptr, size_t end_char_arr_size = 0) {
+    unsigned int sum = 0;
+    if (!i) {
+      size_t j;
+      i = &j;
+    }
+    for (*i = 0; *i < str.length(); ++ * i) {
+      unsigned char c = str[*i];
+      if (c >= 0x30 && c <= 0x39) {
+        c -= 0x30;
+        sum = sum * 10 + c;
+      }
+      //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½É²ï¿½ï¿½ï¿½
+      else if (end_char_arr) {
+        for (size_t j = 0; j < end_char_arr_size; ++j) {
+          if (c == end_char_arr[j]) return sum;
+        }
+      }
+      //ï¿½ï¿½ï¿½ï¿½Òª-1ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1
+      else break;
 
-		}
-		return sum;
-	}
+    }
+    return sum;
+  }
 
-	static int __cdecl memcmp_ex(const void* buf1, const void* buf2, size_t size) {
-		const char* buf1_ = (const char*)buf1;
-		const char* buf2_ = (const char*)buf2;
-		__try {
-			for (int i = 0; i < size; i++) {
-				if (buf1_[i] != buf2_[i]) {
-					return i;
-				}
-			}
-			return -1;
+  static int __cdecl memcmp_ex(const void* buf1, const void* buf2, size_t size) {
+    const char* buf1_ = (const char*)buf1;
+    const char* buf2_ = (const char*)buf2;
+    __try {
+      for (int i = 0; i < size; i++) {
+        if (buf1_[i] != buf2_[i]) {
+          return i;
+        }
+      }
+      return -1;
 
-		}
-		__except (1) {
-			return -2;
-		}
-	}
+    }
+    __except (1) {
+      return -2;
+    }
+  }
 
 
-	/*
-	* ½«ÌØÕ÷Âë×Ö·û´®×ª»»ÎªElement
-	* ±ê×¼¸ñÊ½Ê¾Àý£º "48 &?? ?? 65*20 88"
-	* &±íÊ¾·µ»ØÊ±µÄ»áÒÔ´Ë×Ö½ÚÎªÆðÊ¼µØÖ·£¬¼ÓÔÚ×Ö½ÚÇ°Ãæ¼´¿É£¬Ê¾ÀýÖÐ¼´Æ«ÒÆÎª1
-	*	ÒÔ×îºóÒ»¸ö&Îª×¼
-	* ??±íÊ¾Ä£ºýÆ¥Åä´Ë×Ö½Ú
-	* *xx±íÊ¾ÉÏÒ»¸ö×Ö½ÚµÄÖØ¸´´ÎÊý£¬Ê¾Àý¾ÍÊÇÖØ¸´0x65 20´Î£¬ÊÇÊ®½øÖÆ
-	*/
-	size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
-		bool first = true;
-		unsigned char sum = 0;
-		SignatureElement temp_signature_element;
-		temp_signature_element.length = 0;
-		SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
-		size_t total_length = 0;
+  /*
+  * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½×ªï¿½ï¿½ÎªElement
+  * ï¿½ï¿½×¼ï¿½ï¿½Ê½Ê¾ï¿½ï¿½ï¿½ï¿½ "48 &?? ?? 65*20 88"
+  * &ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½Ê±ï¿½Ä»ï¿½ï¿½Ô´ï¿½ï¿½Ö½ï¿½Îªï¿½ï¿½Ê¼ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½Ç°ï¿½æ¼´ï¿½É£ï¿½Ê¾ï¿½ï¿½ï¿½Ð¼ï¿½Æ«ï¿½ï¿½Îª1
+  *  ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½&Îª×¼
+  * ??ï¿½ï¿½Ê¾Ä£ï¿½ï¿½Æ¥ï¿½ï¿½ï¿½ï¿½Ö½ï¿½
+  * *xxï¿½ï¿½Ê¾ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ö½Úµï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½0x65 20ï¿½Î£ï¿½ï¿½ï¿½Ê®ï¿½ï¿½ï¿½ï¿½
+  */
+  size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
+    bool first = true;
+    unsigned char sum = 0;
+    SignatureElement temp_signature_element;
+    temp_signature_element.length = 0;
+    SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
+    size_t total_length = 0;
 
-		//±éÀú×Ö·û
-		for (size_t i = 0; i < hex_string_data.length(); ++i) {
-			unsigned char c = hex_string_data[i];
-			bool validChar = true;
-			if (c >= '0' && c <= '9') {
-				c -= '0';
-				newType = SignatureElementType::kWhole;
-			}
-			else if (c >= 'a' && c <= 'f') {
-				c = c - 'a' + 10;
-				newType = SignatureElementType::kWhole;
-			}
-			else if (c >= 'A' && c <= 'F') {
-				c = c - 'A' + 10;
-				newType = SignatureElementType::kWhole;
-			}
-			else if (c == '?') {
-				newType = SignatureElementType::kVague;
-			}
-			else {
-				if (c == '&') {
-					offset = total_length + temp_signature_element.length;
-				}
-				else if (c == '*' && i + 1 < hex_string_data.length()) {
-					// Èç¹û*ºÅºóÃæ»¹ÓÐ×Ö·û£¬½«ÆäÊÓ×÷ÖØ¸´´ÎÊý
-					size_t countInt;
-					unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
-					if (countInt) {
-						if (oldType == SignatureElementType::kWhole && temp_signature_element.data.size() > 0) {
-							unsigned char repC = temp_signature_element.data[temp_signature_element.data.size() - 1];
-							for (size_t j = 0; j < lenInt; ++j) {
-								temp_signature_element.data.push_back(repC);
-							}
-						}
-						temp_signature_element.length += lenInt;
-						i += countInt;
-					}
-						
-				}
+    //ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½
+    for (size_t i = 0; i < hex_string_data.length(); ++i) {
+      unsigned char c = hex_string_data[i];
+      bool validChar = true;
+      if (c >= '0' && c <= '9') {
+        c -= '0';
+        newType = SignatureElementType::kWhole;
+      }
+      else if (c >= 'a' && c <= 'f') {
+        c = c - 'a' + 10;
+        newType = SignatureElementType::kWhole;
+      }
+      else if (c >= 'A' && c <= 'F') {
+        c = c - 'A' + 10;
+        newType = SignatureElementType::kWhole;
+      }
+      else if (c == '?') {
+        newType = SignatureElementType::kVague;
+      }
+      else {
+        if (c == '&') {
+          offset = total_length + temp_signature_element.length;
+        }
+        else if (c == '*' && i + 1 < hex_string_data.length()) {
+          // ï¿½ï¿½ï¿½*ï¿½Åºï¿½ï¿½æ»¹ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½
+          size_t countInt;
+          unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
+          if (countInt) {
+            if (oldType == SignatureElementType::kWhole && temp_signature_element.data.size() > 0) {
+              unsigned char repC = temp_signature_element.data[temp_signature_element.data.size() - 1];
+              for (size_t j = 0; j < lenInt; ++j) {
+                temp_signature_element.data.push_back(repC);
+              }
+            }
+            temp_signature_element.length += lenInt;
+            i += countInt;
+          }
+            
+        }
 
-				// ÎÞÐ§×Ö·û£¬²»ÐèÒª¼ì²âÀàÐÍ
-				validChar = false;
-				goto _PushChar;
-			}
+        // ï¿½ï¿½Ð§ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        validChar = false;
+        goto _PushChar;
+      }
 
-			if (oldType == SignatureElementType::kNone) {
-				// Èç¹û¾ÉÀàÐÍÎ´³õÊ¼»¯£¬½«ÐÂÀàÐÍ¸³Öµ¸ø¾ÉÀàÐÍ
-				oldType = newType;
-			}
+      if (oldType == SignatureElementType::kNone) {
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¸ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        oldType = newType;
+      }
 
-			// ¾É×Ö·ûÀàÐÍºÍÐÂ×Ö·ûÀàÐÍ²»Í¬Ê±£¬ÐèÒªÌí¼ÓÐÂµÄÆ¥Åäµ¥Ôª
-			else if (oldType != newType) {
-				temp_signature_element.type = oldType;
-				total_length += temp_signature_element.length;
-				signature.push_back(temp_signature_element);
+      // ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½Íºï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½Í²ï¿½Í¬Ê±ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½Æ¥ï¿½äµ¥Ôª
+      else if (oldType != newType) {
+        temp_signature_element.type = oldType;
+        total_length += temp_signature_element.length;
+        signature.push_back(temp_signature_element);
 
-				oldType = newType;
-				temp_signature_element.length = 0;
-				temp_signature_element.data.clear();
-			}
+        oldType = newType;
+        temp_signature_element.length = 0;
+        temp_signature_element.data.clear();
+      }
 
-		_PushChar:
-			// Èç¹ûÔ­ÏÈÀàÐÍÊÇ¾«È·Æ¥Åä£¬ÔòÌí¼Ó×Ö·û
-			if (oldType == SignatureElementType::kWhole) {
-				if (first && validChar) {
-					sum = c << 4;
-					first = false;
-				}
-				else if (!first) {
-					first = true;
-					// Èç¹ûÊÇÎÞÐ§×Ö·û£¬ËµÃ÷µ÷ÓÃÕß²¢Î´Ìá¹©Á¬ÐøµÄÁ½¸öÓÐÐ§×Ö·û£¬½«ÐÞÕýµÚÒ»¸öÓÐÐ§×Ö·ûµÄÖµ
-					validChar ? sum += c : sum >>= 4;
-					temp_signature_element.data.push_back(sum);
-					++temp_signature_element.length;
-				}
+    _PushChar:
+      // ï¿½ï¿½ï¿½Ô­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½È·Æ¥ï¿½ä£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½
+      if (oldType == SignatureElementType::kWhole) {
+        if (first && validChar) {
+          sum = c << 4;
+          first = false;
+        }
+        else if (!first) {
+          first = true;
+          // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½Ö·ï¿½ï¿½ï¿½Ëµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß²ï¿½Î´ï¿½á¹©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ð§ï¿½Ö·ï¿½ï¿½ï¿½Öµ
+          validChar ? sum += c : sum >>= 4;
+          temp_signature_element.data.push_back(sum);
+          ++temp_signature_element.length;
+        }
 
-				// ×îºóÒ»ÖÖÇé¿ö¾ÍÊÇ£¬¼´Î´¿ªÊ¼Æ´½Ó×Ö½Ú£¬ÇÒÊÇÎÞÐ§×Ö·û£¬Ö±½ÓÎÞÊÓ¼´¿É
-			}
+        // ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç£ï¿½ï¿½ï¿½Î´ï¿½ï¿½Ê¼Æ´ï¿½ï¿½ï¿½Ö½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½Ö·ï¿½ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½Ó¼ï¿½ï¿½ï¿½
+      }
 
-			// Ä£ºýÆ¥Åä£¬ÊÇµÚ¶þ¸ö·ûºÅ¾ÍÖ±½ÓµÝÔö³¤¶È
-			else if (oldType == SignatureElementType::kVague) {
-				if (first && validChar) {
-					first = false;
-				}
-				else if (!first) {
-					first = true;
-					++temp_signature_element.length;
-				}
-			}
+      // Ä£ï¿½ï¿½Æ¥ï¿½ä£¬ï¿½ÇµÚ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¾ï¿½Ö±ï¿½Óµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+      else if (oldType == SignatureElementType::kVague) {
+        if (first && validChar) {
+          first = false;
+        }
+        else if (!first) {
+          first = true;
+          ++temp_signature_element.length;
+        }
+      }
 
-		}
+    }
 
-		//Èç¹ûÓÐÎ´Íê³ÉµÄ×Ö·û£¬ÔòÍÆÈë
-		if (!first) {
-			if (oldType == SignatureElementType::kWhole) {
-				temp_signature_element.data.push_back(sum >> 4);
-			}
-			++temp_signature_element.length;
-		}
+    //ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Éµï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    if (!first) {
+      if (oldType == SignatureElementType::kWhole) {
+        temp_signature_element.data.push_back(sum >> 4);
+      }
+      ++temp_signature_element.length;
+    }
 
-		//ÓÐÆ¥Åäµ¥Ôª£¬ÍÆÈë
-		if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
-			temp_signature_element.type = oldType;
-			total_length += temp_signature_element.length;
-			signature.push_back(temp_signature_element);
-		}
+    //ï¿½ï¿½Æ¥ï¿½äµ¥Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
+      temp_signature_element.type = oldType;
+      total_length += temp_signature_element.length;
+      signature.push_back(temp_signature_element);
+    }
 
-		return total_length;
-	}
+    return total_length;
+  }
 
 private:
-	size_t m_offset;
-	Process* m_process;
+  size_t m_offset;
+  Process* m_process;
 };
 
 } // namespace Geek
