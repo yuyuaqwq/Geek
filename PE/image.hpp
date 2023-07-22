@@ -10,7 +10,7 @@
 #include <ntimage.h>
 #endif
 
-#include <geek/File/file.hpp>
+#include <geek/file/file.hpp>
 
 /*
 * ���ִ���ο���Ŀ��MemoryModule

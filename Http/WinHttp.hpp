@@ -11,7 +11,7 @@
 #include <winhttp.h>
 #pragma comment(lib, "Winhttp.lib")
 
-#include <geek/String/string.hpp>
+#include <geek/string/string.hpp>
 
 namespace geek {
 

@@ -14,14 +14,14 @@
 #endif
 
 
-#include <geek/Process/ntinc.h>
-#include <geek/Process/module.hpp>
-#include <geek/Process/memory_block.hpp>
-#include <geek/Handle/handle.hpp>
-#include <geek/PE/image.hpp>
-#include <geek/Thread/thread.hpp>
+#include <geek/process/ntinc.h>
+#include <geek/process/module.hpp>
+#include <geek/process/memory_block.hpp>
+#include <geek/handle/handle.hpp>
+#include <geek/pe/image.hpp>
+#include <geek/thread/thread.hpp>
 #include <geek/wow64ext/wow64ext.hpp>
-#include <geek/String/string.hpp>
+#include <geek/string/string.hpp>
 
 namespace geek {
 

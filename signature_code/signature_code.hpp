@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <geek/Process/process.hpp>
+#include <geek/process/process.hpp>
 
 
 namespace geek{

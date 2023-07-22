@@ -5,8 +5,8 @@
 
 #include <Windows.h>
 
-#include <geek/Wow64ext/internal.h>
-#include <geek/Wow64ext/Wow64ext.h>
+#include <geek/wow64ext/internal.h>
+#include <geek/wow64ext/Wow64ext.h>
 
 /*
 * https://github.com/rwfpl/rewolf-Wow64ext

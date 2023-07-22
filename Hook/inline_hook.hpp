@@ -6,7 +6,7 @@
 
 #include <Windows.h>
 
-#include <geek/Process/process.hpp>
+#include <geek/process/process.hpp>
 
 
 namespace geek {
