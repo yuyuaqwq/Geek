@@ -6,15 +6,11 @@
 
 #ifndef WINNT
 #include <Windows.h>
+#include <geek/file/file.hpp>
 #else
 #include <ntimage.h>
 #endif
 
-#include <geek/file/file.hpp>
-
-/*
-* ���ִ���ο���Ŀ��MemoryModule
-*/
 
 namespace geek {
 
@@ -57,7 +53,6 @@ public:
     m_memory_image_base = buf;
     m_section_header_table.resize(m_file_header->NumberOfSections);
     m_section_list.resize(m_file_header->NumberOfSections);
-    // ���������ͷ����
     for (int i = 0; i < m_file_header->NumberOfSections; i++) {
       m_section_header_table[i] = sectionHeaderTable[i];
       auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
@@ -82,7 +77,6 @@ public:
     m_memory_image_base = nullptr;
     m_section_header_table.resize(m_file_header->NumberOfSections);
     m_section_list.resize(m_file_header->NumberOfSections);
-    // ���������ͷ����
     for (int i = 0; i < m_file_header->NumberOfSections; i++) {
       m_section_header_table[i] = sectionHeaderTable[i];
       auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
@@ -93,7 +87,6 @@ public:
       }
 
       if (virtual_size == 0) {
-        // dll��û�����ݵ����Σ�
         GET_OPTIONAL_HEADER_FIELD(SectionAlignment, virtual_size);
         m_section_list[i].resize(virtual_size, 0);
       }
@@ -271,7 +264,6 @@ public:
     else {
       export_rva = GetExportRVAByName(func_name);
     }
-    // ���ܷ���һ���ַ�������Ҫ���μ���
     // ��Ӧ.def�ļ���EXPORTS����� MsgBox = user32.MessageBoxA �����
     uintptr_t va = (uintptr_t)m_memory_image_base + export_rva;
     auto export_directory = (uintptr_t)m_memory_image_base + GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;

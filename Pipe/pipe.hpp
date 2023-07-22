@@ -4,9 +4,12 @@
 #include <string>
 #include <vector>
 
+#ifndef WINNT
 #include <Windows.h>
-
 #include <geek/handle/handle.hpp>
+#else
+#include <ntimage.h>
+#endif
 
 namespace geek {
 
