@@ -10,13 +10,13 @@
 #include <ntimage.h>
 #endif
 
-#include <Geek/File/file.hpp>
+#include <geek/File/file.hpp>
 
 /*
 * ���ִ���ο���Ŀ��MemoryModule
 */
 
-namespace Geek {
+namespace geek {
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
   { if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
@@ -760,6 +760,6 @@ private:
   void* m_memory_image_base;
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_PE_IMAGE_H_

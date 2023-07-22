@@ -10,7 +10,7 @@
 #include <Windows.h>
 #endif
 
-namespace Geek {
+namespace geek {
 
 class String {
 public:
@@ -227,6 +227,6 @@ public:
   }
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_STRING_STRING_H_

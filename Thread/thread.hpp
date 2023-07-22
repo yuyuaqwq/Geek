@@ -6,9 +6,9 @@
 
 #include <Windows.h>
 
-#include <Geek\Handle\handle.hpp>
+#include <geek\Handle\handle.hpp>
 
-namespace Geek {
+namespace geek {
 static const HANDLE kCurrentThread = (HANDLE)-2;
 
 
@@ -76,6 +76,6 @@ private:
 };
 
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_THREAD_THREAD_H_

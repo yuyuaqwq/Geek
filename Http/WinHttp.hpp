@@ -11,9 +11,9 @@
 #include <winhttp.h>
 #pragma comment(lib, "Winhttp.lib")
 
-#include <Geek/String/string.hpp>
+#include <geek/String/string.hpp>
 
-namespace Geek {
+namespace geek {
 
 namespace WinHttp {
 
@@ -21,7 +21,7 @@ class Headers {
 public:
   void Parse(const std::wstring& headers) {
     m_Headers.clear();
-    auto linearr = Geek::String::Split(headers, L"\r\n", false);
+    auto linearr = geek::String::Split(headers, L"\r\n", false);
 
     for (auto& line : linearr) {
       size_t offset = line.find(L':');
@@ -33,7 +33,7 @@ public:
       std::wstring key, value;
       key = line.substr(0, offset);
       value = line.substr(offset + 1);
-      value = Geek::String::DeleteHeadSpace(value);
+      value = geek::String::DeleteHeadSpace(value);
 
       m_Headers[key].push_back(value);    // 可以直接push，map会自动构造不存在的key
     }
@@ -105,7 +105,7 @@ public:
       }
       else {
         cookie = value.substr(0, offset);
-        cookie = Geek::String::DeleteHeadSpace(cookie);
+        cookie = geek::String::DeleteHeadSpace(cookie);
       }
 
       offset = cookie.find(L'=');
@@ -734,6 +734,6 @@ public:
 
 } // namespace WinHttp 
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_HTTP_WIN_HTTP_H_

@@ -6,9 +6,9 @@
 
 #include <Windows.h>
 
-#include <Geek/Handle/handle.hpp>
+#include <geek/Handle/handle.hpp>
 
-namespace Geek {
+namespace geek {
 
 class Pipe {
 public:

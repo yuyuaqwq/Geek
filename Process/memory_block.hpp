@@ -5,9 +5,9 @@
 
 #include <Windows.h>
 
-#include <Geek/wow64ext/wow64ext.h>
+#include <geek/wow64ext/wow64ext.h>
 
-namespace Geek {
+namespace geek {
 
 class MemoryBlock {
 public:

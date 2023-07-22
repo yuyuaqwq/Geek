@@ -14,16 +14,16 @@
 #endif
 
 
-#include <Geek/Process/ntinc.h>
-#include <Geek/Process/module.hpp>
-#include <Geek/Process/memory_block.hpp>
-#include <Geek/Handle/handle.hpp>
-#include <Geek/PE/image.hpp>
-#include <Geek/Thread/thread.hpp>
-#include <Geek/wow64ext/wow64ext.hpp>
-#include <Geek/String/string.hpp>
+#include <geek/Process/ntinc.h>
+#include <geek/Process/module.hpp>
+#include <geek/Process/memory_block.hpp>
+#include <geek/Handle/handle.hpp>
+#include <geek/PE/image.hpp>
+#include <geek/Thread/thread.hpp>
+#include <geek/wow64ext/wow64ext.hpp>
+#include <geek/String/string.hpp>
 
-namespace Geek {
+namespace geek {
 
 static Wow64 ms_wow64;
 static const HANDLE kCurrentProcess = (HANDLE)-1;
@@ -343,7 +343,7 @@ public:
     while (true) {
       uint64_t size;
       if (ms_wow64.Wow64Operation(Get())) {
-        size = Geek::Wow64::VirtualQueryEx64(Get(), p, &memInfo64, sizeof(memInfo64));
+        size = geek::Wow64::VirtualQueryEx64(Get(), p, &memInfo64, sizeof(memInfo64));
         if (size != sizeof(memInfo64)) { break; }
         memoryBlockList.push_back(memInfo64);
         p += memInfo64.RegionSize;
@@ -547,7 +547,7 @@ public:
       return (uint64_t)LoadLibraryA(lib_name);
     }
     Module module;
-    if (process->FindModlueByModuleName(Geek::String::AnsiToUtf16le(lib_name), &module)) {
+    if (process->FindModlueByModuleName(geek::String::AnsiToUtf16le(lib_name), &module)) {
       return module.base;
     }
 
@@ -808,9 +808,9 @@ public:
   }
 
   bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
-    std::wstring find_name = Geek::String::ToUppercase(name);
+    std::wstring find_name = geek::String::ToUppercase(name);
     for (auto& it : EnumModuleListEx()) {
-      auto base_name_up = Geek::String::ToUppercase(it.base_name);
+      auto base_name_up = geek::String::ToUppercase(it.base_name);
       if (base_name_up == find_name) {
         if (module) *module = it;
         return true;
@@ -980,8 +980,8 @@ public:
     }
     int i = 0;
     for (auto& entry : processEntryList) {
-      auto exeFile_str = Geek::String::ToUppercase(std::wstring(entry.szExeFile));
-      processName_ = Geek::String::ToUppercase(processName_);
+      auto exeFile_str = geek::String::ToUppercase(std::wstring(entry.szExeFile));
+      processName_ = geek::String::ToUppercase(processName_);
       if (exeFile_str == processName_) {
         if (++i < count) {
           continue;
@@ -1006,6 +1006,6 @@ public:
   }
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_PROCESS_PROCESS_H_

@@ -7,10 +7,9 @@
 #include <Windows.h>
 
 
-namespace Geek {
+namespace geek {
 
-// �����������ӻᵼ��ʵ�ʺ�����ַ��ͨ����������ȡ�ĵ�ַ��һ��
-// �����ݽ��ж�дhookʱ����֤���е�������̬��Ա���ⲿ��������ͬһҳ��
+
 class PageHook {
 public:
   typedef void (*HookCallBack)(LPCONTEXT context);
@@ -33,7 +32,6 @@ public:
     m_callback = nullptr;
 
     if (ms_veh_count == 0) {
-      // ע��VEH
       m_exception_handler_handle = AddVectoredExceptionHandler(TRUE, ExceptionHandler);
     }
     ++ms_veh_count;
@@ -42,7 +40,6 @@ public:
   ~PageHook() {
     --ms_veh_count;
     if (ms_veh_count == 0) {
-      // �Ƴ�VEH
       RemoveVectoredExceptionHandler(m_exception_handler_handle);
     }
 
@@ -51,7 +48,6 @@ public:
 
 
 public:
-  // ��װHook��protect���ڿ��Ʊ�hookҳ��ı��������Դ���hook
   bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
     if (m_status == Status::kNormal) {
       m_status = Status::kRepeatInstall;
@@ -91,7 +87,6 @@ public:
     return true;
   }
 
-  // ж��Hook
   bool Uninstall() noexcept {
     if (m_status != Status::kNormal) {
       return true;
@@ -138,39 +133,29 @@ private:
 
   static LONG NTAPI ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
 
-    // �ж��쳣����
     if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
       LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
       LPVOID page_base = PageAlignment(address);
       auto it_base = ms_page_hook_base.find(page_base);
       if (it_base == ms_page_hook_base.end()) {
-        // �����������õ�ҳ�����Բ������쳣������
         return EXCEPTION_CONTINUE_SEARCH;
       }
 
-      // ִ�е�ָ�������ǵ�Hookλ��ͬһҳ�棬�ָ�ԭ������
       VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
 
-      // ��ȡ�����쳣���̵߳�������
       LPCONTEXT context = ExceptionInfo->ContextRecord;
 
 
       auto it_addr = ms_page_hook_addr.find(address);
       if (it_addr != ms_page_hook_addr.end()) {
-        // �Ǳ�hook�ĵ�ַ
-
-        // ���ûص�
         it_addr->second.mCallback(context);
       }
 
-      // ���õ����������壬���ڵ������������ô�Hook
       context->EFlags |= 0x100;
 
-      // ����ʶ���Ƿ��������õĵ���
       ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
 
-      // �쳣������� �ó������ִ��
       return EXCEPTION_CONTINUE_EXECUTION;
 
 
@@ -179,30 +164,21 @@ private:
     {
       LPCONTEXT context = ExceptionInfo->ContextRecord;
 
-      // �ж��Ƿ�DR�Ĵ����������쳣
       if (context->Dr6 & 0xf) {
-        // �ų�DR�Ĵ��������ĵ����쳣
         return EXCEPTION_CONTINUE_SEARCH;
       }
       else {
-        // �����쳣
         auto it = ms_page_hook_step.find(GetCurrentThreadId());
         if (it == ms_page_hook_step.end()) {
-          //�����������õĵ����ϵ㣬������
           return EXCEPTION_CONTINUE_SEARCH;
         }
 
 
         DWORD uselessProtect;
-        // �ָ�Hook
         VirtualProtect(it->second.page_base, 0x1000, it->second.protect, &it->second.protect);
 
         ms_page_hook_step.erase(GetCurrentThreadId());
 
-        // ����Ҫ����TF�������쳣�Զ���TF��0
-        // �����쳣���������쳣�������޸�ip
-
-        // �쳣������� �ó������ִ��
         return EXCEPTION_CONTINUE_EXECUTION;
       }
 
