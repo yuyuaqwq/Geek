@@ -4,14 +4,12 @@
 #include <string>
 #include <vector>
 
-#include <Geek/Process/process.hpp>
+#include <geek/Process/process.hpp>
 
 
-namespace Geek{
+namespace geek{
 
-/*
-* ��������
-*/
+
 class SignatureCode {
 private:
   enum class SignatureElementType {
@@ -34,9 +32,6 @@ public:
 
 public:
 
-  /*
-  * �޶���С����������
-  */
   uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
     std::vector<SignatureElement> signature;
     size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
@@ -100,13 +95,11 @@ private:
         c -= 0x30;
         sum = sum * 10 + c;
       }
-      //��������˽����ַ������������ַ�������һ�ɲ���
       else if (end_char_arr) {
         for (size_t j = 0; j < end_char_arr_size; ++j) {
           if (c == end_char_arr[j]) return sum;
         }
       }
-      //����Ҫ-1����Ϊ����������Ҫ��������1
       else break;
 
     }
@@ -132,12 +125,7 @@ private:
 
 
   /*
-  * ���������ַ���ת��ΪElement
-  * ��׼��ʽʾ���� "48 &?? ?? 65*20 88"
-  * &��ʾ����ʱ�Ļ��Դ��ֽ�Ϊ��ʼ��ַ�������ֽ�ǰ�漴�ɣ�ʾ���м�ƫ��Ϊ1
-  *  �����һ��&Ϊ׼
-  * ??��ʾģ��ƥ����ֽ�
-  * *xx��ʾ��һ���ֽڵ��ظ�������ʾ�������ظ�0x65 20�Σ���ʮ����
+  * "48 &?? ?? 65*20 88"
   */
   size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
     bool first = true;
@@ -147,7 +135,6 @@ private:
     SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
     size_t total_length = 0;
 
-    //�����ַ�
     for (size_t i = 0; i < hex_string_data.length(); ++i) {
       unsigned char c = hex_string_data[i];
       bool validChar = true;
@@ -171,7 +158,6 @@ private:
           offset = total_length + temp_signature_element.length;
         }
         else if (c == '*' && i + 1 < hex_string_data.length()) {
-          // ���*�ź��滹���ַ������������ظ�����
           size_t countInt;
           unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
           if (countInt) {
@@ -187,17 +173,14 @@ private:
             
         }
 
-        // ��Ч�ַ�������Ҫ�������
         validChar = false;
         goto _PushChar;
       }
 
       if (oldType == SignatureElementType::kNone) {
-        // ���������δ��ʼ�����������͸�ֵ��������
         oldType = newType;
       }
 
-      // ���ַ����ͺ����ַ����Ͳ�ͬʱ����Ҫ�����µ�ƥ�䵥Ԫ
       else if (oldType != newType) {
         temp_signature_element.type = oldType;
         total_length += temp_signature_element.length;
@@ -209,7 +192,6 @@ private:
       }
 
     _PushChar:
-      // ���ԭ�������Ǿ�ȷƥ�䣬�������ַ�
       if (oldType == SignatureElementType::kWhole) {
         if (first && validChar) {
           sum = c << 4;
@@ -217,16 +199,13 @@ private:
         }
         else if (!first) {
           first = true;
-          // �������Ч�ַ���˵�������߲�δ�ṩ������������Ч�ַ�����������һ����Ч�ַ���ֵ
           validChar ? sum += c : sum >>= 4;
           temp_signature_element.data.push_back(sum);
           ++temp_signature_element.length;
         }
 
-        // ���һ��������ǣ���δ��ʼƴ���ֽڣ�������Ч�ַ���ֱ�����Ӽ���
       }
 
-      // ģ��ƥ�䣬�ǵڶ������ž�ֱ�ӵ�������
       else if (oldType == SignatureElementType::kVague) {
         if (first && validChar) {
           first = false;
@@ -239,7 +218,6 @@ private:
 
     }
 
-    //�����δ��ɵ��ַ���������
     if (!first) {
       if (oldType == SignatureElementType::kWhole) {
         temp_signature_element.data.push_back(sum >> 4);
@@ -247,7 +225,6 @@ private:
       ++temp_signature_element.length;
     }
 
-    //��ƥ�䵥Ԫ������
     if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
       temp_signature_element.type = oldType;
       total_length += temp_signature_element.length;
@@ -262,6 +239,6 @@ private:
   Process* m_process;
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_

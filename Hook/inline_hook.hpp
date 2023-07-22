@@ -6,10 +6,10 @@
 
 #include <Windows.h>
 
-#include <Geek/Process/process.hpp>
+#include <geek/Process/process.hpp>
 
 
-namespace Geek {
+namespace geek {
 
 class InlineHook {
 public:
@@ -79,7 +79,7 @@ public:
     * �ں�����ʼhook
     * exec_old_instr = false
     * callback��ָ�� ret_addr = stack[0]
-    * callback�� context->esp += 4 / context->rsp   = 8	; �����ⲿcall���ú����ķ��ص�ַ
+    * callback�� context->esp += 4 / context->rsp   = 8  ; �����ⲿcall���ú����ķ��ص�ַ
     * 
   * 64λ����Ҫע��Hookʱ��ջӦ����16�ֽڶ��룬���򲿷�ָ����ܻ��쳣
   */
@@ -457,6 +457,6 @@ public:
 
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_HOOK_INLINE_HOOK_H_

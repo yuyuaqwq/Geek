@@ -14,7 +14,7 @@
 #define GEEK_STD std::
 #endif // GEEK_STD
 
-namespace Geek {
+namespace geek {
 
 class File {
 public:
@@ -374,6 +374,6 @@ private:
   GEEK_STD fstream m_fs;
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_FILE_FILE_H_

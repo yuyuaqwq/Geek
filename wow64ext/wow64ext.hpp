@@ -5,14 +5,14 @@
 
 #include <Windows.h>
 
-#include <Geek/Wow64ext/internal.h>
-#include <Geek/Wow64ext/Wow64ext.h>
+#include <geek/Wow64ext/internal.h>
+#include <geek/Wow64ext/Wow64ext.h>
 
 /*
 * https://github.com/rwfpl/rewolf-Wow64ext
 */
 
-namespace Geek {
+namespace geek {
 
 static HANDLE ms_heap = NULL;
 static BOOL ms_is_wow64 = FALSE;
