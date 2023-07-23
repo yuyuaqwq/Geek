@@ -4,7 +4,13 @@
 #include <string>
 #include <vector>
 
+#ifdef WINNT
+#include <ntifs.h>
+#else
 #include <Windows.h>
+#endif // WINNT
+
+
 
 #include <Geek/Handle/handle.hpp>
 
@@ -12,18 +18,27 @@ namespace Geek {
 
 class Pipe {
 public:
+#ifdef WINNT
+	bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
+		m_buf_size = buf_size;
+		m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
+		return m_pipe_handle.Valid();
+}
+#else
 	bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
 		m_buf_size = buf_size;
 		m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
 		return m_pipe_handle.Valid();
 	}
+#endif // WINNT
+
 
 	void WaitConnect() {
 		ConnectNamedPipe(m_pipe_handle.Get(), NULL);
 	}
 
-	bool Connect(const wchar_t* name) {
-		if (!WaitNamedPipeW(name, NMPWAIT_USE_DEFAULT_WAIT)) {
+	bool Connect(const wchar_t* name, bool is_pipe = true) {
+		if (is_pipe && !WaitNamedPipeW(name, NMPWAIT_USE_DEFAULT_WAIT)) {
 			return false;
 		}
 		m_pipe_handle.Reset(CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL));
@@ -31,7 +46,7 @@ public:
 			return false;
 		}
 		DWORD dwMode = PIPE_READMODE_MESSAGE | PIPE_WAIT;
-		if (!SetNamedPipeHandleState(m_pipe_handle.Get(), &dwMode, NULL, NULL)) {
+		if (is_pipe && !SetNamedPipeHandleState(m_pipe_handle.Get(), &dwMode, NULL, NULL)) {
 			return false;
 		}
 		return true;
