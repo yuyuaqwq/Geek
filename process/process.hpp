@@ -192,11 +192,11 @@ public:
     }
 
     ::SYSTEM_INFO SystemInfo = { 0 };
-    ::GetNativeSystemInfo(&SystemInfo);    //���ϵͳ��Ϣ
-    if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {    //�õ�ϵͳλ��64
+    ::GetNativeSystemInfo(&SystemInfo);
+    if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
       return false;
     }
-    else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {    // �õ�ϵͳλ��32
+    else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {
       return true;
     }
     return true;
@@ -589,8 +589,7 @@ public:
     } while (false);
   }
 
-  /* ������ڴ�ע�뻹��Ҫ���image�е���LoadLibraryDefault�����ص�ģ���ַ���ǵ�ǰ����ģ���ַ������ */
-  uint64_t LoadLibraryFromImage(Image* image, Image::LoadLibraryFunc load_library_func, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+   uint64_t LoadLibraryFromImage(Image* image, Image::LoadLibraryFunc load_library_func, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
     if (IsX86() != image->IsPE32()) {
       return 0;
     }
@@ -644,17 +643,12 @@ public:
           offset += 2;
         }
         else {
-          /*
-          * 64λ�£�ջ��Ҫ16�ֽڶ��룬������һЩָ���쳣(��movaps)
-          * ��Ϊ����һ��callѹ��ķ��ص�ַ������-28
-          */
           int offset = 0;
           image_buf[offset++] = 0x48;    // sub rsp, 28
           image_buf[offset++] = 0x83;
           image_buf[offset++] = 0xec;
           image_buf[offset++] = 0x28;
 
-          // ���ݲ���
           image_buf[offset++] = 0x48;    // mov rcx, image_base
           image_buf[offset++] = 0xb9;
           *(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
@@ -680,7 +674,6 @@ public:
           image_buf[offset++] = 0xff;    // call rax
           image_buf[offset++] = 0xd0;
 
-          // ����ջ�ռ�
           image_buf[offset++] = 0x48;    // add rsp, 28
           image_buf[offset++] = 0x83;
           image_buf[offset++] = 0xc4;
@@ -882,7 +875,7 @@ public:
     }
 
     MODULEENTRY32 mi = { 0 };
-    mi.dwSize = sizeof(MODULEENTRY32); //��һ��ʹ�ñ����ʼ����Ա
+    mi.dwSize = sizeof(MODULEENTRY32);
     BOOL bRet = Module32First(hSnapshot, &mi);
     do {
       if (bRet == false) {
