@@ -144,7 +144,7 @@ public:
       forward_page_temp[i++] = 0x61;    // popad
 
       
-      forward_page_temp[i++] = 0x83;    // add esp, 4������forwardPage
+      forward_page_temp[i++] = 0x83;    // add esp, 跳过forwardPage
       forward_page_temp[i++] = 0xc4;
       forward_page_temp[i++] = 0x04;
 
