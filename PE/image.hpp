@@ -53,6 +53,8 @@ public:
     m_memory_image_base = buf;
     m_section_header_table.resize(m_file_header->NumberOfSections);
     m_section_list.resize(m_file_header->NumberOfSections);
+
+    // 保存节区和头节区
     for (int i = 0; i < m_file_header->NumberOfSections; i++) {
       m_section_header_table[i] = sectionHeaderTable[i];
       auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
@@ -77,6 +79,8 @@ public:
     m_memory_image_base = nullptr;
     m_section_header_table.resize(m_file_header->NumberOfSections);
     m_section_list.resize(m_file_header->NumberOfSections);
+
+    // 保存节区和头节区
     for (int i = 0; i < m_file_header->NumberOfSections; i++) {
       m_section_header_table[i] = sectionHeaderTable[i];
       auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
@@ -87,6 +91,7 @@ public:
       }
 
       if (virtual_size == 0) {
+        // dll中没有数据的区段？
         GET_OPTIONAL_HEADER_FIELD(SectionAlignment, virtual_size);
         m_section_list[i].resize(virtual_size, 0);
       }
@@ -264,11 +269,12 @@ public:
     else {
       export_rva = GetExportRVAByName(func_name);
     }
-    // ��Ӧ.def�ļ���EXPORTS����� MsgBox = user32.MessageBoxA �����
+    // 可能返回一个字符串，需要二次加载
+    // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
     uintptr_t va = (uintptr_t)m_memory_image_base + export_rva;
     auto export_directory = (uintptr_t)m_memory_image_base + GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
     auto export_directory_size = GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
-    // ���ڵ�������Χ�ڣ��������ӵ��ַ�����NTDLL.RtlAllocateHeap
+    // 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
     if (va > export_directory && va < export_directory + export_directory_size) {
       std::string full_name = (char*)va;
       auto offset = full_name.find(".");
@@ -338,7 +344,7 @@ public:
     for (int i = 0; i < numberOfNames; i++) {
       auto exportName = (char*)RVAToPoint(addressOfNames[i]);
       if (func_name == exportName) {
-        // ͨ�����±������ű����õ�����AddressOfFunctions���±�
+        // 通过此下标访问序号表，得到访问AddressOfFunctions的下标
         funcIdx = addressOfNameOrdinals[i];
       }
     }
@@ -354,7 +360,7 @@ public:
       return 0;
     }
     auto addressOfFunctions = (uint32_t*)RVAToPoint(exportDirectory->AddressOfFunctions);
-    // �ⲿ�ṩ��ordinal��Ҫ��ȥbase
+    // 外部提供的ordinal需要减去base
     auto funcIdx = ordinal - exportDirectory->Base;
     return addressOfFunctions[funcIdx];
   }
@@ -531,7 +537,7 @@ public:
     }
     else {
       ExeEntryProc ExeEntry = (ExeEntryProc)(LPVOID)(ImageBase + rva);
-      // exe��ִ��
+      // exe不执行
     }
   }
 
@@ -596,7 +602,7 @@ public:
   * Resource
   */
   static std::vector<uint8_t> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type) {
-    //������Դ
+    // 查找资源
     std::vector<uint8_t> buf;
     HGLOBAL hRes = NULL;
     do {
@@ -604,12 +610,12 @@ public:
       if (!hResID) {
         break;
       }
-      //������Դ  
+      // 加载资源
       hRes = LoadResource(handle_module, hResID);
       if (!hRes) {
         break;
       }
-      //������Դ
+      // 锁定资源
       LPVOID pRes = LockResource(hRes);
       if (pRes == NULL) {
         break;
@@ -647,7 +653,7 @@ private:
       return false;
     }
 
-    // ����PEͷ
+    // 拷贝PE头
     auto optionalHeader32 = &ntHeader->OptionalHeader;
     if (optionalHeader32->Magic == 0x10b) {
       m_nt_header = new IMAGE_NT_HEADERS32;
@@ -690,7 +696,7 @@ private:
     }
 
     i--;
-    // ����λ�����һ��������������Խ��
+    // 可能位于最后一个节区，但不能越界
     if (rva - m_section_header_table[i].VirtualAddress > m_section_header_table[i].SizeOfRawData) {
       return -1;
     }
@@ -707,7 +713,7 @@ private:
     }
 
     i--;
-    // ����λ�����һ��������������Խ��
+    // 可能位于最后一个节区，但不能越界
     if (raw - m_section_header_table[i].PointerToRawData + 1 > m_section_header_table[i].SizeOfRawData) {
       return -1;
     }

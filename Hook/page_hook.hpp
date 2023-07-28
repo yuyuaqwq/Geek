@@ -9,6 +9,8 @@
 
 namespace geek {
 
+// 启用增量链接会导致实际函数地址与通过函数名获取的地址不一致
+// 对数据进行读写hook时，保证类中的内联静态成员与外部变量不在同一页面
 
 class PageHook {
 public:
@@ -48,6 +50,7 @@ public:
 
 
 public:
+  // 安装Hook，protect用于控制被hook页面的保护属性以触发hook
   bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
     if (m_status == Status::kNormal) {
       m_status = Status::kRepeatInstall;
@@ -132,58 +135,64 @@ private:
   }
 
   static LONG NTAPI ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
-
+    // 判断异常类型
     if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
       LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
       LPVOID page_base = PageAlignment(address);
       auto it_base = ms_page_hook_base.find(page_base);
       if (it_base == ms_page_hook_base.end()) {
+        // 不是我们设置的页面属性产生的异常，忽略
         return EXCEPTION_CONTINUE_SEARCH;
       }
 
+      // // 执行的指令与我们的Hook位于同一页面，恢复原有属性
       VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
 
       LPCONTEXT context = ExceptionInfo->ContextRecord;
 
-
       auto it_addr = ms_page_hook_addr.find(address);
       if (it_addr != ms_page_hook_addr.end()) {
+        // 是被hook的地址，调用回调
         it_addr->second.mCallback(context);
       }
 
+      // // 设置单步触发陷阱，用于单步后重新启用此Hook
       context->EFlags |= 0x100;
 
+      // // 用于识别是否咱们设置的单步
       ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
 
       return EXCEPTION_CONTINUE_EXECUTION;
-
 
     }
     else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
     {
       LPCONTEXT context = ExceptionInfo->ContextRecord;
-
+      // 判断是否DR寄存器触发的异常
       if (context->Dr6 & 0xf) {
+        // 排除DR寄存器触发的单步异常
         return EXCEPTION_CONTINUE_SEARCH;
       }
       else {
+        // 单步异常
         auto it = ms_page_hook_step.find(GetCurrentThreadId());
         if (it == ms_page_hook_step.end()) {
+          //不是咱们设置的单步断点，不处理
           return EXCEPTION_CONTINUE_SEARCH;
         }
 
-
+        // 恢复Hook
         DWORD uselessProtect;
         VirtualProtect(it->second.page_base, 0x1000, it->second.protect, &it->second.protect);
 
         ms_page_hook_step.erase(GetCurrentThreadId());
 
+        // 不需要重设TF，单步异常自动将TF置0
+        // 单步异常是陷阱类异常，无需修复ip
         return EXCEPTION_CONTINUE_EXECUTION;
       }
-
     }
-
     return EXCEPTION_CONTINUE_SEARCH;
   }
 

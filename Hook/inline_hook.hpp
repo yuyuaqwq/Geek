@@ -69,19 +69,19 @@ public:
 public:
 
   /*
-  * ��װת������Hook
-  * ��hook�����ڸ�д��ָ��ܴ������ƫ��ָ���0xe8��0xe9(�ɽ��˼·����ת��ҳ�潫hook��ָ�ԭ�����޸�hook���ĺ��ָ��Ϊ�ٶ���ת�����ٶ���ת�л�ԭhook����ԭ���ָ������غ��ָ�ִ�У����ɸ���hook)
-  * x86Ҫ��instr_size>=5��x64Ҫ��instr_size>=14
-  * forward_page��ת��ҳ�棬������Ҫ0x1000��ǰ0x1000���ɸ�д������ָ���϶�Ŀռ䣬���ڽ�������
-  * �������ر�/GS(��ȫ���)����������__security_cookie�������
-  * �����Ҫ�޸�rsp����ret_addr��ע���ջƽ�⣬push��pop˳��Ϊ  push esp -> push ret_addr -> push xxx  call  pop xxx -> pop&save ret_addr -> pop esp -> ִ��ԭָ�� -> get&push ret_addr -> ret  
-  * ʵ�ֽӹܣ�
-    * �ں�����ʼhook
+  * 安装转发调用Hook
+  * 被hook处用于覆写的指令不能存在相对偏移指令，如0xe8、0xe9(可解决思路：在转发页面将hook处指令还原，但修改hook处的后继指令为再度跳转，在再度跳转中还原hook并还原后继指令，再跳回后继指令处执行，即可复用hook)
+  * x86要求instr_size>=5，x64要求instr_size>=14
+  * forward_page是转发页面，至少需要0x1000，前0x1000不可覆写，可以指定较多的空间，便于交互数据
+  * 跨进程请关闭/GS(安全检查)，避免生成__security_cookie插入代码
+  * 如果需要修改rsp或者ret_addr，注意堆栈平衡，push和pop顺序为  push esp -> push ret_addr -> push xxx  call  pop xxx -> pop&save ret_addr -> pop esp -> 执行原指令 -> get&push ret_addr -> ret
+  * 实现接管：
+    * 在函数起始hook
     * exec_old_instr = false
-    * callback��ָ�� ret_addr = stack[0]
-    * callback�� context->esp += 4 / context->rsp   = 8  ; �����ⲿcall���ú����ķ��ص�ַ
-    * 
-  * 64λ����Ҫע��Hookʱ��ջӦ����16�ֽڶ��룬���򲿷�ָ����ܻ��쳣
+    * callback中指定 ret_addr = stack[0]
+    * callback中 context->esp += 4 / context->rsp += 8	; 跳过外部call到该函数的返回地址
+    *
+  * 64位下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
   */
   bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, size_t forward_page_size = 0x1000, bool exec_old_instr = true) {
     Uninstall();
@@ -94,13 +94,13 @@ public:
       return false;
     }
     
-    // ����ת��ҳ��ָ��
+    // 处理转发页面指令
     std::vector<char> forward_page(forward_page_size);
     auto forward_page_temp = forward_page.data();
 
     uint64_t forward_page_uint = (uint64_t)m_forward_page;
 
-    // ����ԭָ��
+    // 保存原指令
     m_old_instr.resize(instr_size);
     if (!m_process->ReadMemory(hook_addr, m_old_instr.data(), instr_size)) {
       return false;
@@ -131,7 +131,7 @@ public:
       forward_page_temp[i++] = 0x60;    // pushad
       forward_page_temp[i++] = 0x9c;    // pushfd
 
-      // ���ݲ���
+      // 传递参数
       forward_page_temp[i++] = 0x54;    // push esp
 
       forward_page_temp[i++] = 0xe8;    // call callback
@@ -150,60 +150,60 @@ public:
 
 
 
-      // ��ԭָ��ִ��ǰ��ԭ���л���������ѹ���ret_addr
-      // Ҫ��eax���ȴ浽�ڴ���
+      // 在原指令执行前还原所有环境，包括压入的ret_addr
+      // 要用eax，先存到内存里
       // mov [forwardPage + 0x1000 - 4], eax
       forward_page_temp[i++] = 0xa3;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
       i += 4;
 
-      // ��������ret_addr��ʱ�浽�ڴ���
-      forward_page_temp[i++] = 0x58;    // pop eax������ѹ���ret_addr
+      // 接下来把ret_addr临时存到内存里
+      forward_page_temp[i++] = 0x58;    // pop eax，弹出压入的ret_addr
       // mov [forward_page + 0x1000 - 8], eax
       forward_page_temp[i++] = 0xa3;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 8;
       i += 4;
 
-      // mov eax, [forward_page + 0x1000 - 4]���ָ�eax
+      // mov eax, [forward_page + 0x1000 - 4]，恢复eax
       forward_page_temp[i++] = 0xa1;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
       i += 4;
 
-      // ��ִ��ǰ����esp
-      forward_page_temp[i++] = 0x5c;    // pop esp������ѹ���esp
+      // 在执行前设置esp
+      forward_page_temp[i++] = 0x5c;    // pop esp，弹出压入的esp
 
       if (exec_old_instr) {
-        // ִ��ԭָ��
+        // 执行原指令
         memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
         i += m_old_instr.size();
       }
 
-      // �ָ�ret_addr����
-      // mov [forward_page + 0x1000 - 4], eax�������ȱ���eax
+      // 恢复ret_addr环境
+      // mov [forward_page + 0x1000 - 4], 还是先保存eax
       forward_page_temp[i++] = 0xa3;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
       i += 4;
 
 
-      // mov eax, [forward_page + 0x1000 - 8]�������ret_addr
+      // mov eax, [forward_page + 0x1000 - 8]，保存的ret_addr
       forward_page_temp[i++] = 0xa1;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 8;
       i += 4;
       // push eax
       forward_page_temp[i++] = 0x50;
 
-      // mov eax, [forward_page + 0x1000 - 4]���ָ�eax
+      // mov eax, [forward_page + 0x1000 - 4]，恢复eax
       forward_page_temp[i++] = 0xa1;
       *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 - 4;
       i += 4;
 
 
-      // ת��ȥ����ִ��
+      // 转回去继续执行
       //forward_page[i++] = 0xe9;    // jmp 
       //*(uint32_t*)&forward_page[i] = GetJmpOffset(forward_page + i - 1, 5, (char*)hook_addr + instr_size);
       forward_page_temp[i++] = 0xc3;    // ret
 
-      // ΪĿ���ַ��hook
+      // 为目标地址挂hook
       jmp_instr[0] = 0xe9;    // jmp
       *(uint32_t*)&jmp_instr[1] = GetJmpOffset(hook_addr, 5, m_forward_page);
 
@@ -220,7 +220,7 @@ public:
 
       forward_page_temp[i++] = 0x54;    // push rsp
 
-      // ��ǰѹ��ת�ص�ַ���Ա�HookCallback�ܹ��޸�
+      // 提前压入转回地址，以便HookCallback能够修改
       forward_page_temp[i++] = 0x68;    // push low_addr
       *(uint32_t*)&forward_page_temp[i] = ((uint64_t)hook_addr + instr_size) & 0xffffffff;
       i += 4;
@@ -271,7 +271,7 @@ public:
       forward_page_temp[i++] = 0x9c;    // pushfq
 
 
-      // ��ѭx64����Լ����Ϊ��ǰ������ʹ����ǰ����ջ�ռ�
+      // 遵循x64调用约定，为当前函数的使用提前分配栈空间
       forward_page_temp[i++] = 0x48;    // sub rsp, 28
       forward_page_temp[i++] = 0x83;
       forward_page_temp[i++] = 0xec;
@@ -296,7 +296,7 @@ public:
       forward_page_temp[i++] = 0xff;    // call rax
       forward_page_temp[i++] = 0xd0;
 
-      // ����ջ�ռ�
+      // 传递参数
       forward_page_temp[i++] = 0x48;    // add rsp, 28
       forward_page_temp[i++] = 0x83;
       forward_page_temp[i++] = 0xc4;
@@ -330,53 +330,53 @@ public:
       forward_page_temp[i++] = 0x58;    // pop rax
 
 
-      forward_page_temp[i++] = 0x48;    // add esp, 8������forwardPage
+      forward_page_temp[i++] = 0x48;    // add esp, 跳过forwardPage
       forward_page_temp[i++] = 0x83;
       forward_page_temp[i++] = 0xc4;
       forward_page_temp[i++] = 0x08;
 
 
 
-      // ��ԭָ��ִ��ǰ��ԭ���л���������ѹ���retAddr
-      // Ҫ��rax���ȴ浽�ڴ���
+      // 在原指令执行前还原所有环境，包括压入的retAddr
+      // 要用rax，先存到内存里
       // mov [forward_page + 0x1000 - 8], rax
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa3;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
       i += 8;
 
-      // ��������retAddr�浽�ڴ���
-      forward_page_temp[i++] = 0x58;    // pop rax������ѹ���ret_addr
+      // 接下来把retAddr存到内存里
+      forward_page_temp[i++] = 0x58;    // pop rax，弹出压入的ret_addr
       // mov [forward_page + 0x1000 - 16], rax
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa3;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 16;
       i += 8;
 
-      // mov rax, [forward_page + 0x1000 - 8]���ָ�rax
+      // mov rax, [forward_page + 0x1000 - 8]，恢复rax
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa1;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
       i += 8;
 
-      // ��ִ��ǰ����rsp
-      forward_page_temp[i++] = 0x5c;    // pop rsp������ѹ���esp
+      // 在执行前设置rsp
+      forward_page_temp[i++] = 0x5c;    // pop rsp，弹出压入的esp
 
       if (exec_old_instr) {
-        // ִ��ԭָ��
+        // 执行原指令
         memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
         i += m_old_instr.size();
       }
 
 
-      // �ָ�ret_addr����
-      // mov [forward_page + 0x1000 - 8], rax�������ȱ���eax
+      // 恢复ret_addr环境
+      // mov [forward_page + 0x1000 - 8], rax，还是先保存rax
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa3;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
       i += 8;
 
-      // mov rax, [forward_page + 0x1000 - 16]�������ret_addr
+      // mov rax, [forward_page + 0x1000 - 16]，保存的ret_addr
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa1;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 16;
@@ -384,17 +384,17 @@ public:
       // push rax
       forward_page_temp[i++] = 0x50;
 
-      // mov rax, [forward_page + 0x1000 - 8]���ָ�eax
+      // mov rax, [forward_page + 0x1000 - 8]，恢复eax
       forward_page_temp[i++] = 0x48;
       forward_page_temp[i++] = 0xa1;
       *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 - 8;
       i += 8;
 
-      // ת��ȥ����ִ��
+      // 转回去继续执行
       forward_page_temp[i++] = 0xc3;    // ret
 
 
-      // ΪĿ���ַ��hook
+      // 为目标地址挂hook
       jmp_instr[0] = 0x68;    // push low_addr
       *(uint32_t*)&jmp_instr[1] = (uint64_t)forward_page_uint & 0xffffffff;
       jmp_instr[5] = 0xc7;    // mov dword ptr ss:[rsp+4], high_addr
@@ -414,7 +414,7 @@ public:
   }
 
   /*
-  * ж��Hook
+  * 卸载Hook
   */
   void Uninstall() {
     if (m_hook_addr) {
@@ -445,13 +445,13 @@ public:
 
 
 #define GET_KERNEL32_IMAGE_BASE { 0x64, 0xA1, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x0C, 0x8B, 0x40, 0x0C, 0x8B, 0x00, 0x8B, 0x00, 0x8B, 0x40, 0x18 }
-  /* ��λkernel32
-  mov eax, dword ptr fs : [30h]   ;ָ��PEB�ṹ
-  mov eax, dword ptr[eax + 0Ch]   ;ָ��LDR Ptr32 _PEB_LDR_DATA
-  mov eax, dword ptr[eax + 0Ch]   ;ָ��InLoadOrderModuleList _LIST_ENTRY
-  mov eax, dword ptr[eax]     ;�ƶ�_LIST_ENTRY
-  mov eax, dword ptr[eax]     ;ָ��Kernel32
-  mov eax, dword ptr[eax + 18h]   ;ָ��DllBase��ַ
+  /* 定位kernel32
+  mov eax, dword ptr fs : [30h]   ;ָ指向PEB结构
+  mov eax, dword ptr[eax + 0Ch]   ;ָ指向LDR Ptr32 _PEB_LDR_DATA
+  mov eax, dword ptr[eax + 0Ch]   ;指向InLoadOrderModuleList _LIST_ENTRY
+  mov eax, dword ptr[eax]     ;移动_LIST_ENTRY
+  mov eax, dword ptr[eax]     ;ָ指向Kernel32
+  mov eax, dword ptr[eax + 18h]   ;指向DllBase基址
   ;ret
   */
 

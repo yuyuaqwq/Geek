@@ -125,7 +125,12 @@ private:
 
 
   /*
-  * "48 &?? ?? 65*20 88"
+  * 将特征码字符串转换为Element
+  * 标准格式示例： "48 &?? ?? 65*20 88"
+  * &表示返回时的会以此字节为起始地址，加在字节前面即可，示例中即偏移为1
+  *	以最后一个&为准
+  * ??表示模糊匹配此字节
+  * *xx表示上一个字节的重复次数，示例就是重复0x65 20次，是十进制
   */
   size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
     bool first = true;
@@ -135,6 +140,7 @@ private:
     SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
     size_t total_length = 0;
 
+    // 遍历字符
     for (size_t i = 0; i < hex_string_data.length(); ++i) {
       unsigned char c = hex_string_data[i];
       bool validChar = true;
@@ -158,6 +164,7 @@ private:
           offset = total_length + temp_signature_element.length;
         }
         else if (c == '*' && i + 1 < hex_string_data.length()) {
+          // 如果*号后面还有字符，将其视作重复次数
           size_t countInt;
           unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
           if (countInt) {
@@ -172,15 +179,17 @@ private:
           }
             
         }
-
+        // 无效字符，不需要检测类型
         validChar = false;
         goto _PushChar;
       }
 
       if (oldType == SignatureElementType::kNone) {
+        // 如果旧类型未初始化，将新类型赋值给旧类型
         oldType = newType;
       }
 
+      // 旧字符类型和新字符类型不同时，需要添加新的匹配单元
       else if (oldType != newType) {
         temp_signature_element.type = oldType;
         total_length += temp_signature_element.length;
@@ -192,6 +201,7 @@ private:
       }
 
     _PushChar:
+      // 如果原先类型是精确匹配，则添加字符
       if (oldType == SignatureElementType::kWhole) {
         if (first && validChar) {
           sum = c << 4;
@@ -199,13 +209,15 @@ private:
         }
         else if (!first) {
           first = true;
+          // 如果是无效字符，说明调用者并未提供连续的两个有效字符，将修正第一个有效字符的值
           validChar ? sum += c : sum >>= 4;
           temp_signature_element.data.push_back(sum);
           ++temp_signature_element.length;
         }
-
+        // 最后一种情况就是，即未开始拼接字节，且是无效字符，直接无视即可
       }
 
+      // 模糊匹配，是第二个符号就直接递增长度
       else if (oldType == SignatureElementType::kVague) {
         if (first && validChar) {
           first = false;
@@ -218,6 +230,7 @@ private:
 
     }
 
+    // 如果有未完成的字符，则推入
     if (!first) {
       if (oldType == SignatureElementType::kWhole) {
         temp_signature_element.data.push_back(sum >> 4);
@@ -225,6 +238,7 @@ private:
       ++temp_signature_element.length;
     }
 
+    // 有匹配单元，推入
     if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
       temp_signature_element.type = oldType;
       total_length += temp_signature_element.length;
