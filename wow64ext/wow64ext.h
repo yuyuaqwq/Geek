@@ -474,6 +474,25 @@ struct _CONTEXT64
 
 typedef WOW64_CONTEXT _CONTEXT32;
 
+
+
+
+
+typedef struct _RTL_USER_PROCESS_PARAMETERS32 {
+  BYTE           Reserved1[16];
+  DWORD          Reserved2[10];
+  UNICODE_STRING32 ImagePathName;
+  UNICODE_STRING32 CommandLine;
+} RTL_USER_PROCESS_PARAMETERS32, * PRTL_USER_PROCESS_PARAMETERS32;
+
+typedef struct _RTL_USER_PROCESS_PARAMETERS64 {
+  BYTE           Reserved1[16];
+  LONG64          Reserved2[10];
+  UNICODE_STRING64 ImagePathName;
+  UNICODE_STRING64 CommandLine;
+} RTL_USER_PROCESS_PARAMETERS64, * PRTL_USER_PROCESS_PARAMETERS64;
+
+
 // Below defines for .ContextFlags field are taken from WinNT.h
 #ifndef CONTEXT_AMD64
 #define CONTEXT_AMD64 0x100000

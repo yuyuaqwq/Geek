@@ -9,6 +9,7 @@
 #ifndef WINNT
 #include <Windows.h>
 #include <tlhelp32.h>
+//#include <Winternl.h>
 #else
 #include <ntifs.h>
 #endif
@@ -406,6 +407,86 @@ public:
   }
 
     
+  /*
+  * Info
+  */
+  std::wstring GetCommandLineStr() {
+    typedef NTSTATUS(NTAPI* _NtQueryInformationProcess)(
+      HANDLE ProcessHandle,
+      DWORD ProcessInformationClass,
+      PVOID ProcessInformation,
+      DWORD ProcessInformationLength,
+      PDWORD ReturnLength
+      );
+    
+    if (IsX86()) {
+      UNICODE_STRING32 commandLine;
+      _NtQueryInformationProcess NtQuery = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess");
+      if (!NtQuery) {
+        return L"";
+      }
+
+      PROCESS_BASIC_INFORMATION32 pbi;
+      NTSTATUS isok = NtQuery(Get(), ProcessBasicInformation, &pbi, sizeof(RTL_USER_PROCESS_PARAMETERS32), NULL);
+      if (!NT_SUCCESS(isok)) {
+        return  L"";
+      }
+
+      PEB32 peb;
+      RTL_USER_PROCESS_PARAMETERS32 upps;
+      PRTL_USER_PROCESS_PARAMETERS32 rtlUserProcParamsAddress;
+      if (!ReadMemory((uint64_t)&(((PEB32*)(pbi.PebBaseAddress))->ProcessParameters), &rtlUserProcParamsAddress, sizeof(rtlUserProcParamsAddress))) {
+        return L"";
+      }
+
+      if (!ReadMemory((uint64_t)&(rtlUserProcParamsAddress->CommandLine), &commandLine, sizeof(commandLine))) {
+        return L"";
+      }
+
+      std::wstring buf(commandLine.Length, L' ');
+      if (!ReadMemory((uint64_t)commandLine.Buffer,
+        (void*)buf.data(), commandLine.Length)) {
+        return L"";
+      }
+      return buf;
+    }
+    else {
+
+      UNICODE_STRING64 commandLine;
+      PROCESS_BASIC_INFORMATION64 pbi;
+      HMODULE NtdllModule = GetModuleHandleA("ntdll.dll");
+      if (ms_wow64.Wow64Operation(Get())) {
+        pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
+        if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi, sizeof(pbi), NULL))) {
+          return L"";
+        }
+      }
+      else {
+        pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
+        if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi, sizeof(pbi), NULL))) {
+          return L"";
+        }
+      }
+
+      PEB64 peb;
+      RTL_USER_PROCESS_PARAMETERS64 upps;
+      PRTL_USER_PROCESS_PARAMETERS64 rtlUserProcParamsAddress;
+      if (!ReadMemory((uint64_t) & (((PEB64*)(pbi.PebBaseAddress))->ProcessParameters), &rtlUserProcParamsAddress, sizeof(rtlUserProcParamsAddress))) {
+        return L"";
+      }
+
+      if (!ReadMemory((uint64_t) & (rtlUserProcParamsAddress->CommandLine), &commandLine, sizeof(commandLine))) {
+        return L"";
+      }
+
+      std::wstring buf(commandLine.Length, L' ');
+      if (!ReadMemory((uint64_t)commandLine.Buffer,
+        (void*)buf.data(), commandLine.Length)) {
+        return L"";
+      }
+      return buf;
+    }
+  }
 
 
     
@@ -542,46 +623,63 @@ public:
   /*
   * Image
   */
-  static uint64_t LoadLibraryDefault(Process* process, const char* lib_name) {
-    if (process->IsCur()) {
-      return (uint64_t)LoadLibraryA(lib_name);
+  uint64_t LoadLibrary(const wchar_t* lib_name) {
+    if (IsCur()) {
+      return (uint64_t)::LoadLibraryW(lib_name);
     }
-    Module module;
-    if (process->FindModlueByModuleName(geek::String::AnsiToUtf16le(lib_name), &module)) {
+    auto module = FindModlueByModuleName(lib_name);
+    if (module.IsValid()) {
       return module.base;
     }
 
     uint64_t addr = NULL;
-    auto len = strlen(lib_name) + 1;
-    auto lib_name_buf = process->AllocMemory(len);
+    auto len = wcslen(lib_name) * 2 + 2;
+    auto lib_name_buf = AllocMemory(len);
 
     do {
       if (!lib_name_buf) {
         break;
       }
-      if (!process->WriteMemory(lib_name_buf, lib_name, len)) {
+      if (!WriteMemory(lib_name_buf, lib_name, len)) {
         break;
       }
-      auto thread = process->CreateThread((PTHREAD_START_ROUTINE)LoadLibraryA, (PVOID64)lib_name_buf);
+      auto thread = CreateThread((PTHREAD_START_ROUTINE)::LoadLibraryW, (PVOID64)lib_name_buf);
       if (thread.IsCur()) {
         break;
       }
       thread.WaitExit();
-      addr = thread.GetExitCode();
+      if (IsX86()) {
+        addr = thread.GetExitCode();
+      }
+      else {
+        std::wstring name = lib_name;
+        auto pos = name.rfind(L'\\');
+        if (pos == -1) {
+          pos = name.rfind(L'/');
+        }
+        if (pos != -1) {
+          name = name.substr(pos + 1);
+        }
+        auto inject_module = FindModlueByModuleName(name);
+        if (!inject_module.IsValid()) {
+          break;
+        }
+        addr = inject_module.base;
+      }
     } while (false);
     if (lib_name_buf) {
-      process->FreeMemory(lib_name_buf);
+      FreeMemory(lib_name_buf);
     }
     return addr;
   }
 
-  static void FreeLibraryDefault(Process* process, uint64_t module_base) {
-    if (process->IsCur()) {
-      FreeLibrary((HMODULE)module_base);
+  void FreeLibrary(uint64_t module_base) {
+    if (IsCur()) {
+      ::FreeLibrary((HMODULE)module_base);
       return;
     }
     do {
-      auto thread = process->CreateThread((PTHREAD_START_ROUTINE)FreeLibrary, (PVOID64)module_base);
+      auto thread = CreateThread((PTHREAD_START_ROUTINE)::FreeLibrary, (PVOID64)module_base);
       if (thread.IsCur()) {
         break;
       }
@@ -589,11 +687,12 @@ public:
     } while (false);
   }
 
-   uint64_t LoadLibraryFromImage(Image* image, Image::LoadLibraryFunc load_library_func, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+
+  uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
     if (IsX86() != image->IsPE32()) {
       return 0;
     }
-    auto image_base = AllocMemory(NULL, image->GetImageSize(), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    auto image_base = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     bool success = false;
     do {
       if (!image_base) {
@@ -602,89 +701,16 @@ public:
       if (!image->RepairRepositionTable((uint64_t)image_base)) {
         break;
       }
-      if (!image->RepairImportAddressTable(load_library_func, this, skip_not_loaded)) {
+      if (!RepairImportAddressTable(image, skip_not_loaded)) {
         break;
       }
       auto image_buf = image->SaveToImageBuf((uint64_t)image_base, zero_pe_header);
-      if (IsCur()) {
-        if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-          break;
-        }
-        image->ExecuteTls((uint64_t)image_base);
-        if (call_dll_entry) {
-          image->CallEntryPoint((uint64_t)image_base, init_parameter);
-        }
+      if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+        break;
       }
-      else {
-        uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-        if (image->IsPE32()) {
-          int offset = 0;
-          image_buf[offset++] = 0x68;    // push 0
-          *(uint32_t*)&image_buf[offset] = (uint32_t)init_parameter;
-          offset += 4;
-
-          image_buf[offset++] = 0x68;    // push DLL_PROCESS_ATTACH
-          *(uint32_t*)&image_buf[offset] = DLL_PROCESS_ATTACH;
-          offset += 4;
-
-          image_buf[offset++] = 0x68;    // push image_base
-          *(uint32_t*)&image_buf[offset] = (uint32_t)image_base;
-          offset += 4;
-
-          image_buf[offset++] = 0xb8;    // mov eax, entry_point
-          *(uint32_t*)&image_buf[offset] = (uint32_t)entry_point;
-          offset += 4;
-
-          image_buf[offset++] = 0xff;    // call eax
-          image_buf[offset++] = 0xd0;
-
-          image_buf[offset++] = 0xc2;    // ret 4
-          *(uint16_t*)&image_buf[offset] = 4;
-          offset += 2;
-        }
-        else {
-          int offset = 0;
-          image_buf[offset++] = 0x48;    // sub rsp, 28
-          image_buf[offset++] = 0x83;
-          image_buf[offset++] = 0xec;
-          image_buf[offset++] = 0x28;
-
-          image_buf[offset++] = 0x48;    // mov rcx, image_base
-          image_buf[offset++] = 0xb9;
-          *(uint64_t*)&image_buf[offset] = (uint64_t)image_base;
-          offset += 8;
-
-          image_buf[offset++] = 0x48;    // mov rdx, DLL_PROCESS_ATTACH
-          image_buf[offset++] = 0xc7;
-          image_buf[offset++] = 0xc2;
-          *(uint32_t*)&image_buf[offset] = 1;
-          offset += 4;
-
-          image_buf[offset++] = 0x49;    // mov r8, init_parameter
-          image_buf[offset++] = 0xb8;
-          *(uint64_t*)&image_buf[offset] = init_parameter;
-          offset += 8;
-
-
-          image_buf[offset++] = 0x48;    // mov rax, entry_point
-          image_buf[offset++] = 0xb8;
-          *(uint64_t*)&image_buf[offset] = entry_point;
-          offset += 8;
-
-          image_buf[offset++] = 0xff;    // call rax
-          image_buf[offset++] = 0xd0;
-
-          image_buf[offset++] = 0x48;    // add rsp, 28
-          image_buf[offset++] = 0x83;
-          image_buf[offset++] = 0xc4;
-          image_buf[offset++] = 0x28;
-
-          image_buf[offset++] = 0xc3;    // ret
-        }
-        if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-          break;
-        }
-        CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+      ExecuteTls(image, (uint64_t)image_base, &image_buf);
+      if (call_dll_entry) {
+        CallEntryPoint(image, (uint64_t)image_base, &image_buf, init_parameter);
       }
       success = true;
     } while (false);
@@ -695,7 +721,310 @@ public:
     return image_base;
   }
 
-  
+  Image LoadImageFromImageBase(uint64_t image_base) {
+    Image image;
+    if (IsCur()) {
+      image.LoadFromImageBuf((void*)image_base, image_base);
+    }
+    else {
+      auto module = FindModlueByModuleBase(image_base);
+      if (!module.IsValid()) return image;
+      image.LoadFromImageBuf(ReadMemory(image_base, module.size).data(), image_base);
+    }
+    return image;
+  }
+
+  /*
+  * library
+  */
+  uint64_t GetExportProcAddress(Image* image, const char* func_name) {
+    uint32_t export_rva;
+    if ((uintptr_t)func_name <= 0xffff) {
+      export_rva = image->GetExportRvaByOrdinal((uint16_t)func_name);
+    }
+    else {
+      export_rva = image->GetExportRvaByName(func_name);
+    }
+    // 可能返回一个字符串，需要二次加载
+    // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
+    uint64_t va = (uintptr_t)image->GetMemoryImageBase() + export_rva;
+    auto export_directory = (uintptr_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    auto export_directory_size = image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+    // 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
+    if (va > export_directory && va < export_directory + export_directory_size) {
+      std::string full_name = (char*)image->RvaToPoint(export_rva);
+      auto offset = full_name.find(".");
+      auto dll_name = full_name.substr(0, offset);
+      auto func_name = full_name.substr(offset + 1);
+      if (!dll_name.empty() && !func_name.empty()) {
+        auto image_base = LoadLibrary(geek::String::AnsiToUtf16le(dll_name).c_str());
+        auto import_image = LoadImageFromImageBase(image_base);
+        if (!import_image.IsValid()) return 0;
+        va = (uintptr_t)GetExportProcAddress(&import_image, func_name.c_str());
+      }
+    }
+    return va;
+  }
+
+private:
+  template<typename IMAGE_THUNK_DATA_T>
+  bool RepairImportAddressTableFromModule(Image* image, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, uint64_t import_image_base, bool skip_not_loaded) {
+    IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->OriginalFirstThunk);
+    IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->FirstThunk);
+    Image import_image;
+    if (import_image_base) {
+      import_image = LoadImageFromImageBase(import_image_base);
+      if (!import_image.IsValid()) {
+        return false;
+      }
+    }
+    else if (!skip_not_loaded) {
+      return false;
+    }
+    for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+      if (!import_image_base) {
+        import_address_table->u1.Function = import_address_table->u1.Function = 0x1234567887654321;
+        continue;
+      }
+      uint32_t export_rva;
+      if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
+        import_address_table->u1.Function = (uintptr_t)GetExportProcAddress(&import_image, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+      }
+      else {
+        IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)image->RvaToPoint(import_name_table->u1.AddressOfData);
+        import_address_table->u1.Function = (uintptr_t)GetExportProcAddress(&import_image, (char*)func_name->Name);
+      }
+      //import_address_table->u1.Function = import_module_base + export_rva;
+    }
+    return true;
+  }
+public:
+  bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false) {
+    auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+    if (import_descriptor == nullptr) {
+      return false;
+    }
+    for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+      char* import_module_name = (char*)image->RvaToPoint(import_descriptor->Name);
+      uint64_t import_module_base = LoadLibrary(geek::String::AnsiToUtf16le(import_module_name).c_str());
+      if (image->IsPE32()) {
+        if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA32>(image, import_descriptor, import_module_base, skip_not_loaded)) {
+          return false;
+        }
+      }
+      else {
+        if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA64>(image, import_descriptor, import_module_base, skip_not_loaded)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /*
+  * TLS
+  */
+private:
+  // PIMAGE_TLS_CALLBACK
+  typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK32)(uint32_t DllHandle, DWORD Reason, PVOID Reserved);
+  typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK64)(uint64_t DllHandle, DWORD Reason, PVOID Reserved);
+public:
+  bool ExecuteTls(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf) {
+    auto tls_dir = (IMAGE_TLS_DIRECTORY*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+    if (tls_dir == nullptr) {
+      return false;
+    }
+    PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
+    if (callback) {
+      while (*callback) {
+        if (IsCur()) {
+          if (image->IsPE32()) {
+            PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+            callback32((uint32_t)image_base, DLL_PROCESS_ATTACH, NULL);
+          }
+          else {
+            PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+            callback64(image_base, DLL_PROCESS_ATTACH, NULL);
+          }
+        }
+        else {
+          if (image->IsPE32()) {
+            PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+            int offset = 0;
+            (*image_buf)[offset++] = 0x68;    // push 0
+            *(uint32_t*)&(*image_buf)[offset] = 0;
+            offset += 4;
+
+            (*image_buf)[offset++] = 0x68;    // push DLL_PROCESS_ATTACH
+            *(uint32_t*)&(*image_buf)[offset] = DLL_PROCESS_ATTACH;
+            offset += 4;
+
+            (*image_buf)[offset++] = 0x68;    // push image_base
+            *(uint32_t*)&(*image_buf)[offset] = (uint32_t)image_base;
+            offset += 4;
+
+            (*image_buf)[offset++] = 0xb8;    // mov eax, entry_point
+            *(uint32_t*)&(*image_buf)[offset] = (uint32_t)callback32;
+            offset += 4;
+
+            (*image_buf)[offset++] = 0xff;    // call eax
+            (*image_buf)[offset++] = 0xd0;
+
+            (*image_buf)[offset++] = 0xc2;    // ret 4
+            *(uint16_t*)&(*image_buf)[offset] = 4;
+            offset += 2;
+          }
+          else {
+            PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+            int offset = 0;
+            (*image_buf)[offset++] = 0x48;    // sub rsp, 28
+            (*image_buf)[offset++] = 0x83;
+            (*image_buf)[offset++] = 0xec;
+            (*image_buf)[offset++] = 0x28;
+
+            (*image_buf)[offset++] = 0x48;    // mov rcx, image_base
+            (*image_buf)[offset++] = 0xb9;
+            *(uint64_t*)&(*image_buf)[offset] = (uint64_t)image_base;
+            offset += 8;
+
+            (*image_buf)[offset++] = 0x48;    // mov rdx, DLL_PROCESS_ATTACH
+            (*image_buf)[offset++] = 0xc7;
+            (*image_buf)[offset++] = 0xc2;
+            *(uint32_t*)&(*image_buf)[offset] = 1;
+            offset += 4;
+
+            (*image_buf)[offset++] = 0x49;    // mov r8, init_parameter
+            (*image_buf)[offset++] = 0xb8;
+            *(uint64_t*)&(*image_buf)[offset] = NULL;
+            offset += 8;
+
+
+            (*image_buf)[offset++] = 0x48;    // mov rax, entry_point
+            (*image_buf)[offset++] = 0xb8;
+            *(uint64_t*)&(*image_buf)[offset] = (uint64_t)callback64;
+            offset += 8;
+
+            (*image_buf)[offset++] = 0xff;    // call rax
+            (*image_buf)[offset++] = 0xd0;
+
+            (*image_buf)[offset++] = 0x48;    // add rsp, 28
+            (*image_buf)[offset++] = 0x83;
+            (*image_buf)[offset++] = 0xc4;
+            (*image_buf)[offset++] = 0x28;
+
+            (*image_buf)[offset++] = 0xc3;    // ret
+          }
+          if (!WriteMemory(image_base, image_buf->data(), 4096)) {
+            return false;
+          }
+          CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+        }
+        callback++;
+      }
+    }
+    return true;
+  }
+
+  /*
+  * Running
+  */
+private:
+  typedef BOOL(WINAPI* DllEntryProc32)(uint32_t hinstDLL, DWORD fdwReason, uint32_t lpReserved);
+  typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
+  typedef int (WINAPI* ExeEntryProc)(void);
+public:
+  bool CallEntryPoint(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf, uint64_t init_parameter = 0) {
+    if (IsCur()) {
+      uint32_t rva = image->GetEntryPoint();
+      if (image->m_file_header->Characteristics & IMAGE_FILE_DLL) {
+        if (image->IsPE32()) {
+          DllEntryProc32 DllEntry = (DllEntryProc32)(image_base + rva);
+          DllEntry((uint32_t)image_base, DLL_PROCESS_ATTACH, (uint32_t)init_parameter);
+        }
+        else {
+          DllEntryProc64 DllEntry = (DllEntryProc64)(image_base + rva);
+          DllEntry(image_base, DLL_PROCESS_ATTACH, init_parameter);
+        }
+      }
+      else {
+        ExeEntryProc ExeEntry = (ExeEntryProc)(LPVOID)(image_base + rva);
+        // exe不执行
+      }
+    }
+    else {
+      uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
+      if (image->IsPE32()) {
+        int offset = 0;
+        (*image_buf)[offset++] = 0x68;    // push 0
+        *(uint32_t*)&(*image_buf)[offset] = (uint32_t)init_parameter;
+        offset += 4;
+
+        (*image_buf)[offset++] = 0x68;    // push DLL_PROCESS_ATTACH
+        *(uint32_t*)&(*image_buf)[offset] = DLL_PROCESS_ATTACH;
+        offset += 4;
+
+        (*image_buf)[offset++] = 0x68;    // push image_base
+        *(uint32_t*)&(*image_buf)[offset] = (uint32_t)image_base;
+        offset += 4;
+
+        (*image_buf)[offset++] = 0xb8;    // mov eax, entry_point
+        *(uint32_t*)&(*image_buf)[offset] = (uint32_t)entry_point;
+        offset += 4;
+
+        (*image_buf)[offset++] = 0xff;    // call eax
+        (*image_buf)[offset++] = 0xd0;
+
+        (*image_buf)[offset++] = 0xc2;    // ret 4
+        *(uint16_t*)&(*image_buf)[offset] = 4;
+        offset += 2;
+      }
+      else {
+        int offset = 0;
+        (*image_buf)[offset++] = 0x48;    // sub rsp, 28
+        (*image_buf)[offset++] = 0x83;
+        (*image_buf)[offset++] = 0xec;
+        (*image_buf)[offset++] = 0x28;
+
+        (*image_buf)[offset++] = 0x48;    // mov rcx, image_base
+        (*image_buf)[offset++] = 0xb9;
+        *(uint64_t*)&(*image_buf)[offset] = (uint64_t)image_base;
+        offset += 8;
+
+        (*image_buf)[offset++] = 0x48;    // mov rdx, DLL_PROCESS_ATTACH
+        (*image_buf)[offset++] = 0xc7;
+        (*image_buf)[offset++] = 0xc2;
+        *(uint32_t*)&(*image_buf)[offset] = 1;
+        offset += 4;
+
+        (*image_buf)[offset++] = 0x49;    // mov r8, init_parameter
+        (*image_buf)[offset++] = 0xb8;
+        *(uint64_t*)&(*image_buf)[offset] = init_parameter;
+        offset += 8;
+
+
+        (*image_buf)[offset++] = 0x48;    // mov rax, entry_point
+        (*image_buf)[offset++] = 0xb8;
+        *(uint64_t*)&(*image_buf)[offset] = entry_point;
+        offset += 8;
+
+        (*image_buf)[offset++] = 0xff;    // call rax
+        (*image_buf)[offset++] = 0xd0;
+
+        (*image_buf)[offset++] = 0x48;    // add rsp, 28
+        (*image_buf)[offset++] = 0x83;
+        (*image_buf)[offset++] = 0xc4;
+        (*image_buf)[offset++] = 0x28;
+
+        (*image_buf)[offset++] = 0xc3;    // ret
+      }
+      if (!WriteMemory(image_base, image_buf->data(), 4096)) {
+        return false;
+      }
+      CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+    }
+  }
+
+
   /*
   * Module
   */
@@ -800,16 +1129,25 @@ public:
     return moduleList;
   }
 
-  bool FindModlueByModuleName(const std::wstring& name, Module* module = nullptr) {
+  Module FindModlueByModuleName(const std::wstring& name) {
     std::wstring find_name = geek::String::ToUppercase(name);
+    if (find_name == L"NTDLL") find_name += L".DLL";
     for (auto& it : EnumModuleListEx()) {
       auto base_name_up = geek::String::ToUppercase(it.base_name);
       if (base_name_up == find_name) {
-        if (module) *module = it;
-        return true;
+        return it;
       }
     }
-    return false;
+    return Module();
+  }
+
+  Module FindModlueByModuleBase(uint64_t base) {
+    for (auto& it : EnumModuleListEx()) {
+      if (it.base == base) {
+        return it;
+      }
+    }
+    return Module();
   }
 
   static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {

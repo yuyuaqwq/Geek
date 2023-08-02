@@ -29,7 +29,6 @@ public:
     *this = std::move(tUniqueHandle);
   }
   void operator=(UniqueHandle&& tUniqueHandle) noexcept {
-    Close();
     m_handle = tUniqueHandle.m_handle;
     tUniqueHandle.m_handle = INVALID_HANDLE_VALUE;
   }

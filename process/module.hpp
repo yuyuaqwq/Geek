@@ -36,6 +36,10 @@ public:
 
   }
 
+  bool IsValid() {
+    return size != 0;
+  }
+
   uint64_t entry_point;
   uint64_t base;
   uint32_t size;
