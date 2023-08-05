@@ -279,7 +279,7 @@ public:
 
 
 
-      // ���ݲ���
+      // 传递参数
       forward_page_temp[i++] = 0x48;    // lea rcx, [rsp+20]
       forward_page_temp[i++] = 0x8d;
       forward_page_temp[i++] = 0x4c;
