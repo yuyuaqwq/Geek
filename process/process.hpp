@@ -804,7 +804,8 @@ public:
     if (import_descriptor == nullptr) {
       return false;
     }
-    for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+    for (; import_descriptor->FirstThunk; import_descriptor++) {
+      if(import_descriptor->OriginalFirstThunk == NULL) import_descriptor->OriginalFirstThunk = import_descriptor->FirstThunk;
       char* import_module_name = (char*)image->RvaToPoint(import_descriptor->Name);
       uint64_t import_module_base = LoadLibrary(geek::String::AnsiToUtf16le(import_module_name).c_str());
       if (image->IsPE32()) {
