@@ -225,6 +225,26 @@ public:
         }
         return temp;
     }
+
+    static std::string ToHexString(const void* buf, size_t size) {
+        uint8_t* buf_ = (uint8_t*)buf;
+        std::string str;
+        for (size_t i = 0; i < size; i++) {
+            uint8_t high = buf_[i] >> 4;
+            if (high <= 9) high += '0';
+            else high += 'a' - 10;
+
+            uint8_t low = buf_[i] & 0xf;
+            if (low <= 9) low += '0';
+            else low += 'a' - 10;
+            str.push_back((char)high);
+            str.push_back((char)low);
+            str.push_back(' ');
+        }
+        str.pop_back();
+        return str;
+    }
+
 };
 
 } // namespace Geek

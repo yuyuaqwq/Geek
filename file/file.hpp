@@ -154,7 +154,7 @@ public:
         return true;
     }
 
-    static std::wstring ExpandSysEnvsByName(const WCHAR* envsName) {
+    static std::wstring ExpandSysEnvsByName(const std::wstring& envsName) {
         HANDLE hToken = nullptr;
         HANDLE hProcessSnap = nullptr;
         PROCESSENTRY32 pe32 = { 0 };
@@ -178,7 +178,7 @@ public:
         } while (Process32NextW(hProcessSnap, &pe32));
 
         WCHAR szEnvsPath[MAX_PATH] = { 0 };
-        if (!ExpandEnvironmentStringsForUserW(hToken, envsName, szEnvsPath, MAX_PATH)) {
+        if (!ExpandEnvironmentStringsForUserW(hToken, envsName.c_str(), szEnvsPath, MAX_PATH)) {
             return L"";
         }
         return szEnvsPath;
@@ -339,10 +339,10 @@ public:
         return RemoveDirectoryW(pstrFolder.c_str()) == TRUE;
     }
 
-    static std::vector<char> ReadFile(const wchar_t* pFilePath, size_t size = -1) {
+    static std::vector<uint8_t> ReadFile(const wchar_t* pFilePath, size_t size = -1) {
         FILE* fp = NULL;
         errno_t err = _wfopen_s(&fp, pFilePath, L"rb");
-        std::vector<char> buf;
+        std::vector<uint8_t> buf;
         if (fp) {
             if (size == -1) {
                 fseek(fp, 0L, SEEK_END);
@@ -358,7 +358,7 @@ public:
         return buf;
     }
 
-    static bool WriteFile(const wchar_t* pFilePath, const char* lpBuff, int nLen, const wchar_t* mode = L"wb") {
+    static bool WriteFile(const wchar_t* pFilePath, const uint8_t* lpBuff, int nLen, const wchar_t* mode = L"wb") {
         bool bRet = false;
         FILE* fp = NULL;
         errno_t err = _wfopen_s(&fp, pFilePath, mode);
