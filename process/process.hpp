@@ -1213,16 +1213,16 @@ public:
             return moduleList;
         }
 
-        MODULEENTRY32 mi = { 0 };
-        mi.dwSize = sizeof(MODULEENTRY32);
-        BOOL bRet = Module32First(hSnapshot, &mi);
+        MODULEENTRY32W mi = { 0 };
+        mi.dwSize = sizeof(MODULEENTRY32W);
+        BOOL bRet = Module32FirstW(hSnapshot, &mi);
         do {
             if (bRet == false) {
                 break;
             }
             do {
                 moduleList.push_back(mi);
-                bRet = Module32Next(hSnapshot, &mi);
+                bRet = Module32NextW(hSnapshot, &mi);
             } while (bRet);
         } while (false);
 

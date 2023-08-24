@@ -105,6 +105,7 @@ public:
     * 实现接管：
         * 在函数起始hook
         * callback中 context->esp += 4 / context->rsp += 8;	// 跳过外部call到该函数的返回地址
+            * 注：x86下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要。
         * callback中指定 ret_addr = stack[0];      // 直接返回到调用被hook函数的调用处
         * callback中返回false      // 不执行原指令
         *

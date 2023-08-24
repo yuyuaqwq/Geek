@@ -83,7 +83,7 @@ public:
         if (findDir[findDir.size() - 1] != L'\\') {
             findDir.push_back(L'\\');
         }
-        WIN32_FIND_DATA FindFileData;
+        WIN32_FIND_DATAW FindFileData;
         HANDLE hFind = FindFirstFileW((findDir + fileNameFilter).c_str(), &FindFileData);
         if (INVALID_HANDLE_VALUE == hFind) {
             return out;
@@ -125,7 +125,7 @@ public:
         if (copyPath.at(copyPath.size() - 1) == L'\\') {
             copyPath.pop_back();
         }
-        WIN32_FIND_DATA FindFileData;
+        WIN32_FIND_DATAW FindFileData;
         HANDLE hFind = FindFirstFileW(copyPath.c_str(), &FindFileData);
         if (INVALID_HANDLE_VALUE == hFind) {
             return false;
@@ -135,7 +135,7 @@ public:
     }
 
     static bool IsFile(const std::wstring& filePath) {
-        WIN32_FIND_DATA FindFileData;
+        WIN32_FIND_DATAW FindFileData;
         HANDLE hFind = FindFirstFileW(filePath.c_str(), &FindFileData);
         if (INVALID_HANDLE_VALUE == hFind) {
             return false;
@@ -145,7 +145,7 @@ public:
     }
 
     static bool FileExists(const std::wstring& filePath) {
-        WIN32_FIND_DATA FindFileData;
+        WIN32_FIND_DATAW FindFileData;
         HANDLE hFind = FindFirstFileW(filePath.c_str(), &FindFileData);
         if (INVALID_HANDLE_VALUE == hFind) {
             return false;
@@ -157,8 +157,8 @@ public:
     static std::wstring ExpandSysEnvsByName(const std::wstring& envsName) {
         HANDLE hToken = nullptr;
         HANDLE hProcessSnap = nullptr;
-        PROCESSENTRY32 pe32 = { 0 };
-        pe32.dwSize = sizeof(PROCESSENTRY32);
+        PROCESSENTRY32W pe32 = { 0 };
+        pe32.dwSize = sizeof(PROCESSENTRY32W);
 
         hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (INVALID_HANDLE_VALUE == hProcessSnap)
@@ -266,7 +266,7 @@ public:
 
         /* 打开文件查找，查看源目录中是否存在匹配的文件 */
         /* 调用FindFile后，必须调用FindNextFile才能获得查找文件的信息 */
-        WIN32_FIND_DATA wfd;
+        WIN32_FIND_DATAW wfd;
         HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
         if (hFind == INVALID_HANDLE_VALUE) {
             return false;
@@ -312,7 +312,7 @@ public:
 
         /* 打开文件查找，查看源目录中是否存在匹配的文件 */
         /* 调用FindFile后，必须调用FindNextFile才能获得查找文件的信息 */
-        WIN32_FIND_DATA wfd;
+        WIN32_FIND_DATAW wfd;
         HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
         if (hFind == INVALID_HANDLE_VALUE) {
             return false;
