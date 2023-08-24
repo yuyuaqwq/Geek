@@ -20,6 +20,11 @@ public:
         kAmd64,
     };
 
+    enum class Mode {
+        kNormal,
+        kTakeOver,
+    };
+
     struct HookContextX86 {
         uint32_t eflags;
         uint32_t edi;
@@ -38,12 +43,13 @@ public:
         uint32_t stack[];
     };
     struct HookContextAmd64 {
-        const uint64_t* stack;
+        uint64_t* const stack;
         uint64_t rsp;
         uint64_t ret_addr;
         uint64_t forward_page_base;
         uint64_t hook_addr;
-        uint64_t reserve[11];
+        uint64_t old_stack_top;     // pop
+        uint64_t reserve[10];
 
         uint64_t rax;
         uint64_t rcx;
@@ -73,6 +79,8 @@ public:
         uint64_t thread_id_lock;
     };
     
+    
+
     typedef bool (*HookCallbackX86)(HookContextX86* context, HookContextForwardInfoX86* forward_info);
     typedef bool (*HookCallbackAmd64)(HookContextAmd64* context, HookContextForwardInfoAmd64* forward_info);
 
@@ -103,11 +111,17 @@ public:
         * 默认情况下ret_addr是指向被hook处的下一行指令
         * push和pop顺序为    push esp -> push ret_addr -> push xxx    call    pop xxx -> pop&save ret_addr -> pop esp -> 是否执行原指令 -> get&push ret_addr -> ret
     * 
+    * 若pop_stack_top为true
+        * 在调用回调时不会有额外栈帧，可以用于需要输出栈回溯的场景
+        * 会在调用回调前将当前栈顶的值pop到context->old_stack_top
+        * 而context->stack[0]会存储回调函数返回的地址
+    * 
     * 实现接管：
         * 在函数起始hook
+        * pop_stack_top = true
         * callback中 context->esp += 4 / context->rsp += 8;	// 跳过外部call到该函数的返回地址
             * 注：x86下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要。
-        * callback中指定 ret_addr = stack[0];      // 直接返回到调用被hook函数的调用处
+        * callback中指定 ret_addr = context->old_stack_top;      // 直接返回到调用被hook函数的调用处
         * callback中返回false      // 不执行原指令
         *
     * 实现监视：
@@ -122,7 +136,7 @@ public:
     * Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
     */
 
-    bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, Architecture arch = Architecture::kCurrentRunning, 
+    bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, bool pop_stack_top = false, Architecture arch = Architecture::kCurrentRunning,
         uint64_t forward_page_size = 0x2000
     ) {
         if (instr_size > 255) {
@@ -381,296 +395,290 @@ public:
 
             int i = 0;
 
-            // GetCurrentThreadId
-            // 首先获取线程id锁保证线程安全且简单支持嵌套重入
-            forward_page_temp[i++] = 0x50;        // push rax
-            forward_page_temp[i++] = 0x51;        // push rcx
-            forward_page_temp[i++] = 0x52;        // push rdx
-            forward_page_temp[i++] = 0x9c;        // pushfq
+            {
+                // GetCurrentThreadId
+                // 首先获取线程id锁保证线程安全且简单支持嵌套重入
+                forward_page_temp[i++] = 0x50;        // push rax
+                forward_page_temp[i++] = 0x51;        // push rcx
+                forward_page_temp[i++] = 0x52;        // push rdx
+                forward_page_temp[i++] = 0x9c;        // pushfq
 
 
-            // GetCurrentThreadId
-            // mov rax, qword ptr gs:[48h]
-            forward_page_temp[i++] = 0x65;
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x04;
-            forward_page_temp[i++] = 0x25;
-            *(uint32_t*)&forward_page[i] = 0x48;
-            i += 4;
+                // GetCurrentThreadId
+                // mov rax, qword ptr gs:[48h]
+                forward_page_temp[i++] = 0x65;
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x04;
+                forward_page_temp[i++] = 0x25;
+                *(uint32_t*)&forward_page[i] = 0x48;
+                i += 4;
 
 
-            // mov rdx, forward_page_uint + 0xc00
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xba;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xc00;
-            i += 8;
+                // mov rdx, forward_page_uint + 0xc00
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xba;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xc00;
+                i += 8;
 
-            // 直接检查是否嵌套重入，是则是从callback再次回调到当前函数的，直接执行原函数流程
-            // cmp rax, [rdx]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x3b;
-            forward_page_temp[i++] = 0x02;
+                // 直接检查是否嵌套重入，是则是从callback再次回调到当前函数的，直接执行原函数流程
+                // cmp rax, [rdx]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x3b;
+                forward_page_temp[i++] = 0x02;
 
-            // jne _retry
-            forward_page_temp[i++] = 0x75;
-            forward_page_temp[i++] = 4 + m_old_instr.size() + 14;      // 跳过原指令执行
+                // jne _retry
+                forward_page_temp[i++] = 0x75;
+                forward_page_temp[i++] = 4 + m_old_instr.size() + 14;      // 跳过原指令执行
 
-            forward_page_temp[i++] = 0x9d;        // popfq
-            forward_page_temp[i++] = 0x5a;        // pop rdx
-            forward_page_temp[i++] = 0x59;        // pop rcx
-            forward_page_temp[i++] = 0x58;        // pop rax
+                forward_page_temp[i++] = 0x9d;        // popfq
+                forward_page_temp[i++] = 0x5a;        // pop rdx
+                forward_page_temp[i++] = 0x59;        // pop rcx
+                forward_page_temp[i++] = 0x58;        // pop rax
 
-            memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-            i += m_old_instr.size();
+                memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
+                i += m_old_instr.size();
 
-            // 跳回原函数正常执行
-            i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
-
-
-
-            // 抢占锁，ecx保持为当前线程id
-            // mov rcx, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xc1;
-
-        // _retry:
-            // xor eax, eax
-            forward_page_temp[i++] = 0x31;
-            forward_page_temp[i++] = 0xc0;
-
-
-            // lock cmpxchg qword ptr ds:[rdx], rcx
-            forward_page_temp[i++] = 0xf0;
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x0f;
-            forward_page_temp[i++] = 0xb1;
-            forward_page_temp[i++] = 0x0a;
-            
-
-            // 上锁成功，直接继续
-            // je _end
-            forward_page_temp[i++] = 0x74;
-            forward_page_temp[i++] = 0x02;      // +2
-
-            // jmp _retry
-            forward_page_temp[i++] = 0xeb;
-            forward_page_temp[i++] = 0xf5;      // -11
-
-        // _end:
-            forward_page_temp[i++] = 0x9d;        // popfd
-            forward_page_temp[i++] = 0x5a;        // pop rdx
-            forward_page_temp[i++] = 0x59;        // pop ecx
-            forward_page_temp[i++] = 0x58;        // pop eax
+                // 跳回原函数正常执行
+                i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
 
 
 
+                // 抢占锁，ecx保持为当前线程id
+                // mov rcx, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xc1;
 
-            
-            forward_page_temp[i++] = 0x50;        // push rax
-            forward_page_temp[i++] = 0x51;        // push rcx
-
-            // mov rax, forward_page + 0x1000
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xb8;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000;
-            i += 8;
-            // mov rcx, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xc1;
+                // _retry:
+                    // xor eax, eax
+                forward_page_temp[i++] = 0x31;
+                forward_page_temp[i++] = 0xc0;
 
 
-            // 压入原stack，跳过前面push的rax和rcx
-            // lea rax, [rsp+0x10]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8d;
-            forward_page_temp[i++] = 0x44;
-            forward_page_temp[i++] = 0x24;
-            forward_page_temp[i++] = 0x10;
-            // mov [rcx], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x01;
+                // lock cmpxchg qword ptr ds:[rdx], rcx
+                forward_page_temp[i++] = 0xf0;
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x0f;
+                forward_page_temp[i++] = 0xb1;
+                forward_page_temp[i++] = 0x0a;
 
 
-            // 实际上是压入rsp
-            // mov [rcx+8], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x41;
-            forward_page_temp[i++] = 0x08;
+                // 上锁成功，直接继续
+                // je _end
+                forward_page_temp[i++] = 0x74;
+                forward_page_temp[i++] = 0x02;      // +2
+
+                // jmp _retry
+                forward_page_temp[i++] = 0xeb;
+                forward_page_temp[i++] = 0xf5;      // -11
+
+                // _end:
+                forward_page_temp[i++] = 0x9d;        // popfd
+                forward_page_temp[i++] = 0x5a;        // pop rdx
+                forward_page_temp[i++] = 0x59;        // pop ecx
+                forward_page_temp[i++] = 0x58;        // pop eax
+            }
+
+            // 保存上下文环境
+            {
+                forward_page_temp[i++] = 0x50;        // push rax
+                forward_page_temp[i++] = 0x51;        // push rcx
+
+                // mov rax, forward_page + 0x1000
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xb8;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000;
+                i += 8;
+                // mov rcx, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xc1;
 
 
-            // 提前压入转回地址，以便HookCallback能够修改
-            // mov rax, hook_addr + instr_size
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xb8;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr + instr_size;
-            i += 8;
-            // mov [rcx+0x10], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x41;
-            forward_page_temp[i++] = 0x10;
+                // 压入原stack，跳过前面push的rax和rcx
+                // lea rax, [rsp+0x10]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8d;
+                forward_page_temp[i++] = 0x44;
+                forward_page_temp[i++] = 0x24;
+                forward_page_temp[i++] = 0x10;
+                // mov [rcx], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x01;
+
+                // 实际上是压入rsp
+                // mov [rcx+8], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x08;
+
+                // 提前压入转回地址，以便HookCallback能够修改
+                // mov rax, hook_addr + instr_size
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xb8;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr + instr_size;
+                i += 8;
+                // mov [rcx+0x10], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x10;
+
+                // mov rax, forward_page
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xb8;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint;
+                i += 8;
+                // mov [rcx+0x18], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x18;
+
+                // mov rax, hook_addr
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xb8;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr;
+                i += 8;
+                // mov [rcx+0x20], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x20;
+
+                // pop rax      // 这里其实是rcx
+                forward_page_temp[i++] = 0x58;
+                // mov [rcx+0x88], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0x88;
+                i += 4;
+
+                // pop rax
+                forward_page_temp[i++] = 0x58;
+                // mov [rcx+0x80], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0x80;
+                i += 4;
 
 
-            // mov rax, forward_page
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xb8;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint;
-            i += 8;
-            // mov [rcx+0x18], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x41;
-            forward_page_temp[i++] = 0x18;
+                // mov [rcx+0x90], rdx
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x91;
+                *(uint32_t*)&forward_page_temp[i] = 0x90;
+                i += 4;
 
 
-            // mov rax, hook_addr
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xb8;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr;
-            i += 8;
-            // mov [rcx+0x20], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x41;
-            forward_page_temp[i++] = 0x20;
+                // mov [rcx+0x98], rbx
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x99;
+                *(uint32_t*)&forward_page_temp[i] = 0x98;
+                i += 4;
 
 
-            // pop rax      // 这里其实是rcx
-            forward_page_temp[i++] = 0x58;
-            // mov [rcx+0x88], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0x88;
-            i += 4;
+                // mov [rcx+0xa0], rsp
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xa1;
+                *(uint32_t*)&forward_page_temp[i] = 0xa0;
+                i += 4;
 
 
-            // pop rax
-            forward_page_temp[i++] = 0x58;
-            // mov [rcx+0x80], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0x80;
-            i += 4;
+                // mov [rcx+0xa8], rbp
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xa9;
+                *(uint32_t*)&forward_page_temp[i] = 0xa8;
+                i += 4;
+
+                // mov [rcx+0xb0], rsi
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xb1;
+                *(uint32_t*)&forward_page_temp[i] = 0xb0;
+                i += 4;
+
+                // mov [rcx+0xb8], rdi
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = 0xb8;
+                i += 4;
 
 
-            // mov [rcx+0x90], rdx
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x91;
-            *(uint32_t*)&forward_page_temp[i] = 0x90;
-            i += 4;
+                // mov [rcx+0xc0], r8
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0xc0;
+                i += 4;
 
+                // mov [rcx+0xc8], r9
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x89;
+                *(uint32_t*)&forward_page_temp[i] = 0xc8;
+                i += 4;
 
-            // mov [rcx+0x98], rbx
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x99;
-            *(uint32_t*)&forward_page_temp[i] = 0x98;
-            i += 4;
+                // mov [rcx+0xd0], r10
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x91;
+                *(uint32_t*)&forward_page_temp[i] = 0xd0;
+                i += 4;
 
+                // mov [rcx+0xd8], r11
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x99;
+                *(uint32_t*)&forward_page_temp[i] = 0xd8;
+                i += 4;
 
-            // mov [rcx+0xa0], rsp
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xa1;
-            *(uint32_t*)&forward_page_temp[i] = 0xa0;
-            i += 4;
+                // mov [rcx+0xe0], r12
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xa1;
+                *(uint32_t*)&forward_page_temp[i] = 0xe0;
+                i += 4;
 
+                // mov [rcx+0xe8], r13
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xa9;
+                *(uint32_t*)&forward_page_temp[i] = 0xe8;
+                i += 4;
 
-            // mov [rcx+0xa8], rbp
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xa9;
-            *(uint32_t*)&forward_page_temp[i] = 0xa8;
-            i += 4;
+                // mov [rcx+0xf0], r14
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xb1;
+                *(uint32_t*)&forward_page_temp[i] = 0xf0;
+                i += 4;
 
-            // mov [rcx+0xb0], rsi
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xb1;
-            *(uint32_t*)&forward_page_temp[i] = 0xb0;
-            i += 4;
+                // mov [rcx+0xf8], r15
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = 0xf8;
+                i += 4;
 
-            // mov [rcx+0xb8], rdi
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xb9;
-            *(uint32_t*)&forward_page_temp[i] = 0xb8;
-            i += 4;
-
-
-            // mov [rcx+0xc0], r8
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0xc0;
-            i += 4;
-
-            // mov [rcx+0xc8], r9
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x89;
-            *(uint32_t*)&forward_page_temp[i] = 0xc8;
-            i += 4;
-
-            // mov [rcx+0xd0], r10
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x91;
-            *(uint32_t*)&forward_page_temp[i] = 0xd0;
-            i += 4;
-
-            // mov [rcx+0xd8], r11
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x99;
-            *(uint32_t*)&forward_page_temp[i] = 0xd8;
-            i += 4;
-
-            // mov [rcx+0xe0], r12
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xa1;
-            *(uint32_t*)&forward_page_temp[i] = 0xe0;
-            i += 4;
-
-            // mov [rcx+0xe8], r13
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xa9;
-            *(uint32_t*)&forward_page_temp[i] = 0xe8;
-            i += 4;
-
-            // mov [rcx+0xf0], r14
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xb1;
-            *(uint32_t*)&forward_page_temp[i] = 0xf0;
-            i += 4;
-
-            // mov [rcx+0xf8], r15
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xb9;
-            *(uint32_t*)&forward_page_temp[i] = 0xf8;
-            i += 4;
-
-            forward_page_temp[i++] = 0x9c;        // pushfq
-            forward_page_temp[i++] = 0x58;        // pop rax
-            // mov [rcx+0x100], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0x100;
-            i += 4;
-
+                forward_page_temp[i++] = 0x9c;        // pushfq
+                forward_page_temp[i++] = 0x58;        // pop rax
+                // mov [rcx+0x100], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0x100;
+                i += 4;
+            }
 
             // 遵循x64调用约定，为当前函数的使用提前分配栈空间
             // 因为栈上没有放东西，可以不构建这个
@@ -679,32 +687,45 @@ public:
             //forward_page_temp[i++] = 0xec;
             //forward_page_temp[i++] = 0x20;
 
-            // 参数即rcx
+            // 参数即rcx，在保存上下文时已经设置了
+
+            if (pop_stack_top) {
+                // pop rax
+                forward_page_temp[i++] = 0x58;
+                // 保存旧栈顶
+                // mov [forward_page + 0x1000 + 0x28], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa3;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x28;
+                i += 8;
+            }
 
             // 强制使栈16字节对齐
-            // mov rax, rsp
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xe0;
+            {
+                // mov rax, rsp
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xe0;
 
-            // and rax, 0x8
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x83;
-            forward_page_temp[i++] = 0xe0;
-            forward_page_temp[i++] = 0x08;
+                // and rax, 0x8
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x83;
+                forward_page_temp[i++] = 0xe0;
+                forward_page_temp[i++] = 0x08;
 
-            // sub rsp, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x29;
-            forward_page_temp[i++] = 0xc4;
+                // sub rsp, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x29;
+                forward_page_temp[i++] = 0xc4;
 
 
-            // 把对齐值保存起来
-            // mov [forward_page + 0xd00 + 0x18], rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xa3;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
-            i += 8;
+                // 把对齐值保存起来
+                // mov [forward_page + 0xd00 + 0x18], rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa3;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
+                i += 8;
+            }
 
 
 
@@ -713,6 +734,9 @@ public:
             forward_page_temp[i++] = 0xb8;
             *(uint64_t*)&forward_page_temp[i] = (uint64_t)callback;
             i += 8;
+            // jmp rax
+            //forward_page_temp[i++] = 0xff;
+            //forward_page_temp[i++] = 0xe0;
             // call rax
             forward_page_temp[i++] = 0xff;
             forward_page_temp[i++] = 0xd0;
@@ -726,15 +750,17 @@ public:
 
 
             // 恢复栈对齐
-            // mov rax, [forward_page + 0xd00 + 0x18]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xa1;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
-            i += 8;
-            // add rsp, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x01;
-            forward_page_temp[i++] = 0xc4;
+            {
+                // mov rax, [forward_page + 0xd00 + 0x18]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa1;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
+                i += 8;
+                // add rsp, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x01;
+                forward_page_temp[i++] = 0xc4;
+            }
 
 
         // _recovery_stack:
@@ -746,143 +772,143 @@ public:
 
 
             // 恢复上下文环境
+            {
+                // mov rax, forward_page + 0x1000
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xb8;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000;
+                i += 8;
+                // mov rcx, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xc1;
 
-            // mov rax, forward_page + 0x1000
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xb8;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000;
-            i += 8;
-            // mov rcx, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xc1;
-
-            // mov rax, [rcx + 0x100]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0x100;
-            i += 4;
-            forward_page_temp[i++] = 0x50;        // push rax
-            forward_page_temp[i++] = 0x9d;        // popfq
-
-
-            // mov rdx, [rcx + 0x90]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x91;
-            *(uint32_t*)&forward_page_temp[i] = 0x90;
-            i += 4;
-
-            // mov rbx, [rcx + 0x98]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x99;
-            *(uint32_t*)&forward_page_temp[i] = 0x98;
-            i += 4;
-
-            // mov rsp, [rcx + 0xa0]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xa1;
-            *(uint32_t*)&forward_page_temp[i] = 0xa0;
-            i += 4;
-
-            // mov rbp, [rcx + 0xa8]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xa9;
-            *(uint32_t*)&forward_page_temp[i] = 0xa8;
-            i += 4;
-
-            // mov rsi, [rcx + 0xb0]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xb1;
-            *(uint32_t*)&forward_page_temp[i] = 0xb0;
-            i += 4;
-
-            // mov rdi, [rcx + 0xb8]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xb9;
-            *(uint32_t*)&forward_page_temp[i] = 0xb8;
-            i += 4;
+                // mov rax, [rcx + 0x100]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0x100;
+                i += 4;
+                forward_page_temp[i++] = 0x50;        // push rax
+                forward_page_temp[i++] = 0x9d;        // popfq
 
 
-            // mov r8, [rcx + 0xc0]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x81;
-            *(uint32_t*)&forward_page_temp[i] = 0xc0;
-            i += 4;
+                // mov rdx, [rcx + 0x90]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x91;
+                *(uint32_t*)&forward_page_temp[i] = 0x90;
+                i += 4;
 
-            // mov r9, [rcx + 0xc8]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x89;
-            *(uint32_t*)&forward_page_temp[i] = 0xc8;
-            i += 4;
+                // mov rbx, [rcx + 0x98]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x99;
+                *(uint32_t*)&forward_page_temp[i] = 0x98;
+                i += 4;
 
-            // mov r10, [rcx + 0xd0]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x91;
-            *(uint32_t*)&forward_page_temp[i] = 0xd0;
-            i += 4;
+                // mov rsp, [rcx + 0xa0]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xa1;
+                *(uint32_t*)&forward_page_temp[i] = 0xa0;
+                i += 4;
 
-            // mov r11, [rcx + 0xd8]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0x99;
-            *(uint32_t*)&forward_page_temp[i] = 0xd8;
-            i += 4;
+                // mov rbp, [rcx + 0xa8]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xa9;
+                *(uint32_t*)&forward_page_temp[i] = 0xa8;
+                i += 4;
 
-            // mov r12, [rcx + 0xe0]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xa1;
-            *(uint32_t*)&forward_page_temp[i] = 0xe0;
-            i += 4;
+                // mov rsi, [rcx + 0xb0]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xb1;
+                *(uint32_t*)&forward_page_temp[i] = 0xb0;
+                i += 4;
 
-            // mov r13, [rcx + 0xe8]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xa9;
-            *(uint32_t*)&forward_page_temp[i] = 0xe8;
-            i += 4;
-
-            // mov r14, [rcx + 0xf0]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xb1;
-            *(uint32_t*)&forward_page_temp[i] = 0xf0;
-            i += 4;
-
-            // mov r15, [rcx + 0xf8]
-            forward_page_temp[i++] = 0x4c;
-            forward_page_temp[i++] = 0x8b;
-            forward_page_temp[i++] = 0xb9;
-            *(uint32_t*)&forward_page_temp[i] = 0xf8;
-            i += 4;
+                // mov rdi, [rcx + 0xb8]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = 0xb8;
+                i += 4;
 
 
-            // mov rax, [forward_page + 0x1000 + 0x88]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xa1;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x88;
-            i += 8;
-            // mov rcx, rax
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xc1;
+                // mov r8, [rcx + 0xc0]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x81;
+                *(uint32_t*)&forward_page_temp[i] = 0xc0;
+                i += 4;
 
-            // mov rax, [forward_page + 0x1000 + 0x80]
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xa1;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x80;
-            i += 8;
+                // mov r9, [rcx + 0xc8]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x89;
+                *(uint32_t*)&forward_page_temp[i] = 0xc8;
+                i += 4;
 
+                // mov r10, [rcx + 0xd0]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x91;
+                *(uint32_t*)&forward_page_temp[i] = 0xd0;
+                i += 4;
+
+                // mov r11, [rcx + 0xd8]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x99;
+                *(uint32_t*)&forward_page_temp[i] = 0xd8;
+                i += 4;
+
+                // mov r12, [rcx + 0xe0]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xa1;
+                *(uint32_t*)&forward_page_temp[i] = 0xe0;
+                i += 4;
+
+                // mov r13, [rcx + 0xe8]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xa9;
+                *(uint32_t*)&forward_page_temp[i] = 0xe8;
+                i += 4;
+
+                // mov r14, [rcx + 0xf0]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xb1;
+                *(uint32_t*)&forward_page_temp[i] = 0xf0;
+                i += 4;
+
+                // mov r15, [rcx + 0xf8]
+                forward_page_temp[i++] = 0x4c;
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = 0xf8;
+                i += 4;
+
+
+                // mov rax, [forward_page + 0x1000 + 0x88]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa1;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x88;
+                i += 8;
+                // mov rcx, rax
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xc1;
+
+                // mov rax, [forward_page + 0x1000 + 0x80]
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa1;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x80;
+                i += 8;
+            }
 
 
             // 在原指令执行前还原所有环境，包括保存的ret_addr
@@ -965,24 +991,24 @@ public:
             *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 8;
             i += 8;
 
-
             // 解锁
-            // push rax
-            forward_page_temp[i++] = 0x50;
-            // mov rax, 0
-            forward_page_temp[i++] = 0x48; 
-            forward_page_temp[i++] = 0xc7;
-            forward_page_temp[i++] = 0xc0;
-            *(uint32_t*)&forward_page_temp[i] = 0;
-            i += 4;
-            // mov [forward_page + 0xc00 + 0], rax      ;解锁
-            forward_page_temp[i++] = 0x48;
-            forward_page_temp[i++] = 0xa3;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xc00 + 0;
-            i += 8;
-            // pop rax
-            forward_page_temp[i++] = 0x58;
-
+            {
+                // push rax
+                forward_page_temp[i++] = 0x50;
+                // mov rax, 0
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xc7;
+                forward_page_temp[i++] = 0xc0;
+                *(uint32_t*)&forward_page_temp[i] = 0;
+                i += 4;
+                // mov [forward_page + 0xc00 + 0], rax      ;解锁
+                forward_page_temp[i++] = 0x48;
+                forward_page_temp[i++] = 0xa3;
+                *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xc00 + 0;
+                i += 8;
+                // pop rax
+                forward_page_temp[i++] = 0x58;
+            }
 
             // 转回去继续执行
             forward_page_temp[i++] = 0xc3;        // ret
@@ -999,32 +1025,6 @@ public:
         return true;
     }
 
-
-    /*
-    * 在函数头部接管调用，不会执行原函数，回调函数原型是原函数的函数原型
-        * 不能在回调函数中调用原函数
-    */
-    bool InstallFake(uint64_t hook_addr, size_t instr_size, uint64_t callback, Architecture arch = Architecture::kCurrentRunning) {
-        if (instr_size > 255) {
-            return false;
-        }
-        
-        Uninstall();
-
-        if (arch == Architecture::kCurrentRunning) arch = GetCurrentRunningArch();
-
-        m_old_instr.resize(instr_size);
-        if (!m_process->ReadMemory(hook_addr, m_old_instr.data(), instr_size)) {
-            return false;
-        }
-
-        m_hook_addr = hook_addr;
-
-        auto jmp_instr = m_old_instr;
-
-        MakeJmp(arch, &jmp_instr[0], instr_size, hook_addr, callback);
-        m_process->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
-    }
 
     /*
     * 卸载Hook
