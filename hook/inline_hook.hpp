@@ -31,6 +31,7 @@ public:
         uint32_t ecx;
         uint32_t eax;
 
+        uint32_t hook_addr;
         uint32_t forward_page_base;
         uint32_t ret_addr;
         uint32_t esp;
@@ -55,6 +56,7 @@ public:
         uint64_t rcx;
         uint64_t rax;
 
+        uint64_t hook_addr;
         uint64_t forward_page_base;
         uint64_t ret_addr;
         uint64_t rsp;
@@ -84,6 +86,7 @@ public:
     /*
     * 安装通用转发调用Hook
         * 可以在任意位置hook，参数为HookContext*，具体类型因处理器架构而异
+        * 支持在回调函数中调用原函数
     * 
     * 被hook处用于覆写的指令不能存在相对偏移指令
         * 如0xe8、0xe9(可解决思路：在转发页面将hook处指令还原，但修改hook处的后继指令为再度跳转，在再度跳转中还原hook并还原后继指令，再跳回后继指令处执行，即可复用hook)
@@ -114,12 +117,16 @@ public:
             * 不修改esp/rsp以及ret_addr
             * 返回true
     * 
-    * Amd64下需要注意Hook时的栈应该以16字节对齐，否则部分指令可能会异常
+    * Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
     */
 
     bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, Architecture arch = Architecture::kCurrentRunning, 
         uint64_t forward_page_size = 0x1000
     ) {
+        if (instr_size > 255) {
+            return false;
+        }
+
         Uninstall();
         if (forward_page_size < 0x1000) {
             forward_page_size = 0x1000;
@@ -238,6 +245,10 @@ public:
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
             i += 4;
 
+            // push hook_addr
+            forward_page_temp[i++] = 0x68;
+            *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
+            i += 4;
 
             forward_page_temp[i++] = 0x60;        // pushad
             forward_page_temp[i++] = 0x9c;        // pushfd
@@ -262,9 +273,9 @@ public:
             forward_page_temp[i++] = 0x61;        // popad
 
 
-            forward_page_temp[i++] = 0x83;        // add esp        ;跳过forward_page
+            forward_page_temp[i++] = 0x83;        // add esp, 8        ;跳过forward_page&hook_addr
             forward_page_temp[i++] = 0xc4;
-            forward_page_temp[i++] = 0x04;
+            forward_page_temp[i++] = 0x08;
 
 
 
@@ -471,11 +482,22 @@ public:
             forward_page_temp[i++] = 0x68;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
             i += 4;
-            forward_page_temp[i++] = 0xc7;        // mov dword ptr ss:[rsp+4], forwardPageHigh
+            forward_page_temp[i++] = 0xc7;        // mov dword ptr ss:[rsp+4], forward_page_high
             forward_page_temp[i++] = 0x44;
             forward_page_temp[i++] = 0x24;
             forward_page_temp[i++] = 0x04;
             *(uint32_t*)&forward_page_temp[i] = forward_page_uint >> 32;
+            i += 4;
+
+            // push hook_addr
+            forward_page_temp[i++] = 0x68;
+            *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
+            i += 4;
+            forward_page_temp[i++] = 0xc7;        // mov dword ptr ss:[rsp+4], hook_addr_high
+            forward_page_temp[i++] = 0x44;
+            forward_page_temp[i++] = 0x24;
+            forward_page_temp[i++] = 0x04;
+            *(uint32_t*)&forward_page_temp[i] = hook_addr >> 32;
             i += 4;
 
 
@@ -507,11 +529,10 @@ public:
 
 
             // 遵循x64调用约定，为当前函数的使用提前分配栈空间
-            forward_page_temp[i++] = 0x48;        // sub rsp, 28
+            forward_page_temp[i++] = 0x48;        // sub rsp, 20
             forward_page_temp[i++] = 0x83;
             forward_page_temp[i++] = 0xec;
             forward_page_temp[i++] = 0x20;
-
 
 
             // 传递参数
@@ -520,6 +541,32 @@ public:
             forward_page_temp[i++] = 0x4c;
             forward_page_temp[i++] = 0x24;
             forward_page_temp[i++] = 0x20;
+
+
+            // 强制使栈16字节对齐
+            // mov rax, rsp
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0x89;
+            forward_page_temp[i++] = 0xe0;
+
+            // and rax, 0x8
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0x83;
+            forward_page_temp[i++] = 0xe0;
+            forward_page_temp[i++] = 0x08;
+
+            // sub rsp, rax
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0x29;
+            forward_page_temp[i++] = 0xc4;
+
+
+            // 把对齐值保存起来
+            // mov [forward_page + 0xd00 + 0], rax
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0xa3;
+            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
+            i += 8;
 
 
 
@@ -538,8 +585,21 @@ public:
             i += 8;
 
 
-            // 传递参数
-            forward_page_temp[i++] = 0x48;        // add rsp, 28
+            // 恢复栈对齐
+            // mov rax, [forward_page + 0xd00 + 0x18]
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0xa1;
+            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x18;
+            i += 8;
+            // add rsp, rax
+            forward_page_temp[i++] = 0x48;
+            forward_page_temp[i++] = 0x01;
+            forward_page_temp[i++] = 0xc4;
+
+
+        // _recovery_stack:
+            // 恢复传递参数的栈
+            forward_page_temp[i++] = 0x48;        // add rsp, 20
             forward_page_temp[i++] = 0x83;
             forward_page_temp[i++] = 0xc4;
             forward_page_temp[i++] = 0x20;
@@ -572,10 +632,10 @@ public:
             forward_page_temp[i++] = 0x58;        // pop rax
 
 
-            forward_page_temp[i++] = 0x48;        // add esp, 跳过forward_page
+            forward_page_temp[i++] = 0x48;        // add esp, 0x10     ;跳过forward_page&hook_addr
             forward_page_temp[i++] = 0x83;
             forward_page_temp[i++] = 0xc4;
-            forward_page_temp[i++] = 0x08;
+            forward_page_temp[i++] = 0x10;
 
 
 
@@ -589,10 +649,10 @@ public:
 
             // 接下来把ret_addr存到内存里
             forward_page_temp[i++] = 0x58;        // pop rax        ;弹出压入的ret_addr
-            // mov [forward_page + 0xd00 + 16], rax
+            // mov [forward_page + 0xd00 + 0x10], rax
             forward_page_temp[i++] = 0x48;
             forward_page_temp[i++] = 0xa3;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 16;
+            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x10;
             i += 8;
 
             // 在执行前恢复rsp
@@ -644,10 +704,10 @@ public:
             *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 8;
             i += 8;
 
-            // mov rax, [forward_page + 0xd00 + 16]，保存的ret_addr
+            // mov rax, [forward_page + 0xd00 + 0x10]，保存的ret_addr
             forward_page_temp[i++] = 0x48;
             forward_page_temp[i++] = 0xa1;
-            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 16;
+            *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 0x10;
             i += 8;
             // push rax
             forward_page_temp[i++] = 0x50;
@@ -700,8 +760,13 @@ public:
 
     /*
     * 在函数头部接管调用，不会执行原函数，回调函数原型是原函数的函数原型
+        * 不能在回调函数中调用原函数
     */
     bool InstallFake(uint64_t hook_addr, size_t instr_size, uint64_t callback, Architecture arch = Architecture::kCurrentRunning) {
+        if (instr_size > 255) {
+            return false;
+        }
+        
         Uninstall();
 
         if (arch == Architecture::kCurrentRunning) arch = GetCurrentRunningArch();
