@@ -1194,20 +1194,24 @@ public:
             bool success = true;
             switch (arch) {
             case Architecture::kX86: {
-                if (instr_size < 8) {
-                    jmp_instr.resize(8);
-                }
                 MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
+                if (jmp_instr.size() < 8) {
+                    jmp_instr.reserve(8);
+                    memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 8 - jmp_instr.size());
+                }
                 InterlockedExchange64((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0]);
                 break;
             }
             case Architecture::kAmd64:
 #ifdef _WIN64
-                if (instr_size < 16) {
-                    jmp_instr.resize(16);
+                if (jmp_instr.size() < 16) {
+                    jmp_instr.reserve(16);
+                    memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 16 - jmp_instr.size());
                 }
                 MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
-                InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0], *(LONGLONG*)&jmp_instr[8], (long long*)hook_addr);
+                uint8_t buf[16];
+                memcpy(buf, (void*)hook_addr, 16);
+                success = InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[8], *(LONGLONG*)&jmp_instr[0], (long long*)buf);
 #else
                 success = false;
 #endif
