@@ -68,13 +68,15 @@ public:
     /*
     * static method
     */
-    static std::wstring GetAppPath()
-    {
-        wchar_t buffer[MAX_PATH] = { 0 };
-        GetModuleFileNameW(nullptr, buffer, MAX_PATH);
-        std::wstring appPath = buffer;
-        //appPath = appPath.substr(0, appPath.rfind(L'\\'));
-        return appPath;
+    static std::wstring GetAppPath() {
+        std::vector<wchar_t> buf(MAX_PATH, L'\0');
+        do {
+            buf.resize(buf.size() * 2, L'\0');
+            GetModuleFileNameW(nullptr, (LPWSTR)buf.data(), MAX_PATH);
+        } while (GetLastError() == ERROR_INSUFFICIENT_BUFFER);
+        std::wstring app_path = buf.data();
+        app_path = GetFileDir(app_path);
+        return app_path;
     }
 
     static std::vector<std::wstring> EnumFiles(const std::wstring& findDirPath, bool getFilePath, bool getDirPath, bool getSubDir, const std::wstring& fileNameFilter = L"*.*", DWORD fileAttributesFilter = 0) {
@@ -202,7 +204,10 @@ public:
             for (int i = 0; i < level; i++) {
                 pos = filePath.find(L'\\', pos + 1);
                 if (pos == -1) {
-                    return L"";
+                    pos = filePath.find(L'/', pos + 1);
+                    if (pos == -1) {
+                        return L"";
+                    }
                 }
             }
         }
@@ -212,7 +217,10 @@ public:
             for (int i = 0; i < level; i++) {
                 pos = filePath.rfind(L'\\', pos - 1);
                 if (pos == -1) {
-                    return L"";
+                    pos = filePath.find(L'/', pos - 1);
+                    if (pos == -1) {
+                        return L"";
+                    }
                 }
             }
         }
