@@ -38,14 +38,14 @@ public:
 
         uint32_t hook_addr;
         uint32_t forward_page_base;
-        uint32_t ret_addr;
+        uint32_t jmp_addr;
         uint32_t esp;
         uint32_t stack[];
     };
     struct HookContextAmd64 {
         uint64_t* const stack;
         uint64_t rsp;
-        uint64_t ret_addr;
+        uint64_t jmp_addr;
         uint64_t forward_page_base;
         uint64_t hook_addr;
         uint64_t old_stack_top;     // pop
@@ -107,9 +107,9 @@ public:
     * 
     * 跨进程请关闭/GS(安全检查)，避免生成__security_cookie插入代码
     * 
-    * 如果需要修改rsp或者ret_addr，注意堆栈平衡
-        * 默认情况下ret_addr是指向被hook处的下一行指令
-        * push和pop顺序为    push esp -> push ret_addr -> push xxx    call    pop xxx -> pop&save ret_addr -> pop esp -> 是否执行原指令 -> get&push ret_addr -> ret
+    * 如果需要修改rsp或者jmp_addr，注意堆栈平衡
+        * 默认情况下jmp_addr是指向被hook处的下一行指令
+        * push和pop顺序为    push esp -> push jmp_addr -> push xxx    call    pop xxx -> pop&save jmp_addr -> pop esp -> 是否执行原指令 -> get&push jmp_addr -> ret
     * 
     * 若pop_stack_top为true
         * 在调用回调时不会有额外栈帧，可以用于需要输出栈回溯的场景
@@ -121,7 +121,7 @@ public:
         * pop_stack_top = true
         * callback中 context->esp += 4 / context->rsp += 8;	// 跳过外部call到该函数的返回地址
             * 注：x86下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要。
-        * callback中指定 ret_addr = context->old_stack_top;      // 直接返回到调用被hook函数的调用处
+        * callback中指定 jmp_addr = context->old_stack_top;      // 直接返回到调用被hook函数的调用处
         * callback中返回false      // 不执行原指令
         *
     * 实现监视：
@@ -130,7 +130,7 @@ public:
             * 直接在callback中再次调用原函数以获取其运行结果
             * 返回false        // 不执行原指令
         * 不需要获取原函数执行结果
-            * 不修改esp/rsp以及ret_addr
+            * 不修改esp/rsp以及jmp_addr
             * 返回true
     * 
     * Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
@@ -252,7 +252,7 @@ public:
 
             forward_page_temp[i++] = 0x54;        // push esp
 
-            // push ret_addr        ; hook_addr + instr_size
+            // push jmp_addr        ; hook_addr + instr_size
             forward_page_temp[i++] = 0x68;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr + instr_size;
             i += 4;
@@ -297,15 +297,15 @@ public:
 
 
 
-            // 在原指令执行前还原所有环境，包括压入的ret_addr
+            // 在原指令执行前还原所有环境，包括压入的jmp_addr
             // 要用eax，先存到内存里
             // mov [forward_page + 0xd00 + 4], eax
             forward_page_temp[i++] = 0xa3;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 4;
             i += 4;
 
-            // 接下来把ret_addr临时存到内存里
-            forward_page_temp[i++] = 0x58;        // pop eax        ;弹出压入的ret_addr
+            // 接下来把jmp_addr临时存到内存里
+            forward_page_temp[i++] = 0x58;        // pop eax        ;弹出压入的jmp_addr
             // mov [forward_page + 0xd00 + 8], eax
             forward_page_temp[i++] = 0xa3;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 8;
@@ -348,17 +348,17 @@ public:
             forward_page_temp[i++] = 0x9d;      // popfd
         // _next_exec_old_insrt:
             
-            // 恢复ret_addr环境
+            // 恢复jmp_addr环境
             // mov [forward_page + 0xd00 + 4], eax      ;还是先保存eax
             forward_page_temp[i++] = 0xa3;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 4;
             i += 4;
 
-            // mov eax, [forward_page + 0xd00 + 8]      ;保存的ret_addr
+            // mov eax, [forward_page + 0xd00 + 8]      ;保存的jmp_addr
             forward_page_temp[i++] = 0xa1;
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 8;
             i += 4;
-            // push eax     ; 推入ret_addr
+            // push eax     ; 推入jmp_addr
             forward_page_temp[i++] = 0x50;
 
             // mov eax, [forward_page + 0xd00 + 4]      ;恢复eax
@@ -911,7 +911,7 @@ public:
             }
 
 
-            // 在原指令执行前还原所有环境，包括保存的ret_addr
+            // 在原指令执行前还原所有环境，包括保存的jmp_addr
             // 要用rax，先存到内存里
             // mov [forward_page + 0xd00 + 8], rax
             forward_page_temp[i++] = 0x48;
@@ -970,14 +970,14 @@ public:
             
 
 
-            // 恢复ret_addr环境
+            // 恢复jmp_addr环境
             // mov [forward_page + 0xd00 + 8], rax，还是先保存rax
             forward_page_temp[i++] = 0x48;
             forward_page_temp[i++] = 0xa3;
             *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0xd00 + 8;
             i += 8;
 
-            // mov rax, [forward_page + 0x1000 + 0x10]      ;拿到ret_addr
+            // mov rax, [forward_page + 0x1000 + 0x10]      ;拿到jmp_addr
             forward_page_temp[i++] = 0x48;
             forward_page_temp[i++] = 0xa1;
             *(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint + 0x1000 + 0x10;
