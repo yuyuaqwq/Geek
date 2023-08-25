@@ -180,7 +180,7 @@ public:
             return false;
         }
         
-        std::vector<char> jmp_instr(instr_size);
+        std::vector<uint8_t> jmp_instr(instr_size);
         if (arch == Architecture::kCurrentRunning) arch = GetCurrentRunningArch();
 
         switch (arch) {
@@ -227,8 +227,10 @@ public:
                 i += m_old_instr.size();
 
                 // 跳回原函数正常执行
-                i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
-
+                std::vector<uint8_t> temp;
+                MakeJmp(arch, &temp, forward_page_uint + i, hook_addr + instr_size);
+                memcpy(&forward_page_temp[i], &temp[0], temp.size());
+                i += temp.size();
 
                 // 抢占锁，ecx保持为当前线程id
                 // mov ecx, eax
@@ -594,7 +596,10 @@ public:
                 i += m_old_instr.size();
 
                 // 跳回原函数正常执行
-                i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
+                std::vector<uint8_t> temp;
+                MakeJmp(arch, &temp, forward_page_uint + i, hook_addr + instr_size);
+                memcpy(&forward_page_temp[i], &temp[0], temp.size());
+                i += temp.size();
 
 
 
@@ -1174,8 +1179,43 @@ public:
         // 为目标地址挂hook
         m_hook_addr = hook_addr;
 
-        MakeJmp(arch, &jmp_instr[0], instr_size, hook_addr, m_forward_page);
-        m_process->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
+        
+        if (m_process->IsCur() && 
+            (
+                arch == Architecture::kX86 && instr_size <= 8 || 
+                arch == Architecture::kAmd64 && instr_size <= 16
+            )
+        ) {
+            DWORD old_protect;
+            if (!m_process->SetMemoryProtect(hook_addr, 0x1000, PAGE_EXECUTE_READWRITE, &old_protect)) {
+                return false;
+            }
+            // 通过原子指令进行hook，降低错误的概率
+            bool success = true;
+            switch (arch) {
+            case Architecture::kX86: {
+                if (instr_size < 8) {
+                    jmp_instr.resize(8);
+                }
+                MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
+                InterlockedExchange64((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0]);
+                break;
+            }
+            case Architecture::kAmd64:
+#ifdef _WIN64
+                InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0], *(LONGLONG*)&jmp_instr[8], (long long*)hook_addr);
+#else
+                success = false;
+#endif
+                break;
+            }
+            m_process->SetMemoryProtect(hook_addr, 0x1000, old_protect, &old_protect);
+            if (success == false) return false;
+        }
+        else {
+            MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
+            m_process->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
+        }
         return true;
     }
 
@@ -1231,37 +1271,38 @@ private:
         return dst_addr - instr_addr - instr_size;
     }
 
-    static uint64_t MakeJmp(Architecture arch, void* buf, uint64_t instr_size, uint64_t cur_addr, uint64_t jmp_addr) {
-        uint8_t* _buf = (uint8_t*)buf;
+    static uint64_t MakeJmp(Architecture arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr) {
         switch (arch) {
         case Architecture::kX86: {
-            if (instr_size == 0) instr_size = 5;
-            _buf[0] = 0xe9;        // jmp
-            *(uint32_t*)&_buf[1] = GetInstrOffset(cur_addr, 5, jmp_addr);
+            if (buf->size() < 5) {
+                buf->resize(5);
+            }
+            buf->operator[](0) = 0xe9;        // jmp
+            *(uint32_t*)&buf->operator[](1) = GetInstrOffset(cur_addr, 5, jmp_addr);
 
-            for (int i = 5; i < instr_size; i++) {
-                _buf[i] = 0xcc;        // int 3
+            for (int i = 5; i < buf->size(); i++) {
+                buf->operator[](i) = 0xcc;        // int 3
             }
             break;
         }
         case Architecture::kAmd64: {
-            if (instr_size == 0) instr_size = 14;
-            _buf[0] = 0x68;        // push low_addr
-            *(uint32_t*)&_buf[1] = (uint64_t)jmp_addr & 0xffffffff;
-            _buf[5] = 0xc7;        // mov dword ptr ss:[rsp+4], high_addr
-            _buf[6] = 0x44;
-            _buf[7] = 0x24;
-            _buf[8] = 0x04;
-            *(uint32_t*)&_buf[9] = (uint64_t)jmp_addr >> 32;
-            _buf[13] = 0xc3;        // ret
+            if (buf->size() < 14) buf->resize(14);
+            buf->operator[](0) = 0x68;        // push low_addr
+            *(uint32_t*)&buf->operator[](1) = (uint64_t)jmp_addr & 0xffffffff;
+            buf->operator[](5) = 0xc7;        // mov dword ptr ss:[rsp+4], high_addr
+            buf->operator[](6) = 0x44;
+            buf->operator[](7) = 0x24;
+            buf->operator[](8) = 0x04;
+            *(uint32_t*)&buf->operator[](9) = (uint64_t)jmp_addr >> 32;
+            buf->operator[](13) = 0xc3;        // ret
 
-            for (int i = 14; i < instr_size; i++) {
-                _buf[i] = 0xcc;        // int 3
+            for (int i = 14; i < buf->size(); i++) {
+                buf->operator[](i) = 0xcc;        // int 3
             }
             break;
         }
         }
-        return instr_size;
+        return buf->size();
     }
 
 
