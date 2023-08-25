@@ -26,21 +26,23 @@ public:
     };
 
     struct HookContextX86 {
-        uint32_t eflags;
-        uint32_t edi;
-        uint32_t esi;
-        uint32_t ebp;
-        uint32_t esp_invalid;
-        uint32_t ebx;
-        uint32_t edx;
-        uint32_t ecx;
-        uint32_t eax;
-
-        uint32_t hook_addr;
-        uint32_t forward_page_base;
-        uint32_t jmp_addr;
+        uint32_t* const stack;
         uint32_t esp;
-        uint32_t stack[];
+        uint32_t jmp_addr;
+        uint32_t forward_page_base;
+        uint32_t hook_addr;
+        uint32_t old_stack_top;     // pop
+        uint32_t reserve[10];
+
+        uint32_t eax;
+        uint32_t ecx;
+        uint32_t edx;
+        uint32_t ebx;
+        uint32_t esp_invalid;
+        uint32_t ebp;
+        uint32_t esi;
+        uint32_t edi;
+        uint32_t eflags;
     };
     struct HookContextAmd64 {
         uint64_t* const stack;
@@ -81,7 +83,7 @@ public:
     
     
 
-    typedef bool (*HookCallbackX86)(HookContextX86* context, HookContextForwardInfoX86* forward_info);
+    typedef bool (__fastcall *HookCallbackX86)(HookContextX86* context, HookContextForwardInfoX86* forward_info);
     typedef bool (*HookCallbackAmd64)(HookContextAmd64* context, HookContextForwardInfoAmd64* forward_info);
 
 public:
@@ -96,6 +98,7 @@ public:
     * 安装通用转发调用Hook
         * 可以在任意位置hook，参数为HookContext*，具体类型因处理器架构而异
         * 支持在回调函数中调用原函数
+        * 回调函数是线程安全的(加锁，如果出现死锁请考虑此因素)
     * 
     * 被hook处用于覆写的指令不能存在相对偏移指令
         * 如0xe8、0xe9(可解决思路：在转发页面将hook处指令还原，但修改hook处的后继指令为再度跳转，在再度跳转中还原hook并还原后继指令，再跳回后继指令处执行，即可复用hook)
@@ -124,6 +127,7 @@ public:
         * callback中指定 jmp_addr = context->old_stack_top;      // 直接返回到调用被hook函数的调用处
         * callback中返回false      // 不执行原指令
         *
+    *
     * 实现监视：
         * 与接管基本一致
         * 需要获取原函数执行结果
@@ -133,6 +137,16 @@ public:
             * 不修改esp/rsp以及jmp_addr
             * 返回true
     * 
+    * 栈回溯隐藏
+        * 函数头部hook
+        * pop_stack_top = true
+        * 原理就是将call callback时留在栈上的，返回到转发页面的地址临时修改为原调用处的返回地址
+        * 回调函数起始：
+            * auto cur_ret = context->stack[0];
+            * context->stack[0] = context->old_stack_top;
+        * 回调函数返回：
+            * context->stack[0] = cur_ret;
+    *
     * Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
     */
 
@@ -176,102 +190,199 @@ public:
             }
 
             int i = 0;
+
+            // 加可重入锁
+            {
+                // 首先获取线程id锁保证线程安全且简单支持嵌套重入
+                forward_page_temp[i++] = 0x50;        // push eax
+                forward_page_temp[i++] = 0x51;        // push ecx
+                forward_page_temp[i++] = 0x9c;        // pushfd
+
+
+                // GetCurrentThreadId
+                // mov eax, dword ptr fs:[00000024h]
+                forward_page_temp[i++] = 0x64;
+                forward_page_temp[i++] = 0xa1;
+                forward_page_temp[i++] = 0x24;
+                forward_page_temp[i++] = 0x00;
+                forward_page_temp[i++] = 0x00;
+                forward_page_temp[i++] = 0x00;
+
+                // 直接检查是否嵌套重入，是则是从callback再次回调到当前函数的，直接执行原函数流程
+                // cmp eax, [forward_page + 0xc00 + 0]
+                forward_page_temp[i++] = 0x3b;
+                forward_page_temp[i++] = 0x05;
+                *(uint32_t*)&forward_page[i] = (uint32_t)forward_page_uint + 0xc00 + 0;
+                i += 4;
+
+                // jne _retry
+                forward_page_temp[i++] = 0x75;
+                forward_page_temp[i++] = 3 + m_old_instr.size() + 5;      // 跳过原指令执行
+
+                forward_page_temp[i++] = 0x9d;        // popfd
+                forward_page_temp[i++] = 0x59;        // pop ecx
+                forward_page_temp[i++] = 0x58;        // pop eax
+
+                memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
+                i += m_old_instr.size();
+
+                // 跳回原函数正常执行
+                i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
+
+
+                // 抢占锁，ecx保持为当前线程id
+                // mov ecx, eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0xc1;
+                // _retry:
+                    // xor eax, eax
+                forward_page_temp[i++] = 0x31;
+                forward_page_temp[i++] = 0xc0;
+
+
+                // lock cmpxchg dword ptr ds:[forward_page + 0xc00 + 0], ecx
+                forward_page_temp[i++] = 0xf0;
+                forward_page_temp[i++] = 0x0f;
+                forward_page_temp[i++] = 0xb1;
+                forward_page_temp[i++] = 0x0d;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xc00;
+                i += 4;
+
+                // 上锁成功，直接继续
+                // je _end
+                forward_page_temp[i++] = 0x74;
+                forward_page_temp[i++] = 0x02;      // +2
+
+                // jmp _retry
+                forward_page_temp[i++] = 0xeb;
+                forward_page_temp[i++] = 0xf2;      // -14
+
+            // _end:
+                forward_page_temp[i++] = 0x9d;        // popfd
+                forward_page_temp[i++] = 0x59;        // pop ecx
+                forward_page_temp[i++] = 0x58;        // pop eax
+            }
+
+            // 保存上下文环境
+            {
+                forward_page_temp[i++] = 0x50;        // push eax
+                forward_page_temp[i++] = 0x51;        // push ecx
+
+                // mov ecx, forward_page + 0x1000
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = forward_page_uint + 0x1000;
+                i += 4;
+
+                // 压入原stack，跳过前面push的eax和ecx
+                // lea eax, [esp+0x8]
+                forward_page_temp[i++] = 0x8d;
+                forward_page_temp[i++] = 0x44;
+                forward_page_temp[i++] = 0x24;
+                forward_page_temp[i++] = 0x8;
+                // mov [ecx], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x01;
+
+                // 实际上是压入esp
+                // mov [ecx+4], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x04;
+
+
+                // mov eax, hook_addr + instr_size
+                forward_page_temp[i++] = 0xb8;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr + instr_size;
+                i += 4;
+                // mov [ecx+0x8], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x8;
+
+                // mov eax, forward_page
+                forward_page_temp[i++] = 0xb8;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
+                i += 4;
+                // mov [ecx+0xc], rax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0xc;
+
+                // mov eax, hook_addr
+                forward_page_temp[i++] = 0xb8;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
+                i += 4;
+                // mov [ecx+0x10], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x10;
+
+                // pop eax      // 这里其实是ecx
+                forward_page_temp[i++] = 0x58;
+                // mov [ecx+0x44], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x44;
+
+                // pop eax
+                forward_page_temp[i++] = 0x58;
+                // mov [ecx+0x40], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x40;
+
+                // mov [ecx+0x48], edx
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x51;
+                forward_page_temp[i++] = 0x48;
+
+                // mov [ecx+0x4c], ebx
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x59;
+                forward_page_temp[i++] = 0x4c;
+
+                // mov [ecx+0x50], esp
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x61;
+                forward_page_temp[i++] = 0x50;
+
+                // mov [ecx+0x54], ebp
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x69;
+                forward_page_temp[i++] = 0x54;
+
+                // mov [ecx+0x58], esi
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x71;
+                forward_page_temp[i++] = 0x58;
+
+                // mov [ecx+0x5c], edi
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x79;
+                forward_page_temp[i++] = 0x5c;
+
+                forward_page_temp[i++] = 0x9c;        // pushfd
+                forward_page_temp[i++] = 0x58;        // pop eax
+                // mov [ecx+0x60], eax
+                forward_page_temp[i++] = 0x89;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x60;
+
+            }
             
-            // 首先获取线程id锁保证线程安全且简单支持嵌套重入
-            forward_page_temp[i++] = 0x50;        // push eax
-            forward_page_temp[i++] = 0x51;        // push ecx
-            forward_page_temp[i++] = 0x9c;        // pushfd
+            if (pop_stack_top) {
+                // pop rax
+                forward_page_temp[i++] = 0x58;
+                // 保存旧栈顶
+                // mov [forward_page + 0x1000 + 0x14], eax
+                forward_page_temp[i++] = 0xa3;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 + 0x14;
+                i += 4;
+            }
 
-
-            // GetCurrentThreadId
-            // mov eax, dword ptr fs:[00000024h]
-            forward_page_temp[i++] = 0x64;
-            forward_page_temp[i++] = 0xa1;
-            forward_page_temp[i++] = 0x24;
-            forward_page_temp[i++] = 0x00;
-            forward_page_temp[i++] = 0x00;
-            forward_page_temp[i++] = 0x00;
-
-            // 直接检查是否嵌套重入，是则是从callback再次回调到当前函数的，直接执行原函数流程
-            // cmp eax, [forward_page + 0xc00 + 0]
-            forward_page_temp[i++] = 0x3b;
-            forward_page_temp[i++] = 0x05;
-            *(uint32_t*)&forward_page[i] = (uint32_t)forward_page_uint + 0xc00 + 0;
-            i += 4;
-
-            // jne _retry
-            forward_page_temp[i++] = 0x75;
-            forward_page_temp[i++] = 3 + m_old_instr.size() + 5;      // 跳过原指令执行
-
-            forward_page_temp[i++] = 0x9d;        // popfd
-            forward_page_temp[i++] = 0x59;        // pop ecx
-            forward_page_temp[i++] = 0x58;        // pop eax
-
-            memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-            i += m_old_instr.size();
-
-            // 跳回原函数正常执行
-            i += MakeJmp(arch, &forward_page_temp[i], 0, forward_page_uint + i, hook_addr + instr_size);
-
-
-            // 抢占锁，ecx保持为当前线程id
-            // mov ecx, eax
-            forward_page_temp[i++] = 0x89;
-            forward_page_temp[i++] = 0xc1;
-        // _retry:
-            // xor eax, eax
-            forward_page_temp[i++] = 0x31;
-            forward_page_temp[i++] = 0xc0;
-            
-
-            // lock cmpxchg dword ptr ds:[forward_page + 0xc00 + 0], ecx
-            forward_page_temp[i++] = 0xf0;
-            forward_page_temp[i++] = 0x0f;
-            forward_page_temp[i++] = 0xb1;
-            forward_page_temp[i++] = 0x0d;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xc00;
-            i += 4;
-
-            // 上锁成功，直接继续
-            // je _end
-            forward_page_temp[i++] = 0x74;
-            forward_page_temp[i++] = 0x02;      // +2
-
-            // jmp _retry
-            forward_page_temp[i++] = 0xeb;
-            forward_page_temp[i++] = 0xf2;      // -14
-
-        // _end:
-            forward_page_temp[i++] = 0x9d;        // popfd
-            forward_page_temp[i++] = 0x59;        // pop ecx
-            forward_page_temp[i++] = 0x58;        // pop eax
-
-
-
-            // 准备调用回调函数
-
-            forward_page_temp[i++] = 0x54;        // push esp
-
-            // push jmp_addr        ; hook_addr + instr_size
-            forward_page_temp[i++] = 0x68;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr + instr_size;
-            i += 4;
-
-            // push forward_page
-            forward_page_temp[i++] = 0x68;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
-            i += 4;
-
-            // push hook_addr
-            forward_page_temp[i++] = 0x68;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
-            i += 4;
-
-            forward_page_temp[i++] = 0x60;        // pushad
-            forward_page_temp[i++] = 0x9c;        // pushfd
-
+            // 准备调用
             // 传递参数
-            forward_page_temp[i++] = 0x54;        // push esp       ; context
+            // 使用fastcall，参数已在ecx中
 
             forward_page_temp[i++] = 0xe8;        // call callback
             *(uint32_t*)&forward_page_temp[i] = GetInstrOffset((forward_page_uint + i - 1), 5, callback);
@@ -283,19 +394,64 @@ public:
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 0;
             i += 4;
 
+            // 恢复上下文环境
+            {
+                // mov ecx, forward_page + 0x1000
+                forward_page_temp[i++] = 0xb9;
+                *(uint32_t*)&forward_page_temp[i] = forward_page_uint + 0x1000;
+                i += 4;
 
-            forward_page_temp[i++] = 0x5c;        // pop esp
+                // mov eax, [ecx + 0x60]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x41;
+                forward_page_temp[i++] = 0x60;
 
-            forward_page_temp[i++] = 0x9d;        // popfd
-            forward_page_temp[i++] = 0x61;        // popad
+                forward_page_temp[i++] = 0x50;        // push eax
+                forward_page_temp[i++] = 0x9d;        // popfd
+
+                // mov edx, [ecx + 0x48]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x51;
+                forward_page_temp[i++] = 0x48;
+
+                // mov ebx, [ecx + 0x4c]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x59;
+                forward_page_temp[i++] = 0x4c;
+
+                // mov esp, [ecx + 0x50]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x61;
+                forward_page_temp[i++] = 0x50;
+
+                // mov ebp, [ecx + 0x54]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x69;
+                forward_page_temp[i++] = 0x54;
+
+                // mov esi, [ecx + 0x58]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x71;
+                forward_page_temp[i++] = 0x58;
+
+                // mov edi, [ecx + 0x5c]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x79;
+                forward_page_temp[i++] = 0x5c;
 
 
-            forward_page_temp[i++] = 0x83;        // add esp, 8        ;跳过forward_page&hook_addr
-            forward_page_temp[i++] = 0xc4;
-            forward_page_temp[i++] = 0x08;
+                // mov ecx, [forward_page + 0x1000 + 0x44]
+                forward_page_temp[i++] = 0x8b;
+                forward_page_temp[i++] = 0x0d;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 + 0x44;
+                i += 4;
 
-
-
+                // mov eax, [forward_page + 0x1000 + 0x40]
+                forward_page_temp[i++] = 0xa1;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 + 0x40;
+                i += 4;
+            }
+            
 
             // 在原指令执行前还原所有环境，包括压入的jmp_addr
             // 要用eax，先存到内存里
@@ -304,15 +460,12 @@ public:
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 4;
             i += 4;
 
-            // 接下来把jmp_addr临时存到内存里
-            forward_page_temp[i++] = 0x58;        // pop eax        ;弹出压入的jmp_addr
-            // mov [forward_page + 0xd00 + 8], eax
-            forward_page_temp[i++] = 0xa3;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 8;
+            // 执行前设置hook回调中可能修改的esp
+            // mov esp, [forward_page + 0x1000 + 4]
+            forward_page_temp[i++] = 0x8b;
+            forward_page_temp[i++] = 0x25;
+            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 + 4;
             i += 4;
-
-            // 在执行前恢复esp
-            forward_page_temp[i++] = 0x5c;        // pop esp        ;弹出压入的esp
 
 
             // 拿到callback的返回值
@@ -354,11 +507,11 @@ public:
             *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 4;
             i += 4;
 
-            // mov eax, [forward_page + 0xd00 + 8]      ;保存的jmp_addr
+            // mov eax, [forward_page + 0x1000 + 0x8]      ;拿到jmp_addr
             forward_page_temp[i++] = 0xa1;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xd00 + 8;
+            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0x1000 + 0x8;
             i += 4;
-            // push eax     ; 推入jmp_addr
+            // push eax     ; 压入ret时返回的地址
             forward_page_temp[i++] = 0x50;
 
             // mov eax, [forward_page + 0xd00 + 4]      ;恢复eax
@@ -367,21 +520,21 @@ public:
             i += 4;
 
 
-
             // 解锁
-            // push eax
-            forward_page_temp[i++] = 0x50;
-            // mov eax, 0
-            forward_page_temp[i++] = 0xb8;
-            *(uint32_t*)&forward_page_temp[i] = 0;
-            i += 4;
-            // mov [forward_page + 0xc00], eax
-            forward_page_temp[i++] = 0xa3;
-            *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xc00 + 0;
-            i += 4;
-            // pop eax
-            forward_page_temp[i++] = 0x58;
-
+            {
+                // push eax
+                forward_page_temp[i++] = 0x50;
+                // mov eax, 0
+                forward_page_temp[i++] = 0xb8;
+                *(uint32_t*)&forward_page_temp[i] = 0;
+                i += 4;
+                // mov [forward_page + 0xc00], eax
+                forward_page_temp[i++] = 0xa3;
+                *(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint + 0xc00 + 0;
+                i += 4;
+                // pop eax
+                forward_page_temp[i++] = 0x58;
+            }
 
 
             // 转回去继续执行
@@ -395,9 +548,10 @@ public:
 
             int i = 0;
 
+            // 加可重入锁
             {
                 // GetCurrentThreadId
-                // 首先获取线程id锁保证线程安全且简单支持嵌套重入
+                // 首先获取线程id，保证线程安全且简单支持嵌套重入
                 forward_page_temp[i++] = 0x50;        // push rax
                 forward_page_temp[i++] = 0x51;        // push rcx
                 forward_page_temp[i++] = 0x52;        // push rdx
@@ -920,7 +1074,7 @@ public:
             i += 8;
 
             
-            // 设置hook时设置的rsp
+            // 执行前设置hook回调中可能修改的rsp
             // mov rax, [forward_page + 0x1000 + 8]
             forward_page_temp[i++] = 0x48;
             forward_page_temp[i++] = 0xa1;
