@@ -1203,6 +1203,10 @@ public:
             }
             case Architecture::kAmd64:
 #ifdef _WIN64
+                if (instr_size < 16) {
+                    jmp_instr.resize(16);
+                }
+                MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
                 InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0], *(LONGLONG*)&jmp_instr[8], (long long*)hook_addr);
 #else
                 success = false;
