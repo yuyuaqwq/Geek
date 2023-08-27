@@ -105,11 +105,10 @@ public:
     * x86要求instr_size>=5，x64要求instr_size>=14，且instr_size不能大于255
     * 
     * forward_page是转发页面
-        * Tls模式至少需要0x1000，前0x1000不可覆写
-        * 加锁模式至少需要0x2000，前0x2000不可覆写
+        * 至少需要0x1000，前0x1000不可覆写
         * 可以指定较多的空间，便于交互数据
     * 
-    * 跨进程请关闭/GS(安全检查)，避免生成__security_cookie插入代码
+    * 如果需要跨进程将编译器生成的函数拷贝到目标进程，请关闭/GS(安全检查)，避免生成__security_cookie插入代码
     * 
     * 如果需要修改rsp或者jmp_addr，注意堆栈平衡
         * 默认情况下jmp_addr是指向被hook处的下一行指令
@@ -1225,6 +1224,10 @@ public:
         if (m_forward_page) {
             m_process->FreeMemory(m_forward_page);
             m_forward_page = 0;
+        }
+
+        if (m_tls_id != TLS_OUT_OF_INDEXES) {
+            TlsFree(m_tls_id);
         }
     }
 
