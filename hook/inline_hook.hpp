@@ -20,19 +20,13 @@ public:
         kAmd64,
     };
 
-    enum class Mode {
-        kNormal,
-        kTakeOver,
-    };
-
     struct HookContextX86 {
         uint32_t* const stack;
         uint32_t esp;
         uint32_t jmp_addr;
         uint32_t forward_page_base;
         uint32_t hook_addr;
-        uint32_t old_stack_top;     // pop
-        uint32_t reserve[10];
+        uint32_t reserve[11];
 
         uint32_t eax;
         uint32_t ecx;
@@ -50,8 +44,7 @@ public:
         uint64_t jmp_addr;
         uint64_t forward_page_base;
         uint64_t hook_addr;
-        uint64_t old_stack_top;     // pop
-        uint64_t reserve[10];
+        uint64_t reserve[11];
 
         uint64_t rax;
         uint64_t rcx;
@@ -72,19 +65,8 @@ public:
         uint64_t rflags;
     };
 
-    // 位于Forwa 0x200 ~ 0xcff 处的结构体
-    struct HookContextForwardInfoX86 {
-        uint32_t thread_id_lock;
-    };
-
-    struct HookContextForwardInfoAmd64 {
-        uint64_t thread_id_lock;
-    };
-    
-    
-
-    typedef bool (__fastcall *HookCallbackX86)(HookContextX86* context, HookContextForwardInfoX86* forward_info);
-    typedef bool (*HookCallbackAmd64)(HookContextAmd64* context, HookContextForwardInfoAmd64* forward_info);
+    typedef bool (__fastcall *HookCallbackX86)(HookContextX86* context);
+    typedef bool (*HookCallbackAmd64)(HookContextAmd64* context);
 
 public:
     explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ 0 }, m_forward_page{ 0 }, m_tls_id{ TLS_OUT_OF_INDEXES }  { }
@@ -96,11 +78,10 @@ public:
     * 安装通用转发调用Hook
         * 可以在任意位置hook，参数为HookContext*，具体类型因处理器架构而异
         * 支持在回调函数中调用原函数
-        * 原理：基于Tls
-            * 需要保证hook进程加载了kernel32.dll
+        * 原理：基于Tls存储重入信息，是重入则执行原指令并跳回去继续执行
+            * 不能Hook TlsGetValue，TlsSetValue
     * 
     * 被hook处用于覆写的指令不能存在相对偏移指令
-        * 如0xe8、0xe9(可解决思路：在转发页面将hook处指令还原，但修改hook处的后继指令为再度跳转，在再度跳转中还原hook并还原后继指令，再跳回后继指令处执行，即可复用hook)
     * 
     * x86要求instr_size>=5，x64要求instr_size>=14，且instr_size不能大于255
     * 
