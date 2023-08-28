@@ -688,7 +688,7 @@ public:
     }
 
 
-    uint64_t LoadLibraryFromImage(Image* image, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+    uint64_t LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
         if (IsX86() != image->IsPE32()) {
             return 0;
         }
@@ -708,7 +708,9 @@ public:
             if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
                 break;
             }
-            ExecuteTls(image, (uint64_t)image_base, &image_buf);
+            if (exec_tls_callback) {
+                ExecuteTls(image, (uint64_t)image_base, &image_buf);
+            }
             if (call_dll_entry) {
                 CallEntryPoint(image, (uint64_t)image_base, &image_buf, init_parameter);
             }
@@ -837,8 +839,11 @@ public:
         }
         PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
         if (callback) {
-            while (*callback) {
+            while (true) {
                 if (IsCur()) {
+                    if (!*callback) {
+                        break;
+                    }
                     if (image->IsPE32()) {
                         PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
                         callback32((uint32_t)image_base, DLL_PROCESS_ATTACH, NULL);
@@ -850,7 +855,11 @@ public:
                 }
                 else {
                     if (image->IsPE32()) {
-                        PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+                        PIMAGE_TLS_CALLBACK32 callback32;
+                        if (!ReadMemory((uint64_t)callback, &callback32, sizeof(PIMAGE_TLS_CALLBACK32))) {
+                            return false;
+                        }
+
                         int offset = 0;
                         (*image_buf)[offset++] = 0x68;        // push 0
                         *(uint32_t*)&(*image_buf)[offset] = 0;
@@ -876,7 +885,11 @@ public:
                         offset += 2;
                     }
                     else {
-                        PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+                        PIMAGE_TLS_CALLBACK64 callback64;
+                        if (!ReadMemory((uint64_t)callback, &callback64, sizeof(PIMAGE_TLS_CALLBACK64))) {
+                            return false;
+                        }
+
                         int offset = 0;
                         (*image_buf)[offset++] = 0x48;        // sub rsp, 28
                         (*image_buf)[offset++] = 0x83;
@@ -918,7 +931,8 @@ public:
                     if (!WriteMemory(image_base, image_buf->data(), 4096)) {
                         return false;
                     }
-                    CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+                    auto thread = CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+                    thread.WaitExit();
                 }
                 callback++;
             }

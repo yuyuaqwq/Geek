@@ -27,7 +27,7 @@ public:
     }
 
     bool Open(DWORD tid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
-        auto hThread = OpenProcess(desiredAccess, FALSE, tid);
+        auto hThread = OpenThread(desiredAccess, FALSE, tid);
         if (hThread == NULL) {
             return false;
         }
@@ -73,6 +73,8 @@ public:
 
 private:
     UniqueHandle m_handle;
+
+
 };
 
 
