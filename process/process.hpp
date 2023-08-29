@@ -678,6 +678,7 @@ public:
         if (IsCur()) {
             return (uint64_t)::LoadLibraryW(lib_name);
         }
+
         auto module = FindModlueByModuleName(lib_name);
         if (module.IsValid()) {
             return module.base;
@@ -694,29 +695,7 @@ public:
             if (!WriteMemory(lib_name_buf, lib_name, len)) {
                 break;
             }
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)::LoadLibraryW, (PVOID64)lib_name_buf);
-            if (thread.IsCur()) {
-                break;
-            }
-            thread.WaitExit();
-            if (IsX86()) {
-                addr = thread.GetExitCode();
-            }
-            else {
-                std::wstring name = lib_name;
-                auto pos = name.rfind(L'\\');
-                if (pos == -1) {
-                    pos = name.rfind(L'/');
-                }
-                if (pos != -1) {
-                    name = name.substr(pos + 1);
-                }
-                auto inject_module = FindModlueByModuleName(name);
-                if (!inject_module.IsValid()) {
-                    break;
-                }
-                addr = inject_module.base;
-            }
+            Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
         } while (false);
         if (lib_name_buf) {
             FreeMemory(lib_name_buf);
@@ -1076,8 +1055,11 @@ public:
         }
         else {
             uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-            Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter });
+            if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter })) {
+                return false;
+            }
         }
+        return true;
     }
 
 
