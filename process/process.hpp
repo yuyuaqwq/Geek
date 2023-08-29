@@ -623,6 +623,57 @@ public:
     /*
     * Image
     */
+    uint64_t LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+        if (IsX86() != image->IsPE32()) {
+            return 0;
+        }
+        auto image_base = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        bool success = false;
+        do {
+            if (!image_base) {
+                break;
+            }
+            if (!image->RepairRepositionTable((uint64_t)image_base)) {
+                break;
+            }
+            if (!RepairImportAddressTable(image, skip_not_loaded)) {
+                break;
+            }
+            auto image_buf = image->SaveToImageBuf((uint64_t)image_base, zero_pe_header);
+            if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+                break;
+            }
+            if (exec_tls_callback) {
+                ExecuteTls(image, (uint64_t)image_base, &image_buf);
+            }
+            if (call_dll_entry) {
+                CallEntryPoint(image, (uint64_t)image_base, &image_buf, init_parameter);
+            }
+            success = true;
+        } while (false);
+        if (success == false && image_base) {
+            FreeMemory(image_base);
+            image_base = 0;
+        }
+        return image_base;
+    }
+
+    Image LoadImageFromImageBase(uint64_t image_base) {
+        Image image;
+        if (IsCur()) {
+            image.LoadFromImageBuf((void*)image_base, image_base);
+        }
+        else {
+            auto module = FindModlueByModuleBase(image_base);
+            if (!module.IsValid()) return image;
+            image.LoadFromImageBuf(ReadMemory(image_base, module.size).data(), image_base);
+        }
+        return image;
+    }
+
+    /*
+    * library
+    */
     uint64_t LoadLibrary(const wchar_t* lib_name) {
         if (IsCur()) {
             return (uint64_t)::LoadLibraryW(lib_name);
@@ -687,58 +738,6 @@ public:
         } while (false);
     }
 
-
-    uint64_t LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
-        if (IsX86() != image->IsPE32()) {
-            return 0;
-        }
-        auto image_base = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-        bool success = false;
-        do {
-            if (!image_base) {
-                break;
-            }
-            if (!image->RepairRepositionTable((uint64_t)image_base)) {
-                break;
-            }
-            if (!RepairImportAddressTable(image, skip_not_loaded)) {
-                break;
-            }
-            auto image_buf = image->SaveToImageBuf((uint64_t)image_base, zero_pe_header);
-            if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-                break;
-            }
-            if (exec_tls_callback) {
-                ExecuteTls(image, (uint64_t)image_base, &image_buf);
-            }
-            if (call_dll_entry) {
-                CallEntryPoint(image, (uint64_t)image_base, &image_buf, init_parameter);
-            }
-            success = true;
-        } while (false);
-        if (success == false && image_base) {
-            FreeMemory(image_base);
-            image_base = 0;
-        }
-        return image_base;
-    }
-
-    Image LoadImageFromImageBase(uint64_t image_base) {
-        Image image;
-        if (IsCur()) {
-            image.LoadFromImageBuf((void*)image_base, image_base);
-        }
-        else {
-            auto module = FindModlueByModuleBase(image_base);
-            if (!module.IsValid()) return image;
-            image.LoadFromImageBuf(ReadMemory(image_base, module.size).data(), image_base);
-        }
-        return image;
-    }
-
-    /*
-    * library
-    */
     uint64_t GetExportProcAddress(Image* image, const char* func_name) {
         uint32_t export_rva;
         if ((uintptr_t)func_name <= 0xffff) {
@@ -767,6 +766,115 @@ public:
         }
         return va;
     }
+
+    /*
+    * call
+    */
+    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list) {
+        std::vector<uint8_t> temp_data(0x1000, 0);
+        auto temp = temp_data.data();
+
+        if (IsX86()) {
+
+        }
+        else {
+            int i = 0;
+
+            int8_t stack_size = par_list.size() * 8;
+
+            if ((stack_size & 8) == 0) {
+                stack_size += 8;
+            }
+
+            // 构建栈帧
+            temp[i++] = 0x48;        // sub rsp, size
+            temp[i++] = 0x83;
+            temp[i++] = 0xec;
+            temp[i++] = stack_size;
+
+            uint16_t par_code[] = {
+                0xb948,
+                0xba48,
+                0xb849,
+                0xb949,
+            };
+            for (int j = 0; j < 4; j++) {
+                // 寄存器传参
+                // mov reg, par[j]
+                *((uint16_t*)&temp[i]) = par_code[j];
+                i += 2;
+
+                *((uint64_t*)&temp[i]) = par_list[j];
+                i += 8;
+            }
+
+            for (int j = 4; j < par_list.size(); j++) {
+                // 栈传参
+                // mov rax, par[j]
+                temp[i++] = 0x48;
+                temp[i++] = 0xb8;
+                *((uint64_t*)&temp[i]) = par_list[j];
+                i += 8;
+                // mov [rsp+ j * 8], rax
+                temp[i++] = 0x48;
+                temp[i++] = 0x89;
+                temp[i++] = 0x44;
+                temp[i++] = 0x24;
+                temp[i++] = j * 8;
+
+            }
+            
+            temp[i++] = 0x48;        // mov rax, addr
+            temp[i++] = 0xb8;
+            *(uint64_t*)&temp[i] = (uint64_t)call_addr;
+            i += 8;
+            // call rax
+            temp[i++] = 0xff;
+            temp[i++] = 0xd0;
+
+            // 还原栈帧
+            temp[i++] = 0x48;
+            temp[i++] = 0x83;
+            temp[i++] = 0xc4;
+            temp[i++] = stack_size;
+
+            temp[i++] = 0xc3;        // ret
+        }
+        
+        bool success = false;
+        do {
+            if (!WriteMemory(exec_page, temp, 0x1000)) {
+                break;
+            }
+
+            auto thread = CreateThread((PTHREAD_START_ROUTINE)exec_page, NULL);
+            if (!thread.IsVaild()) {
+                break;
+            }
+
+            if (!thread.WaitExit()) {
+                break;
+            }
+
+            success = true;
+        }
+        while (false);
+        return success;
+    }
+
+    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list) {
+        uint64_t exec_page = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
+        if (!exec_page) {
+            return false;
+        }
+
+        bool success = Call(exec_page, call_addr, par_list);
+
+        FreeMemory(exec_page);
+        return success;
+    }
+
 
 private:
     template<typename IMAGE_THUNK_DATA_T>

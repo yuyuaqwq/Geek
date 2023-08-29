@@ -38,7 +38,7 @@ public:
     bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
         m_buf_size = buf_size;
         m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
-        return m_pipe_handle.Valid();
+        return m_pipe_handle.IsValid();
     }
 #endif
 
@@ -51,7 +51,7 @@ public:
             return false;
         }
         m_pipe_handle.Reset(CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL));
-        if (!m_pipe_handle.Valid()) {
+        if (!m_pipe_handle.IsValid()) {
             return false;
         }
         DWORD dwMode = PIPE_READMODE_MESSAGE | PIPE_WAIT;
@@ -62,7 +62,7 @@ public:
     }
 
     bool Disconnect() {
-        if (m_pipe_handle.Valid()) {
+        if (m_pipe_handle.IsValid()) {
             return DisconnectNamedPipe(m_pipe_handle.Get());
         }
         return false;
@@ -94,7 +94,7 @@ public:
         return packet;
     }
 
-    bool Send(void* buf, size_t len) {
+    bool Send(const void* buf, size_t len) {
         DWORD write_len;
         return WriteFile(m_pipe_handle.Get(), buf, len, &write_len, NULL);
     }

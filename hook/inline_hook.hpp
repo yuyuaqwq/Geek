@@ -142,7 +142,6 @@ public:
             forward_page_size = 0x1000;
         }
 
-
         if (instr_size > 255) {
             return false;
         }

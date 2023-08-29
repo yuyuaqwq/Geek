@@ -38,7 +38,7 @@ public:
         return m_handle;
     }
 
-    inline bool Valid() const noexcept {
+    inline bool IsValid() const noexcept {
         return m_handle != NULL && m_handle != INVALID_HANDLE_VALUE;
     }
 
@@ -56,7 +56,7 @@ public:
 
 private:
     inline void Close() noexcept {
-        if (Valid()) {
+        if (IsValid()) {
             ::CloseHandle(m_handle);
         }
     }

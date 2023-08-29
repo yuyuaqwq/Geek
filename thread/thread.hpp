@@ -35,6 +35,11 @@ public:
         return true;
     }
 
+    bool IsVaild() {
+        if (this == nullptr) { return true; }
+        return m_handle.IsValid();
+    }
+
     HANDLE Get() const noexcept {
         if (this == nullptr) {
             return kCurrentThread;
