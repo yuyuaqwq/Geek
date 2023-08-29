@@ -767,19 +767,64 @@ public:
         return va;
     }
 
+    
     /*
     * call
     */
-    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list) {
+    enum class CallConvention {
+        kStdCall,
+        kCdecl,
+    };
+    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
         std::vector<uint8_t> temp_data(0x1000, 0);
         auto temp = temp_data.data();
 
+        int exec_offset = 0;
         if (IsX86()) {
+            exec_offset = 4;
+            int i = exec_offset;      // 返回值的位置
+            for (int j = par_list.size() - 1; j >= 0; j--) {
+                temp[i++] = 0x68;        // push par[j]
+                *(uint32_t*)&temp[i] = par_list[j];
+                i += 4;
+            }
+
+            temp[i++] = 0xb8;        // mov eax, entry_point
+            *(uint32_t*)&temp[i] = (uint32_t)call_addr;
+            i += 4;
+
+            temp[i++] = 0xff;        // call eax
+            temp[i++] = 0xd0;
+
+            switch (call_convention) {
+            case CallConvention::kStdCall: {
+                break;
+            }
+            case CallConvention::kCdecl: {
+                temp[i++] = 0x83;        // add esp, par_list.size() * 4
+                temp[i++] = 0xc4;
+                temp[i++] = par_list.size() * 4;
+                break;
+            }
+            }
+
+            // mov [exec_page], eax
+            temp[i++] = 0xa3;
+            *(uint32_t*)&temp[i] = (uint32_t)exec_page;
+            i += 4;
+
+            // xor eax, eax
+            temp[i++] = 0x31;
+            temp[i++] = 0xc0;
+
+            temp[i++] = 0xc2;        // ret 4
+            *(uint16_t*)&temp[i] = 4;
+            i += 2;
 
         }
         else {
-            int i = 0;
-
+            exec_offset = 8;
+            int i = exec_offset;      // 返回值的位置
             int8_t stack_size = par_list.size() * 8;
 
             if ((stack_size & 8) == 0) {
@@ -824,7 +869,7 @@ public:
 
             }
             
-            temp[i++] = 0x48;        // mov rax, addr
+            temp[i++] = 0x48;        // mov rax, call_addr
             temp[i++] = 0xb8;
             *(uint64_t*)&temp[i] = (uint64_t)call_addr;
             i += 8;
@@ -838,6 +883,21 @@ public:
             temp[i++] = 0xc4;
             temp[i++] = stack_size;
 
+            // mov rcx, exec_page
+            temp[i++] = 0x48;
+            temp[i++] = 0xb9;
+            *(uint64_t*)&temp[i] = (uint64_t)exec_page;
+            i += 8;
+            // mov [rcx], rax
+            temp[i++] = 0x48;
+            temp[i++] = 0x89;
+            temp[i++] = 0x01;
+
+            // xor rax, rax
+            temp[i++] = 0x48;
+            temp[i++] = 0x31;
+            temp[i++] = 0xc0;
+
             temp[i++] = 0xc3;        // ret
         }
         
@@ -847,7 +907,7 @@ public:
                 break;
             }
 
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)exec_page, NULL);
+            auto thread = CreateThread((PTHREAD_START_ROUTINE)(exec_page + exec_offset), NULL);
             if (!thread.IsVaild()) {
                 break;
             }
@@ -856,20 +916,25 @@ public:
                 break;
             }
 
+            if (ret_value) {
+                *ret_value = 0;
+                ReadMemory(exec_page, ret_value, exec_offset);
+            }
+
             success = true;
         }
         while (false);
         return success;
     }
 
-    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list) {
+    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
         uint64_t exec_page = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 
         if (!exec_page) {
             return false;
         }
 
-        bool success = Call(exec_page, call_addr, par_list);
+        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention);
 
         FreeMemory(exec_page);
         return success;
@@ -967,80 +1032,15 @@ public:
                         if (!ReadMemory((uint64_t)callback, &callback32, sizeof(PIMAGE_TLS_CALLBACK32))) {
                             return false;
                         }
-
-                        int offset = 0;
-                        (*image_buf)[offset++] = 0x68;        // push 0
-                        *(uint32_t*)&(*image_buf)[offset] = 0;
-                        offset += 4;
-
-                        (*image_buf)[offset++] = 0x68;        // push DLL_PROCESS_ATTACH
-                        *(uint32_t*)&(*image_buf)[offset] = DLL_PROCESS_ATTACH;
-                        offset += 4;
-
-                        (*image_buf)[offset++] = 0x68;        // push image_base
-                        *(uint32_t*)&(*image_buf)[offset] = (uint32_t)image_base;
-                        offset += 4;
-
-                        (*image_buf)[offset++] = 0xb8;        // mov eax, entry_point
-                        *(uint32_t*)&(*image_buf)[offset] = (uint32_t)callback32;
-                        offset += 4;
-
-                        (*image_buf)[offset++] = 0xff;        // call eax
-                        (*image_buf)[offset++] = 0xd0;
-
-                        (*image_buf)[offset++] = 0xc2;        // ret 4
-                        *(uint16_t*)&(*image_buf)[offset] = 4;
-                        offset += 2;
+                        Call(image_base, (uint64_t)callback32, { image_base, DLL_PROCESS_ATTACH , NULL, (uint64_t)callback32 });
                     }
                     else {
                         PIMAGE_TLS_CALLBACK64 callback64;
                         if (!ReadMemory((uint64_t)callback, &callback64, sizeof(PIMAGE_TLS_CALLBACK64))) {
                             return false;
                         }
-
-                        int offset = 0;
-                        (*image_buf)[offset++] = 0x48;        // sub rsp, 28
-                        (*image_buf)[offset++] = 0x83;
-                        (*image_buf)[offset++] = 0xec;
-                        (*image_buf)[offset++] = 0x28;
-
-                        (*image_buf)[offset++] = 0x48;        // mov rcx, image_base
-                        (*image_buf)[offset++] = 0xb9;
-                        *(uint64_t*)&(*image_buf)[offset] = (uint64_t)image_base;
-                        offset += 8;
-
-                        (*image_buf)[offset++] = 0x48;        // mov rdx, DLL_PROCESS_ATTACH
-                        (*image_buf)[offset++] = 0xc7;
-                        (*image_buf)[offset++] = 0xc2;
-                        *(uint32_t*)&(*image_buf)[offset] = 1;
-                        offset += 4;
-
-                        (*image_buf)[offset++] = 0x49;        // mov r8, init_parameter
-                        (*image_buf)[offset++] = 0xb8;
-                        *(uint64_t*)&(*image_buf)[offset] = NULL;
-                        offset += 8;
-
-
-                        (*image_buf)[offset++] = 0x48;        // mov rax, entry_point
-                        (*image_buf)[offset++] = 0xb8;
-                        *(uint64_t*)&(*image_buf)[offset] = (uint64_t)callback64;
-                        offset += 8;
-
-                        (*image_buf)[offset++] = 0xff;        // call rax
-                        (*image_buf)[offset++] = 0xd0;
-
-                        (*image_buf)[offset++] = 0x48;        // add rsp, 28
-                        (*image_buf)[offset++] = 0x83;
-                        (*image_buf)[offset++] = 0xc4;
-                        (*image_buf)[offset++] = 0x28;
-
-                        (*image_buf)[offset++] = 0xc3;        // ret
+                        Call(image_base, (uint64_t)callback64, { image_base, DLL_PROCESS_ATTACH , NULL, (uint64_t)callback64 });
                     }
-                    if (!WriteMemory(image_base, image_buf->data(), 4096)) {
-                        return false;
-                    }
-                    auto thread = CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
-                    thread.WaitExit();
                 }
                 callback++;
             }
