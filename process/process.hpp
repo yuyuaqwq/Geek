@@ -1032,14 +1032,14 @@ public:
                         if (!ReadMemory((uint64_t)callback, &callback32, sizeof(PIMAGE_TLS_CALLBACK32))) {
                             return false;
                         }
-                        Call(image_base, (uint64_t)callback32, { image_base, DLL_PROCESS_ATTACH , NULL, (uint64_t)callback32 });
+                        Call(image_base, (uint64_t)callback32, { image_base, DLL_PROCESS_ATTACH , NULL });
                     }
                     else {
                         PIMAGE_TLS_CALLBACK64 callback64;
                         if (!ReadMemory((uint64_t)callback, &callback64, sizeof(PIMAGE_TLS_CALLBACK64))) {
                             return false;
                         }
-                        Call(image_base, (uint64_t)callback64, { image_base, DLL_PROCESS_ATTACH , NULL, (uint64_t)callback64 });
+                        Call(image_base, (uint64_t)callback64, { image_base, DLL_PROCESS_ATTACH , NULL });
                     }
                 }
                 callback++;
@@ -1076,74 +1076,7 @@ public:
         }
         else {
             uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-            if (image->IsPE32()) {
-                int offset = 0;
-                (*image_buf)[offset++] = 0x68;        // push 0
-                *(uint32_t*)&(*image_buf)[offset] = (uint32_t)init_parameter;
-                offset += 4;
-
-                (*image_buf)[offset++] = 0x68;        // push DLL_PROCESS_ATTACH
-                *(uint32_t*)&(*image_buf)[offset] = DLL_PROCESS_ATTACH;
-                offset += 4;
-
-                (*image_buf)[offset++] = 0x68;        // push image_base
-                *(uint32_t*)&(*image_buf)[offset] = (uint32_t)image_base;
-                offset += 4;
-
-                (*image_buf)[offset++] = 0xb8;        // mov eax, entry_point
-                *(uint32_t*)&(*image_buf)[offset] = (uint32_t)entry_point;
-                offset += 4;
-
-                (*image_buf)[offset++] = 0xff;        // call eax
-                (*image_buf)[offset++] = 0xd0;
-
-                (*image_buf)[offset++] = 0xc2;        // ret 4
-                *(uint16_t*)&(*image_buf)[offset] = 4;
-                offset += 2;
-            }
-            else {
-                int offset = 0;
-                (*image_buf)[offset++] = 0x48;        // sub rsp, 28
-                (*image_buf)[offset++] = 0x83;
-                (*image_buf)[offset++] = 0xec;
-                (*image_buf)[offset++] = 0x28;
-
-                (*image_buf)[offset++] = 0x48;        // mov rcx, image_base
-                (*image_buf)[offset++] = 0xb9;
-                *(uint64_t*)&(*image_buf)[offset] = (uint64_t)image_base;
-                offset += 8;
-
-                (*image_buf)[offset++] = 0x48;        // mov rdx, DLL_PROCESS_ATTACH
-                (*image_buf)[offset++] = 0xc7;
-                (*image_buf)[offset++] = 0xc2;
-                *(uint32_t*)&(*image_buf)[offset] = 1;
-                offset += 4;
-
-                (*image_buf)[offset++] = 0x49;        // mov r8, init_parameter
-                (*image_buf)[offset++] = 0xb8;
-                *(uint64_t*)&(*image_buf)[offset] = init_parameter;
-                offset += 8;
-
-
-                (*image_buf)[offset++] = 0x48;        // mov rax, entry_point
-                (*image_buf)[offset++] = 0xb8;
-                *(uint64_t*)&(*image_buf)[offset] = entry_point;
-                offset += 8;
-
-                (*image_buf)[offset++] = 0xff;        // call rax
-                (*image_buf)[offset++] = 0xd0;
-
-                (*image_buf)[offset++] = 0x48;        // add rsp, 28
-                (*image_buf)[offset++] = 0x83;
-                (*image_buf)[offset++] = 0xc4;
-                (*image_buf)[offset++] = 0x28;
-
-                (*image_buf)[offset++] = 0xc3;        // ret
-            }
-            if (!WriteMemory(image_base, image_buf->data(), 4096)) {
-                return false;
-            }
-            CreateThread((PTHREAD_START_ROUTINE)image_base, NULL);
+            Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter });
         }
     }
 
