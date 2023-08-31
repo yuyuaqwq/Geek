@@ -751,8 +751,10 @@ public:
     * call
     */
     enum class CallConvention {
+        kCdeclCall,
+        kThisCall,
         kStdCall,
-        kCdecl,
+        kFastCall,
     };
     bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
         std::vector<uint8_t> temp_data(0x1000, 0);
@@ -760,11 +762,36 @@ public:
 
         int exec_offset = 0;
         if (IsX86()) {
+            int32_t not_push_count = 0;
+            switch (call_convention) {
+            case CallConvention::kFastCall: {
+                not_push_count = 2;
+                break;
+            }
+            case CallConvention::kThisCall: {
+                not_push_count = 1;
+                break;
+            }
+            }
+
             exec_offset = 4;
             int i = exec_offset;      // 返回值的位置
-            for (int j = par_list.size() - 1; j >= 0; j--) {
+            for (int j = par_list.size() - 1; j >= not_push_count; j--) {
                 temp[i++] = 0x68;        // push par[j]
                 *(uint32_t*)&temp[i] = par_list[j];
+                i += 4;
+            }
+
+            // mov reg, par_list[j]
+            uint8_t reg_code[] = {
+                0xb9,
+                0xba,
+            };
+            for (int j = not_push_count - 1; j >= 0; j--) {
+                *((uint8_t*)&temp[i]) = reg_code[j];
+                i += 1;
+
+                *((uint32_t*)&temp[i]) = par_list[j];
                 i += 4;
             }
 
@@ -776,13 +803,15 @@ public:
             temp[i++] = 0xd0;
 
             switch (call_convention) {
+            case CallConvention::kFastCall:
             case CallConvention::kStdCall: {
                 break;
             }
-            case CallConvention::kCdecl: {
+            case CallConvention::kCdeclCall:
+            case CallConvention::kThisCall: {
                 temp[i++] = 0x83;        // add esp, par_list.size() * 4
                 temp[i++] = 0xc4;
-                temp[i++] = par_list.size() * 4;
+                temp[i++] = (par_list.size() - not_push_count) * 4;
                 break;
             }
             }
@@ -816,7 +845,7 @@ public:
             temp[i++] = 0xec;
             temp[i++] = stack_size;
 
-            uint16_t par_code[] = {
+            uint16_t reg_code[] = {
                 0xb948,
                 0xba48,
                 0xb849,
@@ -825,7 +854,7 @@ public:
             for (int j = 0; j < 4; j++) {
                 // 寄存器传参
                 // mov reg, par[j]
-                *((uint16_t*)&temp[i]) = par_code[j];
+                *((uint16_t*)&temp[i]) = reg_code[j];
                 i += 2;
 
                 *((uint64_t*)&temp[i]) = par_list[j];

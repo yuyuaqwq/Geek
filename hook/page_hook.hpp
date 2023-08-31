@@ -2,15 +2,15 @@
 #define GEEK_HOOK_PAGE_HOOK_H_
 
 #include <type_traits>
-#include <map>
+#include <unordered_map>
 
 #include <Windows.h>
 
 
 namespace Geek {
 
-// �����������ӻᵼ��ʵ�ʺ�����ַ��ͨ����������ȡ�ĵ�ַ��һ��
-// �����ݽ��ж�дhookʱ����֤���е�������̬��Ա���ⲿ��������ͬһҳ��
+// 基于VEH接管页面异常的hook框架
+// 注意hook回调/PageHook代码不能与被hook地址处于同一页面
 
 class PageHook {
 public:
@@ -50,7 +50,6 @@ public:
 
 
 public:
-    // ��װHook��protect���ڿ��Ʊ�hookҳ��ı��������Դ���hook
     bool Install(void* hookAddr, HookCallBack callback, DWORD protect = PAGE_READONLY) {
         if (m_status == Status::kNormal) {
             m_status = Status::kRepeatInstall;
@@ -135,32 +134,27 @@ private:
     }
 
     static LONG NTAPI ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
-        // �ж��쳣����
         if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
 
             LPVOID address = (LPVOID)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
             LPVOID page_base = PageAlignment(address);
             auto it_base = ms_page_hook_base.find(page_base);
             if (it_base == ms_page_hook_base.end()) {
-                // �����������õ�ҳ�����Բ������쳣������
                 return EXCEPTION_CONTINUE_SEARCH;
             }
 
-            // // ִ�е�ָ�������ǵ�Hookλ��ͬһҳ�棬�ָ�ԭ������
             VirtualProtect(page_base, 0x1000, it_base->second.protect, &it_base->second.protect);
 
             LPCONTEXT context = ExceptionInfo->ContextRecord;
 
             auto it_addr = ms_page_hook_addr.find(address);
             if (it_addr != ms_page_hook_addr.end()) {
-                // �Ǳ�hook�ĵ�ַ�����ûص�
                 it_addr->second.mCallback(context);
             }
 
-            // // ���õ����������壬���ڵ������������ô�Hook
+            // 设置TF，单步后再次设置页面属性
             context->EFlags |= 0x100;
 
-            // // ����ʶ���Ƿ��������õĵ���
             ms_page_hook_step.insert(std::pair<DWORD, PageRecord&>(GetCurrentThreadId(), it_base->second));
 
             return EXCEPTION_CONTINUE_EXECUTION;
@@ -169,16 +163,12 @@ private:
         else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
         {
             LPCONTEXT context = ExceptionInfo->ContextRecord;
-            // �ж��Ƿ�DR�Ĵ����������쳣
             if (context->Dr6 & 0xf) {
-                // �ų�DR�Ĵ��������ĵ����쳣
                 return EXCEPTION_CONTINUE_SEARCH;
             }
             else {
-                // �����쳣
                 auto it = ms_page_hook_step.find(GetCurrentThreadId());
                 if (it == ms_page_hook_step.end()) {
-                    //�����������õĵ����ϵ㣬������
                     return EXCEPTION_CONTINUE_SEARCH;
                 }
 
@@ -188,8 +178,7 @@ private:
 
                 ms_page_hook_step.erase(GetCurrentThreadId());
 
-                // ����Ҫ����TF�������쳣�Զ���TF��0
-                // �����쳣���������쳣�������޸�ip
+                // 不需要设置TF
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
         }
@@ -204,9 +193,9 @@ private:
 
     // C++17
     inline static int ms_veh_count = 0;
-    inline static std::map<void*, PageRecord> ms_page_hook_base;
-    inline static std::map<void*, PageHook&> ms_page_hook_addr;
-    inline static std::map<DWORD, PageRecord&> ms_page_hook_step;
+    inline static std::unordered_map<void*, PageRecord> ms_page_hook_base;
+    inline static std::unordered_map<void*, PageHook&> ms_page_hook_addr;
+    inline static std::unordered_map<DWORD, PageRecord&> ms_page_hook_step;
 };
 
 } // namespace PageHook
