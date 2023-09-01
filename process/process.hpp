@@ -252,9 +252,9 @@ public:
         return true;
     }
 
-    std::vector<char> ReadMemory(uint64_t addr, size_t len) const {
-        std::vector<char> buf;
-        buf.resize(len);
+    std::vector<uint8_t> ReadMemory(uint64_t addr, size_t len) const {
+        std::vector<uint8_t> buf;
+        buf.resize(len, 0);
         if (!ReadMemory(addr, buf.data(), len)) {
             buf.clear();
         }
@@ -365,7 +365,7 @@ public:
         return memoryBlockList;
     }
 
-    bool ScanMemoryBlocks(bool(*callback)(uint64_t raw_addr, char* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
+    bool ScanMemoryBlocks(bool(*callback)(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
         bool success = false;
         do {
             auto modulelist = EnumModuleListEx();
@@ -839,6 +839,10 @@ public:
                 stack_size += 8;
             }
 
+            if (stack_size < 0x28) {
+                stack_size = 0x28;
+            }
+
             // 构建栈帧
             temp[i++] = 0x48;        // sub rsp, size
             temp[i++] = 0x83;
@@ -851,7 +855,7 @@ public:
                 0xb849,
                 0xb949,
             };
-            for (int j = 0; j < 4; j++) {
+            for (int j = 0; j < min(4, par_list.size()); j++) {
                 // 寄存器传参
                 // mov reg, par[j]
                 *((uint16_t*)&temp[i]) = reg_code[j];

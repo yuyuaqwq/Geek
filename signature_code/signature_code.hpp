@@ -39,7 +39,7 @@ public:
         size_t signature_size = signature.size();
         if (!signature_size) return 0;
 
-        std::vector<char> buf;
+        std::vector<uint8_t> buf;
         uint64_t base = 0;
         if (!m_process->IsCur()) {
             buf = m_process->ReadMemory(start_address, size);
@@ -52,19 +52,19 @@ public:
         }
 
         for (size_t i = 0; i < size; ++i) {
-            uint64_t cur_pos = (uint64_t)start_address + i;
+            uint64_t cur_pos = start_address + i;
             uint64_t ret_pos = cur_pos;
             if (i + total_len > size) break;
             bool match = true;
-
             for (size_t j = 0; j < signature_size; ++j) {
                 size_t length = signature[j].length;
                 if (signature[j].type == SignatureElementType::kWhole) {
-                    int ret = memcmp_ex((void*)cur_pos, signature[j].data.data(), length);
-                    if (ret == -2) {
-                        return 0;
+                    if (IsBadReadPtr((void*)cur_pos, length)) {
+                        match = false;
+                        break;
                     }
-                    else if (ret != -1) {
+                    int ret = memcmp((void*)cur_pos, signature[j].data.data(), length);
+                    if (ret != 0) {
                         match = false;
                         break;
                     }
@@ -74,7 +74,6 @@ public:
             if (match) {
                 return (base + ret_pos + offset);
             }
-
         }
         return 0;
 
@@ -109,6 +108,7 @@ private:
     static int __cdecl memcmp_ex(const void* buf1, const void* buf2, size_t size) {
         const char* buf1_ = (const char*)buf1;
         const char* buf2_ = (const char*)buf2;
+        
         __try {
             for (int i = 0; i < size; i++) {
                 if (buf1_[i] != buf2_[i]) {
@@ -124,13 +124,11 @@ private:
     }
 
 
-    /*
-    * ���������ַ���ת��ΪElement
-    * ��׼��ʽʾ���� "48 &?? ?? 65*20 88"
-    * &��ʾ����ʱ�Ļ��Դ��ֽ�Ϊ��ʼ��ַ�������ֽ�ǰ�漴�ɣ�ʾ���м�ƫ��Ϊ1
-    *	�����һ��&Ϊ׼
-    * ??��ʾģ��ƥ����ֽ�
-    * *xx��ʾ��һ���ֽڵ��ظ�������ʾ�������ظ�0x65 20�Σ���ʮ����
+    /* 
+    * "48 &?? ?? 65*20 88"
+    * &表示返回的地址以此为准
+    * *20表示重复20次，是十进制
+    * ??表示模糊匹配
     */
     size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
         bool first = true;
@@ -140,7 +138,6 @@ private:
         SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
         size_t total_length = 0;
 
-        // �����ַ�
         for (size_t i = 0; i < hex_string_data.length(); ++i) {
             unsigned char c = hex_string_data[i];
             bool validChar = true;
@@ -164,7 +161,6 @@ private:
                     offset = total_length + temp_signature_element.length;
                 }
                 else if (c == '*' && i + 1 < hex_string_data.length()) {
-                    // ���*�ź��滹���ַ������������ظ�����
                     size_t countInt;
                     unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
                     if (countInt) {
@@ -179,17 +175,14 @@ private:
                     }
                         
                 }
-                // ��Ч�ַ�������Ҫ�������
                 validChar = false;
                 goto _PushChar;
             }
 
             if (oldType == SignatureElementType::kNone) {
-                // ���������δ��ʼ�����������͸�ֵ��������
                 oldType = newType;
             }
 
-            // ���ַ����ͺ����ַ����Ͳ�ͬʱ����Ҫ�����µ�ƥ�䵥Ԫ
             else if (oldType != newType) {
                 temp_signature_element.type = oldType;
                 total_length += temp_signature_element.length;
@@ -201,7 +194,6 @@ private:
             }
 
         _PushChar:
-            // ���ԭ�������Ǿ�ȷƥ�䣬�������ַ�
             if (oldType == SignatureElementType::kWhole) {
                 if (first && validChar) {
                     sum = c << 4;
@@ -209,15 +201,12 @@ private:
                 }
                 else if (!first) {
                     first = true;
-                    // �������Ч�ַ���˵�������߲�δ�ṩ������������Ч�ַ�����������һ����Ч�ַ���ֵ
                     validChar ? sum += c : sum >>= 4;
                     temp_signature_element.data.push_back(sum);
                     ++temp_signature_element.length;
                 }
-                // ���һ��������ǣ���δ��ʼƴ���ֽڣ�������Ч�ַ���ֱ�����Ӽ���
             }
 
-            // ģ��ƥ�䣬�ǵڶ������ž�ֱ�ӵ�������
             else if (oldType == SignatureElementType::kVague) {
                 if (first && validChar) {
                     first = false;
@@ -230,7 +219,6 @@ private:
 
         }
 
-        // �����δ��ɵ��ַ���������
         if (!first) {
             if (oldType == SignatureElementType::kWhole) {
                 temp_signature_element.data.push_back(sum >> 4);
@@ -238,7 +226,6 @@ private:
             ++temp_signature_element.length;
         }
 
-        // ��ƥ�䵥Ԫ������
         if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
             temp_signature_element.type = oldType;
             total_length += temp_signature_element.length;
