@@ -1,5 +1,5 @@
-#ifndef GEEK_PROCESS_MEMORY_BLOCK_H_
-#define GEEK_PROCESS_MEMORY_BLOCK_H_
+#ifndef GEEK_PROCESS_MEMORY_INFO_H_
+#define GEEK_PROCESS_MEMORY_INFO_H_
 
 #include <string>
 
@@ -9,27 +9,28 @@
 
 namespace Geek {
 
-class MemoryBlock {
-public:
-    MemoryBlock() {
+struct MemoryInfo {
+    MemoryInfo() {
         base = 0;
         size = 0;
+        protect = 0;
+        state = 0;
     }
 
-    MemoryBlock(const MEMORY_BASIC_INFORMATION32& entry) {
+    MemoryInfo(const MEMORY_BASIC_INFORMATION32& entry) {
         base = entry.BaseAddress;
         size = entry.RegionSize;
         protect = entry.Protect;
         state = entry.State;
     }
-    MemoryBlock(const MEMORY_BASIC_INFORMATION64& entry) {
+    MemoryInfo(const MEMORY_BASIC_INFORMATION64& entry) {
         base = entry.BaseAddress;
         size = entry.RegionSize;
         protect = entry.Protect;
         state = entry.State;
     }
 
-    ~MemoryBlock() {
+    ~MemoryInfo() {
 
     }
 
@@ -42,4 +43,4 @@ public:
 
 };
 
-#endif // GEEK_PROCESS_MEMORY_BLOCK_H_
+#endif // GEEK_PROCESS_MEMORY_INFO_H_

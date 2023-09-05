@@ -15,14 +15,15 @@
 #endif
 
 
-#include <geek/process/ntinc.h>
-#include <geek/process/module.hpp>
-#include <geek/process/memory_block.hpp>
-#include <geek/handle/handle.hpp>
-#include <geek/pe/image.hpp>
-#include <geek/thread/thread.hpp>
-#include <geek/wow64ext/wow64ext.hpp>
-#include <geek/string/string.hpp>
+#include <Geek/process/ntinc.h>
+#include <Geek/process/module_info.hpp>
+#include <Geek/process/memory_info.hpp>
+#include <Geek/process/process_info.hpp>
+#include <Geek/handle/handle.hpp>
+#include <Geek/pe/image.hpp>
+#include <Geek/thread/thread.hpp>
+#include <Geek/wow64ext/wow64ext.hpp>
+#include <Geek/string/string.hpp>
 
 namespace Geek {
 
@@ -312,8 +313,8 @@ public:
         return success;
     }
 
-    std::vector<MemoryBlock> EnumMemoryBlockList() const {
-        std::vector<MemoryBlock> memoryBlockList;
+    std::vector<MemoryInfo> GetMemoryInfoList() const {
+        std::vector<MemoryInfo> memoryBlockList;
 
         memoryBlockList.reserve(200);
         /*
@@ -340,7 +341,7 @@ public:
         uint64_t p = 0;
         MEMORY_BASIC_INFORMATION    memInfo = { 0 };
         MEMORY_BASIC_INFORMATION64    memInfo64 = { 0 };
-        MemoryBlock temp;
+        MemoryInfo temp;
         while (true) {
             uint64_t size;
             if (ms_wow64.Wow64Operation(Get())) {
@@ -365,11 +366,11 @@ public:
         return memoryBlockList;
     }
 
-    bool ScanMemoryBlocks(bool(*callback)(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
+    bool ScanMemoryInfoList(bool(*callback)(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
         bool success = false;
         do {
-            auto modulelist = EnumModuleListEx();
-            auto vec = EnumMemoryBlockList();
+            auto modulelist = GetModuleInfoList();
+            auto vec = GetMemoryInfoList();
             size_t sizeSum = 0;
 
             for (int i = 0; i < vec.size(); i++) {
@@ -664,9 +665,9 @@ public:
             image.LoadFromImageBuf((void*)image_base, image_base);
         }
         else {
-            auto module = FindModlueByModuleBase(image_base);
-            if (!module.IsValid()) return image;
-            image.LoadFromImageBuf(ReadMemory(image_base, module.size).data(), image_base);
+            auto module_info = GetModlueInfoByModuleBase(image_base);
+            if (!module_info.IsValid()) return image;
+            image.LoadFromImageBuf(ReadMemory(image_base, module_info.size).data(), image_base);
         }
         return image;
     }
@@ -679,7 +680,7 @@ public:
             return (uint64_t)::LoadLibraryW(lib_name);
         }
 
-        auto module = FindModlueByModuleName(lib_name);
+        auto module = GetModlueInfoByModuleName(lib_name);
         if (module.IsValid()) {
             return module.base;
         }
@@ -1099,12 +1100,12 @@ public:
     /*
     * Module
     */
-    std::vector<Module> EnumModuleListEx() const {
+    std::vector<ModuleInfo> GetModuleInfoList() const {
         /*
         * https://blog.csdn.net/wh445306/article/details/107867375
         */
 
-        std::vector<Module> moduleList;
+        std::vector<ModuleInfo> moduleList;
         if (IsX86()) {
             do {
                 HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
@@ -1140,7 +1141,7 @@ public:
                     if (!ReadMemory(LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
                         continue;
                     }
-                    Module module(LDTE32, base_name.data(), full_name.data());
+                    ModuleInfo module(LDTE32, base_name.data(), full_name.data());
                     moduleList.push_back(module);
                     if (!ReadMemory(LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
                 }
@@ -1190,7 +1191,7 @@ public:
                         if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
                         continue;
                     }
-                    Module module(LDTE64, base_name.data(), full_name.data());
+                    ModuleInfo module(LDTE64, base_name.data(), full_name.data());
                     moduleList.push_back(module);
                     if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
                 }
@@ -1200,25 +1201,25 @@ public:
         return moduleList;
     }
 
-    Module FindModlueByModuleName(const std::wstring& name) {
+    ModuleInfo GetModlueInfoByModuleName(const std::wstring& name) {
         std::wstring find_name = Geek::String::ToUppercase(name);
         if (find_name == L"NTDLL") find_name += L".DLL";
-        for (auto& it : EnumModuleListEx()) {
+        for (auto& it : GetModuleInfoList()) {
             auto base_name_up = Geek::String::ToUppercase(it.base_name);
             if (base_name_up == find_name) {
                 return it;
             }
         }
-        return Module();
+        return ModuleInfo();
     }
 
-    Module FindModlueByModuleBase(uint64_t base) {
-        for (auto& it : EnumModuleListEx()) {
+    ModuleInfo GetModlueInfoByModuleBase(uint64_t base) {
+        for (auto& it : GetModuleInfoList()) {
             if (it.base == base) {
                 return it;
             }
         }
-        return Module();
+        return ModuleInfo();
     }
 
     static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
@@ -1276,30 +1277,6 @@ public:
 
     }
 
-    std::vector<MODULEENTRY32W> EnumModuleList() const {
-        std::vector<MODULEENTRY32W> moduleList;
-        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetId());
-        if (hSnapshot == INVALID_HANDLE_VALUE) {
-            return moduleList;
-        }
-
-        MODULEENTRY32W mi = { 0 };
-        mi.dwSize = sizeof(MODULEENTRY32W);
-        BOOL bRet = Module32FirstW(hSnapshot, &mi);
-        do {
-            if (bRet == false) {
-                break;
-            }
-            do {
-                moduleList.push_back(mi);
-                bRet = Module32NextW(hSnapshot, &mi);
-            } while (bRet);
-        } while (false);
-
-        CloseHandle(hSnapshot);
-        return moduleList;
-    }
-
     
     /*
     * other
@@ -1326,69 +1303,69 @@ public:
         return ::GetProcessIdOfThread(thread->Get());
     }
 
-    static std::vector<PROCESSENTRY32W> GetProcessList() {
+    static std::vector<ProcessInfo> GetProcessInfoList() {
         PROCESSENTRY32W pe32 = { 0 };
         pe32.dwSize = sizeof(PROCESSENTRY32W);
-        std::vector<PROCESSENTRY32W> processEntryList;
+        std::vector<ProcessInfo> processEntryList;
 
         UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
         if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
             return processEntryList;
         }
         do {
-            processEntryList.push_back(pe32);
+            processEntryList.push_back(ProcessInfo(pe32));
         } while (Process32NextW(hProcessSnap.Get(), &pe32));
         return processEntryList;
     }
 
-    static std::map<DWORD, PROCESSENTRY32W> GetProcessIdMap() {
+    static std::map<DWORD, ProcessInfo> GetProcessIdMap() {
         PROCESSENTRY32W pe32 = { 0 };
         pe32.dwSize = sizeof(PROCESSENTRY32W);
-        std::map<DWORD, PROCESSENTRY32W> process_map;
+        std::map<DWORD, ProcessInfo> process_map;
 
         UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
         if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
             return process_map;
         }
         do {
-            process_map.insert(std::make_pair(pe32.th32ProcessID, pe32));
+            process_map.insert(std::make_pair(pe32.th32ProcessID, ProcessInfo(pe32)));
         } while (Process32NextW(hProcessSnap.Get(), &pe32));
         return process_map;
     }
 
-    static std::wstring GetProcessNameByProcessId(DWORD pid, std::vector<PROCESSENTRY32W>* cache = nullptr) {
-        std::vector<PROCESSENTRY32W>* process_list = cache;
-        std::vector<PROCESSENTRY32W> copy;
+    static std::wstring GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr) {
+        std::vector<ProcessInfo>* process_list = cache;
+        std::vector<ProcessInfo> copy;
         if (process_list == nullptr) {
-            copy = GetProcessList();
+            copy = GetProcessInfoList();
             process_list = &copy;
         }
         else if(process_list->empty()) {
-            *process_list = GetProcessList();
+            *process_list = GetProcessInfoList();
         }
         for (auto& process : *process_list) {
-            if (pid == process.th32ProcessID) {
-                return std::wstring(process.szExeFile);
+            if (pid == process.process_id) {
+                return std::wstring(process.process_name);
             }
         }
         return L"";
     }
 
     static DWORD GetProcessIdByProcessName(const std::wstring& processName, int count = 1) {
-        auto processEntryList = GetProcessList();
+        auto processEntryList = GetProcessInfoList();
         std::wstring processName_ = processName;
         if (processEntryList.empty()) {
             return NULL;
         }
         int i = 0;
         for (auto& entry : processEntryList) {
-            auto exeFile_str = Geek::String::ToUppercase(std::wstring(entry.szExeFile));
+            auto exeFile_str = Geek::String::ToUppercase(entry.process_name);
             processName_ = Geek::String::ToUppercase(processName_);
             if (exeFile_str == processName_) {
                 if (++i < count) {
                     continue;
                 }
-                return entry.th32ProcessID;
+                return entry.process_id;
             }
         }
         return NULL;

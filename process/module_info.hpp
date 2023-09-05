@@ -1,5 +1,5 @@
-#ifndef GEEK_PROCESS_MODULE_H_
-#define GEEK_PROCESS_MODULE_H_
+#ifndef GEEK_PROCESS_MODULE_INFO_H_
+#define GEEK_PROCESS_MODULE_INFO_H_
 
 #include <string>
 
@@ -9,22 +9,21 @@
 
 namespace Geek {
 
-class Module {
-public:
-    Module() {
+struct ModuleInfo {
+    ModuleInfo() {
         base = 0;
         size = 0;
         entry_point = 0;
     }
 
-    Module(const LDR_DATA_TABLE_ENTRY64& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
+    ModuleInfo(const LDR_DATA_TABLE_ENTRY64& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
         base = entry.DllBase;
         size = entry.SizeOfImage;
         base_name = base_name_;
         full_name = full_name_;
         entry_point = entry.EntryPoint;
     }
-    Module(const LDR_DATA_TABLE_ENTRY32& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
+    ModuleInfo(const LDR_DATA_TABLE_ENTRY32& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
         base = entry.DllBase;
         size = entry.SizeOfImage;
         base_name = base_name_;
@@ -32,7 +31,7 @@ public:
         entry_point = entry.EntryPoint;
     }
 
-    ~Module() {
+    ~ModuleInfo() {
 
     }
 
@@ -49,4 +48,4 @@ public:
 
 };
 
-#endif // GEEK_PROCESS_MODULE_H_
+#endif // GEEK_PROCESS_MODULE_INFO_H_
