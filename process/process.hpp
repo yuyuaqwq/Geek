@@ -231,12 +231,11 @@ public:
     }
 
     bool ReadMemory(uint64_t addr, void* buf, size_t len) const {
+        SIZE_T readByte;
         if (this == nullptr) {
             memcpy(buf, (void*)addr, len);
             return true;
         }
-        SIZE_T readByte;
-
         if (ms_wow64.Wow64Operation(Get())) {
             HMODULE NtdllModule = ::GetModuleHandleW(L"ntdll.dll");
             pfnNtWow64ReadVirtualMemory64 NtWow64ReadVirtualMemory64 = (pfnNtWow64ReadVirtualMemory64)::GetProcAddress(NtdllModule, "NtWow64ReadVirtualMemory64");

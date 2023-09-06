@@ -400,7 +400,7 @@ protected:
 
 
 
-bool StackWalkCustom(
+static bool StackWalkCustom(
 	_In_ DWORD MachineType,
 	_In_ HANDLE hProcess,
 	_In_ HANDLE hThread,
