@@ -78,10 +78,11 @@ public:
             auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
-            
-            if (virtual_size % SectionAlignment) {
+
+            // 对齐不一定表示后面就有
+            /*if (virtual_size % SectionAlignment) {
                 virtual_size += SectionAlignment - virtual_size % SectionAlignment;
-            }
+            }*/
             m_section_list[i].resize(virtual_size, 0);
             memcpy(m_section_list[i].data(), &buf[m_section_header_table[i].VirtualAddress], virtual_size);
         }
