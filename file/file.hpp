@@ -72,10 +72,11 @@ public:
         std::vector<wchar_t> buf(MAX_PATH, L'\0');
         do {
             buf.resize(buf.size() * 2, L'\0');
-            GetModuleFileNameW(nullptr, (LPWSTR)buf.data(), MAX_PATH);
+            GetCurrentDirectoryW(MAX_PATH, (LPWSTR)buf.data());
+            // GetModuleFileNameW(nullptr, (LPWSTR)buf.data(), MAX_PATH);
         } while (GetLastError() == ERROR_INSUFFICIENT_BUFFER);
         std::wstring app_path = buf.data();
-        app_path = GetFileDir(app_path);
+        // app_path = GetFileDir(app_path);
         return app_path;
     }
 

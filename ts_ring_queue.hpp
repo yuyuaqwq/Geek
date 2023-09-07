@@ -3,7 +3,7 @@
 
 #include <mutex>
 
-#include <ring_queue.hpp>
+#include <Geek/ring_queue.hpp>
 
 template<class T>
 class TsRingQueue : private RingQueue<T> {
