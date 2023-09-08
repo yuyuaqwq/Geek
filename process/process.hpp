@@ -65,6 +65,10 @@ public:
         return Open(pid, desiredAccess);
     }
 
+    bool IsValid() {
+        return m_handle.Get() != NULL;
+    }
+
     /*
     * CREATE_SUSPENDED:挂起目标进程
     */
