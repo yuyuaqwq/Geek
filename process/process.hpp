@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <functionl>
 
 
 #ifndef WINNT
@@ -369,7 +370,7 @@ public:
         return memoryBlockList;
     }
 
-    bool ScanMemoryInfoList(bool(*callback)(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
+    bool ScanMemoryInfoList(std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg) callback, bool include_module = false) const {
         bool success = false;
         do {
             auto modulelist = GetModuleInfoList();
