@@ -6,7 +6,7 @@
 
 #include <Windows.h>
 
-#include <geek\handle\handle.hpp>
+#include <geek/handle.hpp>
 
 namespace Geek {
 static const HANDLE kCurrentThread = (HANDLE)-2;

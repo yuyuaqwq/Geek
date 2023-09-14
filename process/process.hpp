@@ -19,7 +19,7 @@
 #include <Geek/process/module_info.hpp>
 #include <Geek/process/memory_info.hpp>
 #include <Geek/process/process_info.hpp>
-#include <Geek/handle/handle.hpp>
+#include <Geek/handle.hpp>
 #include <Geek/pe/image.hpp>
 #include <Geek/thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
@@ -316,6 +316,27 @@ public:
         return success;
     }
 
+    MemoryInfo GetMemoryInfo(uint64_t addr) const {
+        uint64_t size;
+        MEMORY_BASIC_INFORMATION    memInfo = { 0 };
+        MEMORY_BASIC_INFORMATION64    memInfo64 = { 0 };
+        if (ms_wow64.Wow64Operation(Get())) {
+            size = Geek::Wow64::VirtualQueryEx64(Get(), addr, &memInfo64, sizeof(memInfo64));
+            if (size != sizeof(memInfo64)) { return MemoryInfo(); }
+            return MemoryInfo(memInfo64);
+        }
+        else {
+            size_t size = ::VirtualQueryEx(Get(), (PVOID)addr, &memInfo, sizeof(memInfo));
+            if (size != sizeof(memInfo)) { return MemoryInfo(); }
+            if (IsX86()) {
+                return MemoryInfo(*(MEMORY_BASIC_INFORMATION32*)&memInfo);
+            }
+            else {
+                return MemoryInfo(*(MEMORY_BASIC_INFORMATION64*)&memInfo);
+            }
+        }
+    }
+
     std::vector<MemoryInfo> GetMemoryInfoList() const {
         std::vector<MemoryInfo> memoryBlockList;
 
@@ -368,6 +389,8 @@ public:
         }
         return memoryBlockList;
     }
+
+  
 
     bool ScanMemoryInfoList(bool(*callback)(uint64_t raw_addr, uint8_t* addr, size_t size, void* arg), void* arg, bool include_module = false) const {
         bool success = false;
