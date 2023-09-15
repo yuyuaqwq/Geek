@@ -1,141 +1,77 @@
 #ifndef RING_QUEUE_H_
 #define RING_QUEUE_H_
 
-#include <Geek/sync/event.hpp>
+#include <exception>
+#include <atomic>
 
+/*
+* 无锁单读单写循环队列
+* 参考：https://zhuanlan.zhihu.com/p/360872276
+*/
 
-template<class T, class Array = std::vector<T>>
+template<class T>
 class RingQueue {
 public:
-    RingQueue(sync::Event* readable_event = nullptr, sync::Event* writable_event = nullptr) {
-        head_ = 0;
-        tail_ = 0;
-        readable_event_ = readable_event;
-        writable_event_ = writable_event;
-
-        wait_readable_ = false;
-    }
-    RingQueue(size_t count, sync::Event* readable_event = nullptr, sync::Event* writable_event = nullptr) : arr_(count) {
-        head_ = 0;
-        tail_ = 0;
-        readable_event_ = readable_event;
-        writable_event_ = writable_event;
-
-        wait_readable_ = false;
+    RingQueue(T* arr, size_t count) {
+        Reset(arr, count);
     }
 
-    void Reset(Array&& arr) {
-        arr_ = std::move(arr);
+    void Reset(T* arr, size_t count) {
+        if ((count > 0) && (count & (count - 1)) != 0) {
+            throw std::runtime_error("must be a power of 2.");
+        }
+        arr_ = arr;
+        count_ = count;
+        head_ = 0;
+        tail_ = 0;
     }
 
     bool IsEmpty() {
-        return head_ == tail_;
+        return head_.load() == tail_.load();
     }
 
     bool IsFull() {
-        return (tail_ + 1) % arr_.size() == tail_;
+        return RewindIndex(tail_.load() + 1) == tail_.load();
     }
 
     size_t Size() {
-        if (tail_ >= head_) return tail_ - head_;
-        return (tail_) + (arr_.size() - head_);
+        if (tail_.load() >= head_.load()) {
+            return tail_.load() - head_.load();
+        }
+        return (tail_.load()) + (count_ - head_.load());
     }
 
-    bool Enqueue(T&& t) {
-        if (IsFull()) {
-            return false;
+    bool Enqueue(T&& ele) {
+        auto ctail = tail_.load(std::memory_order_relaxed);
+        auto ntail = RewindIndex(ctail + 1);
+        if (ntail != head_.load(std::memory_order_acquire)) {
+            arr_[tail_] = std::move(ele);
+            tail_.store(ntail, std::memory_order_release);
+            return true;
         }
-        arr_[tail_] = std::move(t);
-        tail_ = (tail_ + 1) % arr_.size();
+        return false;
     }
 
-    bool Enqueue(const T& t, bool full_wait = true) {
-        _retry:
-        if (IsFull()) {
-            if (full_wait) {
-                return false;
-            }
-            else {
-                goto _retry;
-            }
+    bool Dequeue(T* ele) {
+        auto chead = head_.load(std::memory_order_relaxed);
+        if (chead != tail_.load(std::memory_order_acquire)) {
+            *ele = std::move(arr_[head_]);
+            head_.store(RewindIndex(chead + 1), std::memory_order_release);
+            return true;
         }
-        arr_[tail_] = t;
-        tail_ = (tail_ + 1) % arr_.size();
-        if (wait_readable_count_ > 0) {
-            // 通知可读
-            readable_event_->Set();
-        }
-    }
-
-    void Enquene(T* buf, size_t count) {
-        for (size_t i = 0; i < count; i++) {
-            Enqueue(buf[i]);
-        }
-        //ptrdiff_t begin_pos, end_pos, cur_pos = 0;
-        //do {
-        //    if (tail_ >= head_) {
-        //        begin_pos = tail_;
-        //        end_pos = arr.size();
-        //        tail_ = 0;
-        //    }
-        //    else {
-        //        begin_pos = 0;
-        //        end_pos = tail_;
-        //    }
-        //    size_t copy_count = end_pos - begin_pos;
-        //    if (size < copy_count) {
-        //        copy_count = size;
-        //    }
-        //    memcpy(&arr_[begin_pos], &buf[cur_pos], copy_count * sizeof(T));
-        //    size -= copy_count;
-        //    cur_pos += copy_count;
-        //}  while (size > 0);
-    }
-
-    // 没有考虑异常安全
-    T InternalDequeue(bool empty_wait = true) {
-    _retry:
-        if (IsEmpty()) {
-            if (empty_wait) {
-                lock_->Release();
-                wait_readable_count_ = 1;
-                readable_event_->Wait();
-                wait_readable_count_ = 0;
-                goto _retry;
-            }
-            else {
-                throw std::runtime_error("queue is empty.");
-            }
-        }
-        auto ret = std::move(arr_[head_]);
-        head_ = (head_ + 1) % arr_.size();
-        return ret;
-    }
-
-    T Dequeue(bool empty_wait = true) {
-        lock_->Acquire();
-        auto data = InternalDequeue(empty_wait);
-        lock_->Release();
-        return data;
-    }
-
-    void Dequeue(T* data, size_t count) {
-        lock_->Acquire();
-        for (size_t i = 0; i < count; i++) {
-            data[i] = InternalDequeue();
-        }
-        lock_->Release();
+        return false;
     }
 
 private:
-    Array arr_;
-    size_t head_;
-    size_t tail_;
-    sync::Mutex* lock_;
-    sync::Event* readable_event_;
-    sync::Event* writable_event_;
+	size_t RewindIndex(size_t i) {
+        return i & (count_ - 1);
+    }
 
-    size_t wait_readable_count_;
+private:
+    T* arr_;
+    size_t count_;
+    std::atomic<size_t> head_;
+    std::atomic<size_t> tail_;
 };
 
 #endif  // RING_QUEUE_H_
