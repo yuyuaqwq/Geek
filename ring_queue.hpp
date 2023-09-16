@@ -12,25 +12,33 @@
 template<class T>
 class RingQueue {
 public:
-    RingQueue(T* arr, size_t count) : arr_{ arr }, count_{ count } {
+    RingQueue(T* arr, size_t count) {
+        Reset(arr, count);
+    }
+
+    void Reset(T* arr, size_t count) {
         if ((count > 0) && (count & (count - 1)) != 0) {
             throw std::runtime_error("must be a power of 2.");
         }
+        arr_ = arr;
+        count_ = count;
         head_ = 0;
         tail_ = 0;
     }
 
     bool IsEmpty() {
-        return head_ == tail_;
+        return head_.load() == tail_.load();
     }
 
     bool IsFull() {
-        return RewindIndex(tail_ + 1) == tail_;
+        return RewindIndex(tail_.load() + 1) == tail_.load();
     }
 
     size_t Size() {
-        if (tail_ >= head_) return tail_ - head_;
-        return (tail_) + (count_ - head_);
+        if (tail_.load() >= head_.load()) {
+            return tail_.load() - head_.load();
+        }
+        return (tail_.load()) + (count_ - head_.load());
     }
 
     bool Enqueue(T&& ele) {

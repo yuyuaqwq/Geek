@@ -13,7 +13,7 @@ public:
     UniqueHandle() noexcept : m_handle{ INVALID_HANDLE_VALUE } {
 
     }
-    explicit UniqueHandle(HANDLE handle) noexcept : m_handle{ handle } {
+    UniqueHandle(HANDLE handle) noexcept : m_handle{ handle } {
 
     }
     ~UniqueHandle() noexcept {

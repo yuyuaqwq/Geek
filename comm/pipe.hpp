@@ -1,56 +1,32 @@
-#ifndef GEEK_PIPE_PIPE_H_
-#define GEEK_PIPE_PIPE_H_
+#ifndef GEEK_COMM_PIPE_H_
+#define GEEK_COMM_PIPE_H_
 
 #include <string>
 #include <vector>
 
-
-#ifdef WINNT
-#include <ntimage.h>
-#include <ntifs.h>
-#else
 #include <Windows.h>
-#include <geek/handle/handle.hpp>
-#endif
+#include <geek/handle.hpp>
 
 
 namespace Geek {
 
 class Pipe {
 public:
-#ifdef WINNT
-    bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
-        UNICODE_STRING uniName;
-        OBJECT_ATTRIBUTES objAttr;
-        RtlInitUnicodeString(&uniName, (std::wstring(L"\\DosDevices\\Pipe\\") + name).c_str());
-        InitializeObjectAttributes(&objAttr, &uniName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-        ZwCreateFile(&g_hClient, GENERIC_READ | GENERIC_WRITE, &objAttr,
-            &g_ioStatusBlock, NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN,
-            FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
-        if (!g_hClient)
-        {
-            return;
-        }
-        KeInitializeEvent(&g_event, SynchronizationEvent, TRUE);
-        return true;
-    }
-#else
-    bool Create(const wchar_t* name, size_t buf_size = 4096, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
+    bool Create(const std::wstring& name, size_t buf_size = 0x1000, DWORD open_mode = PIPE_ACCESS_DUPLEX, DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT) {
         m_buf_size = buf_size;
-        m_pipe_handle.Reset(CreateNamedPipeW(name, open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
+        m_pipe_handle.Reset(CreateNamedPipeW((LR"(\\.\pipe\Geek_Pipe_)" + name).c_str(), open_mode, pipe_mode, 1, buf_size, buf_size, 0, NULL));
         return m_pipe_handle.IsValid();
     }
-#endif
 
     void WaitConnect() {
         ConnectNamedPipe(m_pipe_handle.Get(), NULL);
     }
 
-    bool Connect(const wchar_t* name) {
-        if (!WaitNamedPipeW(name, NMPWAIT_USE_DEFAULT_WAIT)) {
+    bool Connect(const std::wstring& name) {
+        if (!WaitNamedPipeW((LR"(\\.\pipe\Geek_Pipe_)" + name).c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
             return false;
         }
-        m_pipe_handle.Reset(CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL));
+        m_pipe_handle.Reset(CreateFileW((LR"(\\.\pipe\Geek_Pipe_)" + name).c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL));
         if (!m_pipe_handle.IsValid()) {
             return false;
         }
@@ -73,7 +49,7 @@ public:
         DWORD read_len;
         uint8_t* ptr = packet.data();
         bool success = false;
-        int32_t i = 0;
+        int64_t i = 0;
         do {
             success = ReadFile(m_pipe_handle.Get(), ptr, 4096, &read_len, NULL);
             if (read_len == 0) {
@@ -89,7 +65,7 @@ public:
                 break;
             }
             packet.resize(packet.size() + 4096);
-            ptr = &packet[i+=4096];
+            ptr = &packet[i+=4096ll];
         } while (true);
         return packet;
     }
@@ -107,4 +83,4 @@ private:
 }
 
 
-#endif // GEEK_PIPE_PIPE_H_
+#endif // GEEK_COMM_PIPE_H_
