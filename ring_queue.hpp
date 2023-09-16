@@ -1,10 +1,21 @@
 #ifndef RING_QUEUE_H_
 #define RING_QUEUE_H_
 
+#include <exception>
+#include <atomic>
+
+/*
+* 无锁单读单写循环队列
+* 参考：https://zhuanlan.zhihu.com/p/360872276
+*/
+
 template<class T>
 class RingQueue {
 public:
-    RingQueue(size_t count) : arr_(count) {
+    RingQueue(T* arr, size_t count) : arr_{ arr }, count_{ count } {
+        if ((count > 0) && (count & (count - 1)) != 0) {
+            throw std::runtime_error("must be a power of 2.");
+        }
         head_ = 0;
         tail_ = 0;
     }
@@ -14,36 +25,45 @@ public:
     }
 
     bool IsFull() {
-        return (tail_ + 1) % arr_.size() == tail_;
+        return RewindIndex(tail_ + 1) == tail_;
     }
 
     size_t Size() {
         if (tail_ >= head_) return tail_ - head_;
-        return (tail_) + (arr_.size() - head_);
+        return (tail_) + (count_ - head_);
     }
 
-    bool Enqueue(T&& t) {
-        if (IsFull()) {
-            return false;
+    bool Enqueue(T&& ele) {
+        auto ctail = tail_.load(std::memory_order_relaxed);
+        auto ntail = RewindIndex(ctail + 1);
+        if (ntail != head_.load(std::memory_order_acquire)) {
+            arr_[tail_] = std::move(ele);
+            tail_.store(ntail, std::memory_order_release);
+            return true;
         }
-        arr_[tail_] = std::move(t);
-        tail_ = (tail_ + 1) % arr_.size();
+        return false;
     }
 
-    // 没有考虑异常安全
-    T Dequeue() {
-        if (IsEmpty()) {
-            throw std::runtime_error("queue is empty.");
+    bool Dequeue(T* ele) {
+        auto chead = head_.load(std::memory_order_relaxed);
+        if (chead != tail_.load(std::memory_order_acquire)) {
+            *ele = std::move(arr_[head_]);
+            head_.store(RewindIndex(chead + 1), std::memory_order_release);
+            return true;
         }
-        auto ret = std::move(arr_[head_]);
-        head_ = (head_ + 1) % arr_.size();
-        return ret;
+        return false;
     }
 
 private:
-    std::vector<T> arr_;
-    size_t head_;
-    size_t tail_;
+	size_t RewindIndex(size_t i) {
+        return i & (count_ - 1);
+    }
+
+private:
+    T* arr_;
+    size_t count_;
+    std::atomic<size_t> head_;
+    std::atomic<size_t> tail_;
 };
 
 #endif  // RING_QUEUE_H_
