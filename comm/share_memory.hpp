@@ -9,31 +9,6 @@
 namespace Geek {
 namespace comm {
 
-namespace internal {
-struct Buffer {
-    Buffer() : base_{ nullptr }, size_{0}  {
-
-    }
-    Buffer(void* base, size_t size) : base_{ (uint8_t*)base }, size_{ size } {
-
-    }
-
-    void resize(size_t size) {
-
-    }
-
-    size_t size() {
-        return size_;
-    }
-
-    uint8_t& operator[](ptrdiff_t i) {
-        return base_[i];
-    }
-
-    uint8_t* base_;
-    size_t size_;
-};
-}
 
 class ShareMemory {
 public:
