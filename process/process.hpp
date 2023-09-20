@@ -690,7 +690,7 @@ public:
             image.LoadFromImageBuf((void*)image_base, image_base);
         }
         else {
-            auto module_info = GetModlueInfoByModuleBase(image_base);
+            auto module_info = GetModuleInfoByModuleBase(image_base);
             if (!module_info.IsValid()) return image;
             image.LoadFromImageBuf(ReadMemory(image_base, module_info.size).data(), image_base);
         }
@@ -705,7 +705,7 @@ public:
             return (uint64_t)::LoadLibraryW(lib_name);
         }
 
-        auto module = GetModlueInfoByModuleName(lib_name);
+        auto module = GetModuleInfoByModuleName(lib_name);
         if (module.IsValid()) {
             return module.base;
         }
@@ -1226,7 +1226,7 @@ public:
         return moduleList;
     }
 
-    ModuleInfo GetModlueInfoByModuleName(const std::wstring& name) {
+    ModuleInfo GetModuleInfoByModuleName(const std::wstring& name) {
         std::wstring find_name = Geek::String::ToUppercase(name);
         if (find_name == L"NTDLL") find_name += L".DLL";
         for (auto& it : GetModuleInfoList()) {
@@ -1238,7 +1238,7 @@ public:
         return ModuleInfo();
     }
 
-    ModuleInfo GetModlueInfoByModuleBase(uint64_t base) {
+    ModuleInfo GetModuleInfoByModuleBase(uint64_t base) {
         for (auto& it : GetModuleInfoList()) {
             if (it.base == base) {
                 return it;

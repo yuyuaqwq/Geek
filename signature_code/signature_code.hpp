@@ -31,7 +31,6 @@ public:
     ~SignatureCode() { }
 
 public:
-
     uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
         std::vector<SignatureElement> signature;
         size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
