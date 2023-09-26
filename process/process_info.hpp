@@ -10,9 +10,6 @@
 namespace Geek {
 
 struct ProcessInfo {
-    ProcessInfo() {
-        process_id = 0;
-    }
     explicit ProcessInfo(const PROCESSENTRY32W& entry) {
         process_id = entry.th32ProcessID;
         parent_process_id = entry.th32ParentProcessID;

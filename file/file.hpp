@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <optional>
 
 #include <Windows.h>
 #include <TlHelp32.h>
@@ -18,51 +19,44 @@ namespace Geek {
 
 class File {
 public:
-    enum class Status {
-        kNormal = 0,
-        kInvalidPath,
-    };
+    File() {
 
-public:
-    File(const GEEK_STD wstring& path, GEEK_STD ios_base::openmode mode = GEEK_STD ios_base::in | GEEK_STD ios_base::out) {
-        m_fs.open(path.c_str(), mode);
-        if (!m_fs.is_open()) {
-            m_status = Status::kInvalidPath;
-            return;
-        }
-        m_status = Status::kNormal;
     }
+
+    File(File&& file) : fs_{std::move(file.fs_)} {
+
+    }
+
     ~File() {
-        m_fs.close();
+        fs_.close();
+    }
+
+    static std::optional<File> Open(std::wstring_view path, GEEK_STD ios_base::openmode mode = GEEK_STD ios_base::in | GEEK_STD ios_base::out) {
+        File temp{};
+        temp.fs_.open(path.data(), mode);
+        if (!temp.fs_.is_open()) {
+            return {};
+        }
+        return temp;
     }
 
 public:
-    GEEK_STD vector<char> Read(uint32_t offset = 0, uint32_t len = 0) {
-        GEEK_STD vector<char> ret;
-        if (m_status != Status::kNormal) {
-            return ret;
-        }
+    GEEK_STD vector<uint8_t> Read(uint32_t offset = 0, uint32_t len = 0) {
+        GEEK_STD vector<uint8_t> ret;
         if (len == 0) {
-            m_fs.seekg(offset, GEEK_STD ios_base::end);
-            len = m_fs.tellg();
+            fs_.seekg(offset, GEEK_STD ios_base::end);
+            len = fs_.tellg();
         }
-        m_fs.seekg(offset, GEEK_STD ios_base::beg);
+        fs_.seekg(offset, GEEK_STD ios_base::beg);
         ret.resize(len);
-        m_fs.read(ret.data(), len);
+        fs_.read((char*)ret.data(), len);
         return ret;
     }
 
     bool Write(const GEEK_STD vector<uint8_t>& buf, uint32_t offset = 0) {
-        if (m_status != Status::kNormal) {
-            return false;
-        }
-        m_fs.seekg(offset, GEEK_STD ios_base::beg);
-        m_fs.write((char*)buf.data(), buf.size());
+        fs_.seekg(offset, GEEK_STD ios_base::beg);
+        fs_.write((char*)buf.data(), buf.size());
         return true;
-    }
-
-    bool Ok() {
-        return m_status == Status::kNormal;
     }
 
     /*
@@ -379,8 +373,7 @@ public:
     }
 
 private:
-    Status m_status;
-    GEEK_STD fstream m_fs;
+    GEEK_STD fstream fs_;
 };
 
 } // namespace Geek

@@ -149,7 +149,7 @@ private:
 
             auto it_addr = ms_page_hook_addr.find(address);
             if (it_addr != ms_page_hook_addr.end()) {
-                it_addr->second.mCallback(context);
+                it_addr->second.m_callback(context);
             }
 
             // 设置TF，单步后再次设置页面属性

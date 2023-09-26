@@ -1,8 +1,9 @@
-#ifndef GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
-#define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
+#ifndef GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_
+#define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_
 
 #include <string>
 #include <vector>
+#include <optional>
 
 #include <geek/process/process.hpp>
 
@@ -24,28 +25,27 @@ private:
         std::vector<unsigned char> data;
     };
 
-
 public:
-    SignatureCode() : m_process { nullptr } { }
-    explicit SignatureCode(Process* process) : m_process{ process } { }
+    SignatureCode() : process_handle_ { nullptr } { }
+    explicit SignatureCode(Process* process) : process_handle_{ process } { }
     ~SignatureCode() { }
 
 public:
-    uint64_t Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
+    std::optional<uint64_t> Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
         std::vector<SignatureElement> signature;
         size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 
         size_t signature_size = signature.size();
-        if (!signature_size) return 0;
+        if (!signature_size) return {};
 
-        std::vector<uint8_t> buf;
         uint64_t base = 0;
-        if (!m_process->IsCur()) {
-            buf = m_process->ReadMemory(start_address, size);
-            if (buf.empty()) {
-                return 0;
+        std::optional<std::vector<uint8_t>> buf;
+        if (!process_handle_->IsCur()) {
+            buf = process_handle_->ReadMemory(start_address, size);
+            if (!buf) {
+                return {};
             }
-            uint64_t new_start_address = (uint64_t)buf.data();
+            uint64_t new_start_address = (uint64_t)buf.value().data();
             base = ((uint64_t)start_address - (uint64_t)new_start_address);
             start_address = new_start_address;
         }
@@ -74,7 +74,7 @@ public:
                 return (base + ret_pos + offset);
             }
         }
-        return 0;
+        return {};
 
     }
 
@@ -235,10 +235,9 @@ private:
     }
 
 private:
-    size_t m_offset;
-    Process* m_process;
+    Process* process_handle_;
 };
 
 } // namespace Geek
 
-#endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_H_
+#endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_

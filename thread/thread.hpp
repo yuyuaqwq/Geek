@@ -1,8 +1,9 @@
-#ifndef GEEK_THREAD_THREAD_H_
-#define GEEK_THREAD_THREAD_H_
+#ifndef GEEK_THREAD_THREAD_HPP_
+#define GEEK_THREAD_THREAD_HPP_
 
 #include <string>
 #include <vector>
+#include <optional>
 
 #include <Windows.h>
 
@@ -14,40 +15,27 @@ static const HANDLE kCurrentThread = (HANDLE)-2;
 
 class Thread {
 public:
-    Thread() {
-        Open(UniqueHandle(kCurrentThread));
+    Thread(UniqueHandle thread_handle) : thread_handle_ { std::move(thread_handle) } {
+        
     }
 
-    void Create(LPTHREAD_START_ROUTINE routine, LPVOID par = nullptr) {
-        m_handle.Reset(::CreateThread(NULL, 0, routine, par, 0, NULL));
+    static std::optional<Thread> Create(LPTHREAD_START_ROUTINE routine, LPVOID par = nullptr) {
+        auto handle = ::CreateThread(NULL, 0, routine, par, 0, NULL);
+        if (!handle) return {};
+        return Thread{ handle };
     }
 
-    void Open(UniqueHandle hThread) {
-        m_handle = std::move(hThread);
-    }
-
-    bool Open(DWORD tid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
-        auto hThread = OpenThread(desiredAccess, FALSE, tid);
-        if (hThread == NULL) {
-            return false;
-        }
-        m_handle = UniqueHandle(hThread);
-        return true;
-    }
-
-    bool IsVaild() {
-        if (this == nullptr) { return true; }
-        return m_handle.IsValid();
+    static std::optional<Thread> Open(DWORD tid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+        auto handle = OpenThread(desiredAccess, FALSE, tid);
+        if (!handle) return {};
+        return Thread{ handle };
     }
 
     HANDLE Get() const noexcept {
-        if (this == nullptr) {
-            return kCurrentThread;
-        }
-        return m_handle.Get();
+        return thread_handle_.Get();
     }
 
-    bool IsCur() {
+    bool IsCur() const noexcept {
         return Get() == kCurrentThread;
     }
 
@@ -77,12 +65,10 @@ public:
     
 
 private:
-    UniqueHandle m_handle;
-
-
+    UniqueHandle thread_handle_;
 };
 
 
 } // namespace Geek
 
-#endif // GEEK_THREAD_THREAD_H_
+#endif // GEEK_THREAD_THREAD_HPP_

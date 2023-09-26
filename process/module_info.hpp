@@ -10,11 +10,6 @@
 namespace Geek {
 
 struct ModuleInfo {
-    ModuleInfo() {
-        base = 0;
-        size = 0;
-        entry_point = 0;
-    }
 
     ModuleInfo(const LDR_DATA_TABLE_ENTRY64& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
         base = entry.DllBase;
@@ -33,10 +28,6 @@ struct ModuleInfo {
 
     ~ModuleInfo() {
 
-    }
-
-    bool IsValid() {
-        return size != 0;
     }
 
     uint64_t entry_point;

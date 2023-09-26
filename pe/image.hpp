@@ -1,8 +1,9 @@
-#ifndef GEEK_PE_IMAGE_H_
-#define GEEK_PE_IMAGE_H_
+#ifndef GEEK_PE_IMAGE_HPP_
+#define GEEK_PE_IMAGE_HPP_
 
 #include <string>
 #include <vector>
+#include <optional>
 
 #ifndef WINNT
 #include <Windows.h>
@@ -22,11 +23,11 @@ namespace Geek {
     else/* (m_nt_header->OptionalHeader.Magic == 0x20b)*/ ((IMAGE_NT_HEADERS64*)m_nt_header)->OptionalHeader.##field = var; } 
 
 class Image {
+private:
+    friend class Process;
 
 public:
-    Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } {
-        
-    }
+    Image() : m_dos_header{ 0 }, m_nt_header { nullptr }, m_file_header{ nullptr } { }
 
     ~Image() {
         if (m_nt_header) {
@@ -58,11 +59,31 @@ public:
     void operator=(const Image&) = delete;
 
 public:
-    bool IsValid() {
-        return m_nt_header != nullptr;
+    static std::optional<Image> LoadFromImageBuf(void* buf, uint64_t memory_image_base) {
+        Image temp;
+        if (!temp.ReloadFromImageBuf(buf, memory_image_base)) {
+            return {};
+        }
+        return temp;
     }
 
-    bool LoadFromImageBuf(void* buf_, uint64_t memory_image_base) {
+    static std::optional<Image> LoadFromFileBuf(void* buf, uint64_t memory_image_base) {
+        Image temp;
+        if (!temp.ReloadFromFileBuf(buf, memory_image_base)) {
+            return {};
+        }
+        return temp;
+    }
+
+    static std::optional<Image> LoadFromFile(std::wstring_view path) {
+        Image temp;
+        if (!temp.ReloadFromFile(path)) {
+            return {};
+        }
+        return temp;
+    }
+
+    bool ReloadFromImageBuf(void* buf_, uint64_t memory_image_base) {
         IMAGE_SECTION_HEADER* sectionHeaderTable;
         if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
             return false;
@@ -89,7 +110,7 @@ public:
         return true;
     }
 
-    bool LoadFromFileBuf(void* buf_, uint64_t memory_image_base) {
+    bool ReloadFromFileBuf(void* buf_, uint64_t memory_image_base) {
         IMAGE_SECTION_HEADER* sectionHeaderTable;
         if (!CopyPEHeader(buf_, &sectionHeaderTable)) {
             return false;
@@ -123,24 +144,22 @@ public:
         return true;
     }
 
-    bool LoadFromFile(const std::wstring& path) {
-        File pe(path, std::ios::in | std::ios::binary);
-        if (!pe.Ok()) {
+    bool ReloadFromFile(std::wstring_view path) {
+        auto pe = File::Open(path, std::ios::in | std::ios::binary);
+        if (!pe) {
             return false;
         }
-        auto buf = pe.Read();
-        return LoadFromFileBuf(buf.data(), 0);
+        auto buf = pe.value().Read();
+        return ReloadFromFileBuf(buf.data(), 0);
     }
 
-    bool SaveToFile(const std::wstring& path) {
-        File pe(path, std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!pe.Ok()) {
+    bool SaveToFile(std::wstring_view path) {
+        auto pe = File::Open(path, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!pe) {
             return false;
         }
-
         auto buf = SaveToFileBuf();
-
-        return pe.Write(buf);
+        return pe.value().Write(buf);
     }
 
     std::vector<uint8_t> SaveToFileBuf() {
@@ -484,14 +503,15 @@ public:
     /*
     * Resource
     */
-    static std::vector<uint8_t> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type) {
+    static std::optional<std::vector<uint8_t>> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type) {
         // 查找资源
         std::vector<uint8_t> buf;
         HGLOBAL hRes = NULL;
+        LPVOID pRes = NULL;
         do {
             HRSRC hResID = FindResourceW(handle_module, MAKEINTRESOURCEW(resource_id), type);
             if (!hResID) {
-                break;
+                return {};
             }
             // 加载资源
             hRes = LoadResource(handle_module, hResID);
@@ -499,7 +519,7 @@ public:
                 break;
             }
             // 锁定资源
-            LPVOID pRes = LockResource(hRes);
+            pRes = LockResource(hRes);
             if (pRes == NULL) {
                 break;
             }
@@ -513,6 +533,7 @@ public:
             FreeResource(hRes);
             hRes = NULL;
         }
+        if (!hRes || !pRes) return {};
         return buf;
     }
 
@@ -640,9 +661,8 @@ private:
 
     uint64_t m_memory_image_base;
 
-    friend class Process;
 };
 
 } // namespace Geek
 
-#endif // GEEK_PE_IMAGE_H_
+#endif // GEEK_PE_IMAGE_HPP_

@@ -1,9 +1,10 @@
-#ifndef GEEK_PROCESS_PROCESS_H_
-#define GEEK_PROCESS_PROCESS_H_
+#ifndef GEEK_PROCESS_PROCESS_HPP_
+#define GEEK_PROCESS_PROCESS_HPP_
 
 #include <string>
 #include <vector>
 #include <map>
+#include <optional>
 #include <functional>
 
 
@@ -31,6 +32,8 @@ namespace Geek {
 static Wow64 ms_wow64;
 static const HANDLE kCurrentProcess = (HANDLE)-1;
 
+
+
 class Process {
 public:
     enum class Status {
@@ -41,64 +44,49 @@ public:
     };
 
 public:
-    Process() {
-        Open(UniqueHandle(kCurrentProcess));
-    }
-
-    void Open(UniqueHandle hProcess) {
-        m_handle = std::move(hProcess);
-    }
-
-    bool Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
+    static std::optional<Process> Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
         auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
         if (hProcess == NULL) {
-            return false;
+            return {};
         }
-        m_handle = UniqueHandle(hProcess);
-        return true;
+        return Process{ UniqueHandle(hProcess) };
     }
 
-    bool Open(const wchar_t* process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS, int count = 1) {
-        DWORD pid = GetProcessIdByProcessName(process_name, count);
-        if (pid == 0) {
-            return false;
+    static std::optional<Process> Open(std::wstring_view process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS, size_t count = 1) {
+        auto pid = GetProcessIdByProcessName(process_name, count);
+        if (!pid) {
+            return {};
         }
-        return Open(pid, desiredAccess);
-    }
-
-    bool IsValid() {
-        return m_handle.Get() != NULL;
+        return Open(pid.value(), desiredAccess);
     }
 
     /*
     * CREATE_SUSPENDED:挂起目标进程
     */
-    Status Create(const std::wstring& command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
-        std::wstring command_ = command;
+    static std::optional<Process> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
+        std::wstring command_ = command.data();
         STARTUPINFOW startupInfo{ sizeof(startupInfo) };
         PROCESS_INFORMATION processInformation{ 0 };
         if (!CreateProcessW(NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
-            return Status::kApiCallFailed;
+            return {};
         }
-        m_handle = UniqueHandle(processInformation.hProcess);
         CloseHandle(processInformation.hThread);
-        return Status::kOk;
+        return Process{ UniqueHandle(processInformation.hProcess) };
     }
 
     /*
     * L"explorer.exe"
     */
-    bool CreateByToken(const std::wstring& tokenProcessName, const std::wstring& command, HANDLE* thread = NULL, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+    static std::optional<Process> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, HANDLE* thread = NULL, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
         HANDLE hToken_ = NULL;
-        std::wstring tokenProcessName_ = tokenProcessName;
-        DWORD pid = GetProcessIdByProcessName(tokenProcessName);
-        if (pid == NULL) {
-            return false;
+        auto pid = GetProcessIdByProcessName(tokenProcessName);
+        if (!pid) {
+            return {};
         }
-        UniqueHandle hProcess{ OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid) };
+        UniqueHandle hProcess{ OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid.value()) };
         OpenProcessToken(hProcess.Get(), TOKEN_ALL_ACCESS, &hToken_);
         if (hToken_ == NULL) {
-            return false;
+            return {};
         }
         UniqueHandle hToken{ hToken_ };
 
@@ -114,37 +102,41 @@ public:
         // si->lpDesktop = L"winsta0\\default";
         si->dwFlags |= STARTF_USESHOWWINDOW;
         si->wShowWindow |= SW_HIDE;
-        std::wstring command_ = command;
-        BOOL ret = CreateProcessAsUserW(hToken.Get(), NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags | NORMAL_PRIORITY_CLASS, NULL, NULL, si, pi);
+        std::wstring command_copy = command.data();
+        BOOL ret = CreateProcessAsUserW(hToken.Get(), NULL, (LPWSTR)command_copy.c_str(), NULL, NULL, inheritHandles, creationFlags | NORMAL_PRIORITY_CLASS, NULL, NULL, si, pi);
         if (!ret) {
-            return false;
+            return {};
         }
-        m_handle = UniqueHandle(pi->hProcess);
         if (!thread) {
             CloseHandle(pi->hThread);
         }
         else {
             *thread = pi->hThread;
         }
-        return true;
+        return Process{ UniqueHandle(pi->hProcess) };
     }
 
-    bool Terminate(DWORD exitCode) {
-        BOOL ret = ::TerminateProcess(Get(), exitCode);
-        m_handle.Reset();
+
+
+    Process(UniqueHandle process_handle) : process_handle_ { std::move(process_handle) } {
+        
+    }
+
+
+
+    bool Terminate(uint32_t exitCode) {
+        bool ret = ::TerminateProcess(Get(), exitCode);
+        process_handle_.Reset();
         return ret;
     }
 
-    BOOL SetDebugPrivilege(BOOL IsEnable)
-    {
-        DWORD    LastError = 0;
+    bool SetDebugPrivilege(bool IsEnable) {
+        DWORD LastError = 0;
         HANDLE TokenHandle = 0;
 
-        if (!OpenProcessToken(Get(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TokenHandle))
-        {
+        if (!OpenProcessToken(Get(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TokenHandle)) {
             LastError = GetLastError();
-            if (TokenHandle)
-            {
+            if (TokenHandle) {
                 CloseHandle(TokenHandle);
             }
             return LastError;
@@ -152,20 +144,17 @@ public:
         TOKEN_PRIVILEGES TokenPrivileges;
         memset(&TokenPrivileges, 0, sizeof(TOKEN_PRIVILEGES));
         LUID v1;
-        if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &v1))
-        {
+        if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &v1)) {
             LastError = GetLastError();
             CloseHandle(TokenHandle);
             return LastError;
         }
         TokenPrivileges.PrivilegeCount = 1;
         TokenPrivileges.Privileges[0].Luid = v1;
-        if (IsEnable)
-        {
+        if (IsEnable) {
             TokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
         }
-        else
-        {
+        else {
             TokenPrivileges.Privileges[0].Attributes = 0;
         }
         AdjustTokenPrivileges(TokenHandle, FALSE, &TokenPrivileges, sizeof(TOKEN_PRIVILEGES), NULL, NULL);
@@ -179,7 +168,7 @@ public:
         if (this == nullptr) {
             return kCurrentProcess;
         }
-        return m_handle.Get();
+        return process_handle_.Get();
     }
 
     DWORD GetId() const noexcept {
@@ -191,7 +180,7 @@ public:
 
         ::BOOL IsWow64;
         if (!::IsWow64Process(handle, &IsWow64)) {
-            return true;
+            return false;
         }
 
         if (IsWow64) {
@@ -206,7 +195,7 @@ public:
         else if (SystemInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {
             return true;
         }
-        return true;
+        return false;
 
     }
 
@@ -217,14 +206,22 @@ public:
     /*
     * Memory
     */
-    uint64_t AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+    std::optional<uint64_t> AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
         if (ms_wow64.Wow64Operation(Get())) {
-            return (uint64_t)ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
+            auto ptr = ms_wow64.VirtualAllocEx64(Get(), (DWORD64)addr, len, type, protect);
+            if (ptr == 0) {
+                return {};
+            }
+            return static_cast<uint64_t>(ptr);
         }
-        return (uint64_t)VirtualAllocEx(Get(), (LPVOID)addr, len, type, protect);
+        auto ptr = VirtualAllocEx(Get(), (LPVOID)addr, len, type, protect);
+        if (ptr == NULL) {
+            return {};
+        }
+        return reinterpret_cast<uint64_t>(ptr);
     }
 
-    uint64_t AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
+    std::optional<uint64_t> AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) {
         return AllocMemory(NULL, len, type, protect);
     }
 
@@ -257,11 +254,11 @@ public:
         return true;
     }
 
-    std::vector<uint8_t> ReadMemory(uint64_t addr, size_t len) const {
+    std::optional<std::vector<uint8_t>> ReadMemory(uint64_t addr, size_t len) const {
         std::vector<uint8_t> buf;
         buf.resize(len, 0);
         if (!ReadMemory(addr, buf.data(), len)) {
-            buf.clear();
+            return {};
         }
         return buf;
     }
@@ -297,12 +294,12 @@ public:
         return true;
     }
 
-    uint64_t WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
+    std::optional<uint64_t> WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) {
         auto mem = AllocMemory(len, (DWORD)MEM_COMMIT, protect);
         if (!mem) {
-            return 0;
+            return {};
         }
-        WriteMemory(mem, buf, len);
+        WriteMemory(mem.value(), buf, len);
         return mem;
     }
 
@@ -317,18 +314,18 @@ public:
         return success;
     }
 
-    MemoryInfo GetMemoryInfo(uint64_t addr) const {
+    std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const {
         uint64_t size;
         MEMORY_BASIC_INFORMATION    memInfo = { 0 };
         MEMORY_BASIC_INFORMATION64    memInfo64 = { 0 };
         if (ms_wow64.Wow64Operation(Get())) {
             size = Geek::Wow64::VirtualQueryEx64(Get(), addr, &memInfo64, sizeof(memInfo64));
-            if (size != sizeof(memInfo64)) { return MemoryInfo(); }
+            if (size != sizeof(memInfo64)) { return {}; }
             return MemoryInfo(memInfo64);
         }
         else {
             size_t size = ::VirtualQueryEx(Get(), (PVOID)addr, &memInfo, sizeof(memInfo));
-            if (size != sizeof(memInfo)) { return MemoryInfo(); }
+            if (size != sizeof(memInfo)) { return {}; }
             if (IsX86()) {
                 return MemoryInfo(*(MEMORY_BASIC_INFORMATION32*)&memInfo);
             }
@@ -338,10 +335,10 @@ public:
         }
     }
 
-    std::vector<MemoryInfo> GetMemoryInfoList() const {
-        std::vector<MemoryInfo> memoryBlockList;
+    std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const {
+        std::vector<MemoryInfo> memory_block_list;
 
-        memoryBlockList.reserve(200);
+        memory_block_list.reserve(200);
         /*
         typedef struct _SYSTEM_INFO {
         union {
@@ -364,38 +361,45 @@ public:
         */
 
         uint64_t p = 0;
-        MEMORY_BASIC_INFORMATION    memInfo = { 0 };
-        MEMORY_BASIC_INFORMATION64    memInfo64 = { 0 };
-        MemoryInfo temp;
+        MEMORY_BASIC_INFORMATION mem_info = { 0 };
+        MEMORY_BASIC_INFORMATION64 mem_info64 = { 0 };
         while (true) {
             uint64_t size;
             if (ms_wow64.Wow64Operation(Get())) {
-                size = Geek::Wow64::VirtualQueryEx64(Get(), p, &memInfo64, sizeof(memInfo64));
-                if (size != sizeof(memInfo64)) { break; }
-                memoryBlockList.push_back(memInfo64);
-                p += memInfo64.RegionSize;
+                size = Geek::Wow64::VirtualQueryEx64(Get(), p, &mem_info64, sizeof(mem_info64));
+                if (size != sizeof(mem_info64)) { break; }
+                memory_block_list.push_back(MemoryInfo{ mem_info64 });
+                p += mem_info64.RegionSize;
             }
             else {
-                size_t size = ::VirtualQueryEx(Get(), (PVOID)p, &memInfo, sizeof(memInfo));
-                if (size != sizeof(memInfo)) { break; }
+                size_t size = ::VirtualQueryEx(Get(), (PVOID)p, &mem_info, sizeof(mem_info));
+                if (size != sizeof(mem_info)) { break; }
                 if (IsX86()) {
-                    memoryBlockList.push_back(*(MEMORY_BASIC_INFORMATION32*)&memInfo);
+                    memory_block_list.push_back(MemoryInfo{ *(MEMORY_BASIC_INFORMATION32*)&mem_info });
                 }
                 else {
-                    memoryBlockList.push_back(*(MEMORY_BASIC_INFORMATION64*)&memInfo);
+                    memory_block_list.push_back(MemoryInfo{ *(MEMORY_BASIC_INFORMATION64*)&mem_info });
                 }
-                p += memInfo.RegionSize;
+                p += mem_info.RegionSize;
             }
             
         }
-        return memoryBlockList;
+        return memory_block_list;
     }
 
     bool ScanMemoryInfoList(std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)> callback, bool include_module = false) const {
         bool success = false;
         do {
-            auto modulelist = GetModuleInfoList();
-            auto vec = GetMemoryInfoList();
+            auto module_list_res = GetModuleInfoList();
+            if (!module_list_res) {
+                return false;
+            }
+            auto& module_list = module_list_res.value();
+            auto vec_res = GetMemoryInfoList();
+            if (!vec_res) {
+                return false;
+            }
+            auto& vec = vec_res.value();
             size_t sizeSum = 0;
 
             for (int i = 0; i < vec.size(); i++) {
@@ -404,25 +408,24 @@ public:
                 }
 
                 if (include_module == false) {
-                    bool isModule = false;
-                    for (int j = 0; j < modulelist.size(); j++) {
-                        if (vec[i].base >= modulelist[j].base && vec[i].base < modulelist[j].base + modulelist[j].base) {
-                            isModule = true;
+                    bool is_module = false;
+                    for (int j = 0; j < module_list.size(); j++) {
+                        if (vec[i].base >= module_list[j].base && vec[i].base < module_list[j].base + module_list[j].base) {
+                            is_module = true;
                             break;
                         }
                     }
-                    if (!(!isModule && vec[i].protect & PAGE_READWRITE && vec[i].state & MEM_COMMIT)) {
+                    if (!(!is_module && vec[i].protect & PAGE_READWRITE && vec[i].state & MEM_COMMIT)) {
                         continue;
                     }
                 }
 
                 auto temp_buff = ReadMemory(vec[i].base, vec[i].size);
-                if (temp_buff.empty()) {
-                    //printf("%d\n", GetLastError());
+                if (!temp_buff) {
                     continue;
                 }
                 
-                if (callback(vec[i].base, temp_buff.data(), temp_buff.size())) {
+                if (callback(vec[i].base, temp_buff.value().data(), temp_buff.value().size())) {
                     break;
                 }
                 sizeSum += vec[i].size;
@@ -436,7 +439,7 @@ public:
     /*
     * Info
     */
-    std::wstring GetCommandLineStr() {
+    std::optional<std::wstring> GetCommandLineStr() {
         typedef NTSTATUS(NTAPI* _NtQueryInformationProcess)(
             HANDLE ProcessHandle,
             DWORD ProcessInformationClass,
@@ -449,30 +452,30 @@ public:
             UNICODE_STRING32 commandLine;
             _NtQueryInformationProcess NtQuery = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess");
             if (!NtQuery) {
-                return L"";
+                return {};
             }
 
             PROCESS_BASIC_INFORMATION32 pbi;
             NTSTATUS isok = NtQuery(Get(), ProcessBasicInformation, &pbi, sizeof(RTL_USER_PROCESS_PARAMETERS32), NULL);
             if (!NT_SUCCESS(isok)) {
-                return    L"";
+                return {};
             }
 
             PEB32 peb;
             RTL_USER_PROCESS_PARAMETERS32 upps;
             PRTL_USER_PROCESS_PARAMETERS32 rtlUserProcParamsAddress;
             if (!ReadMemory((uint64_t)&(((PEB32*)(pbi.PebBaseAddress))->ProcessParameters), &rtlUserProcParamsAddress, sizeof(rtlUserProcParamsAddress))) {
-                return L"";
+                return {};
             }
 
             if (!ReadMemory((uint64_t)&(rtlUserProcParamsAddress->CommandLine), &commandLine, sizeof(commandLine))) {
-                return L"";
+                return {};
             }
 
             std::wstring buf(commandLine.Length, L' ');
             if (!ReadMemory((uint64_t)commandLine.Buffer,
                 (void*)buf.data(), commandLine.Length)) {
-                return L"";
+                return {};
             }
             return buf;
         }
@@ -484,13 +487,13 @@ public:
             if (ms_wow64.Wow64Operation(Get())) {
                 pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
                 if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi, sizeof(pbi), NULL))) {
-                    return L"";
+                    return {};
                 }
             }
             else {
                 pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
                 if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi, sizeof(pbi), NULL))) {
-                    return L"";
+                    return {};
                 }
             }
 
@@ -498,17 +501,17 @@ public:
             RTL_USER_PROCESS_PARAMETERS64 upps;
             PRTL_USER_PROCESS_PARAMETERS64 rtlUserProcParamsAddress;
             if (!ReadMemory((uint64_t) & (((PEB64*)(pbi.PebBaseAddress))->ProcessParameters), &rtlUserProcParamsAddress, sizeof(rtlUserProcParamsAddress))) {
-                return L"";
+                return {};
             }
 
             if (!ReadMemory((uint64_t) & (rtlUserProcParamsAddress->CommandLine), &commandLine, sizeof(commandLine))) {
-                return L"";
+                return {};
             }
 
             std::wstring buf(commandLine.Length, L' ');
             if (!ReadMemory((uint64_t)commandLine.Buffer,
                 (void*)buf.data(), commandLine.Length)) {
-                return L"";
+                return {};
             }
             return buf;
         }
@@ -519,14 +522,14 @@ public:
     /*
     * Run
     */
-    uint16_t LockAddress(uint64_t addr) {
+    std::optional<uint16_t> LockAddress(uint64_t addr) {
         uint16_t instr;
         if (!ReadMemory(addr, &instr, 2)) {
-            return 0;
+            return {};
         }
         unsigned char jmpSelf[] = { 0xeb, 0xfe };
         if (!WriteMemory(addr, jmpSelf, 2, true)) {
-            return 0;
+            return {};
         }
         return instr;
     }
@@ -538,7 +541,7 @@ public:
     /*
     * Thread
     */
-    Thread CreateThread(PTHREAD_START_ROUTINE start_routine, PVOID64 parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
+    std::optional<Thread> CreateThread(PTHREAD_START_ROUTINE start_routine, PVOID64 parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
         DWORD thread_id = 0;
         HANDLE thread_handle = NULL;
         if (IsCur()) {
@@ -547,33 +550,32 @@ public:
         else {
             thread_handle = ::CreateRemoteThread(Get(), NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
         }
-        if (thread_handle != NULL) {
-            Thread thread;
-            thread.Open(UniqueHandle(thread_handle));
-            return thread;
+        if (thread_handle == NULL) {
+            return {};
         }
-        return Thread();
+        return Thread{ thread_handle };
     }
 
-    uint16_t BlockThread(Thread* thread) {
+    std::optional<uint16_t> BlockThread(Thread* thread) {
         if (!thread->Suspend()) {
-            return 0;
+            return {};
         }
         unsigned char jmpSelf[] = { 0xeb, 0xfe };
         bool isX86;
-        auto contextBuf = GetThreadContext(thread, &isX86);
+        auto context_buf_res = GetThreadContext(thread);
+        auto& context_buf = *context_buf_res;
         uint64_t ip;
         if (isX86) {
-            auto context = (_CONTEXT32*)contextBuf.data();
+            auto context = (_CONTEXT32*)context_buf.data();
             ip = context->Eip;
         }
         else {
-            auto context = (_CONTEXT64*)contextBuf.data();
+            auto context = (_CONTEXT64*)context_buf.data();
             ip = context->Rip;
         }
-        auto oldInstr = LockAddress(ip);
+        auto old_instr = LockAddress(ip);
         thread->Resume();
-        return oldInstr;
+        return old_instr;
     }
 
     bool ResumeBlockedThread(Thread* thread, uint16_t instr) {
@@ -582,14 +584,15 @@ public:
         }
         uint16_t oldInstr;
         bool isX86;
-        auto contextBuf = GetThreadContext(thread, &isX86);
+        auto context_buf_res = GetThreadContext(thread);
+        auto& context_buf = *context_buf_res;
         uint64_t ip;
         if (isX86) {
-            auto context = (_CONTEXT32*)contextBuf.data();
+            auto context = (_CONTEXT32*)context_buf.data();
             ip = context->Eip;
         }
         else {
-            auto context = (_CONTEXT64*)contextBuf.data();
+            auto context = (_CONTEXT64*)context_buf.data();
             ip = context->Rip;
         }
         auto success = UnlockAddress(ip, instr);
@@ -601,34 +604,34 @@ public:
         return GetProcessIdOfThread(thread) == GetId();
     }
 
-    std::vector<char> GetThreadContext(Thread* thread, bool* isX86 = nullptr, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
+
+    std::optional<std::vector<char>> GetThreadContext(Thread* thread, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
         std::vector<char> context;
         bool success;
         if (!IsTheOwningThread(thread)) {
-            return context;
+            return {};
         }
         if (ms_wow64.Wow64Operation(Get())) {
             context.resize(sizeof(_CONTEXT64));
             ((_CONTEXT64*)context.data())->ContextFlags = flags;
             success = ms_wow64.GetThreadContext64(thread->Get(), (_CONTEXT64*)context.data());
-            if (isX86) *isX86 = false;
         }
         else {
             if (IsX86() && !CurIsX86()) {
-                if (isX86) *isX86 = true;
+                
                 context.resize(sizeof(WOW64_CONTEXT));
                 ((WOW64_CONTEXT*)context.data())->ContextFlags = flags;
                 success = ::Wow64GetThreadContext(thread->Get(), (PWOW64_CONTEXT)context.data());
             }
             else {
-                if (isX86) *isX86 = false;
+                
                 context.resize(sizeof(CONTEXT));
                 ((CONTEXT*)context.data())->ContextFlags = flags;
                 success = ::GetThreadContext(thread->Get(), (LPCONTEXT)context.data());
             }
         }
         if (!success) {
-            context.clear();
+            return {};
         }
         return context;
     }
@@ -640,40 +643,41 @@ public:
         return WaitForSingleObject(Get(), dwMilliseconds) == WAIT_OBJECT_0;
     }
 
-    DWORD GetExitCode() {
+    std::optional<DWORD> GetExitCode() {
         DWORD code;
-        GetExitCodeProcess(Get(), &code);
+        if (!GetExitCodeProcess(Get(), &code)) {
+            return {};
+        }
         return code;
     }
 
     /*
     * Image
     */
-    uint64_t LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+    std::optional<uint64_t> LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
         if (IsX86() != image->IsPE32()) {
             return 0;
         }
-        auto image_base = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        auto image_base_res = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        if (!image_base_res) return {};
+        auto& image_base = *image_base_res;
         bool success = false;
         do {
-            if (!image_base) {
-                break;
-            }
-            if (!image->RepairRepositionTable((uint64_t)image_base)) {
+            if (!image->RepairRepositionTable(image_base)) {
                 break;
             }
             if (!RepairImportAddressTable(image, skip_not_loaded)) {
                 break;
             }
-            auto image_buf = image->SaveToImageBuf((uint64_t)image_base, zero_pe_header);
+            auto image_buf = image->SaveToImageBuf(image_base, zero_pe_header);
             if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
                 break;
             }
             if (exec_tls_callback) {
-                ExecuteTls(image, (uint64_t)image_base, &image_buf);
+                ExecuteTls(image, image_base, &image_buf);
             }
             if (call_dll_entry) {
-                CallEntryPoint(image, (uint64_t)image_base, &image_buf, init_parameter);
+                CallEntryPoint(image, image_base, &image_buf, init_parameter);
             }
             success = true;
         } while (false);
@@ -684,15 +688,19 @@ public:
         return image_base;
     }
 
-    Image LoadImageFromImageBase(uint64_t image_base) {
+    std::optional<Image> LoadImageFromImageBase(uint64_t image_base) {
         Image image;
         if (IsCur()) {
             image.LoadFromImageBuf((void*)image_base, image_base);
         }
         else {
             auto module_info = GetModuleInfoByModuleBase(image_base);
-            if (!module_info.IsValid()) return image;
-            image.LoadFromImageBuf(ReadMemory(image_base, module_info.size).data(), image_base);
+            if (!module_info) return image;
+            auto buf = ReadMemory(image_base, module_info.value().size);
+            if (!buf) {
+                return {};
+            }
+            image.LoadFromImageBuf(buf.value().data(), image_base);
         }
         return image;
     }
@@ -700,25 +708,33 @@ public:
     /*
     * library
     */
-    uint64_t LoadLibrary(const wchar_t* lib_name) {
+    std::optional<uint64_t> LoadLibrary(std::wstring_view lib_name) {
         if (IsCur()) {
-            return (uint64_t)::LoadLibraryW(lib_name);
+            auto addr = ::LoadLibraryW(lib_name.data());
+            if (!addr) {
+                return {};
+            }
+            return reinterpret_cast<uint64_t>(addr);
         }
 
         auto module = GetModuleInfoByModuleName(lib_name);
-        if (module.IsValid()) {
-            return module.base;
+        if (module) {
+            return module.value().base;
         }
 
         uint64_t addr = NULL;
-        auto len = wcslen(lib_name) * 2 + 2;
-        auto lib_name_buf = AllocMemory(len);
-
+        
+        auto len = lib_name.size() * 2 + 2;
+        auto lib_name_buf_res = AllocMemory(len);
+        if (!lib_name_buf_res) {
+            return {};
+        }
+        auto& lib_name_buf = *lib_name_buf_res;
         do {
             if (!lib_name_buf) {
                 break;
             }
-            if (!WriteMemory(lib_name_buf, lib_name, len)) {
+            if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
                 break;
             }
             Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
@@ -729,27 +745,26 @@ public:
         return addr;
     }
 
-    void FreeLibrary(uint64_t module_base) {
+    bool FreeLibrary(uint64_t module_base) {
         if (IsCur()) {
-            ::FreeLibrary((HMODULE)module_base);
-            return;
+            return ::FreeLibrary((HMODULE)module_base);
         }
         do {
             auto thread = CreateThread((PTHREAD_START_ROUTINE)::FreeLibrary, (PVOID64)module_base);
-            if (thread.IsCur()) {
-                break;
+            if (!thread) {
+                return false;
             }
-            thread.WaitExit(INFINITE);
+            thread.value().WaitExit(INFINITE);
         } while (false);
     }
 
-    uint64_t GetExportProcAddress(Image* image, const char* func_name) {
+    std::optional<uint64_t> GetExportProcAddress(Image* image, std::string_view func_name) {
         uint32_t export_rva;
-        if ((uintptr_t)func_name <= 0xffff) {
-            export_rva = image->GetExportRvaByOrdinal((uint16_t)func_name);
+        if ((uintptr_t)func_name.data() <= 0xffff) {
+            export_rva = image->GetExportRvaByOrdinal((uint16_t)func_name.data());
         }
         else {
-            export_rva = image->GetExportRvaByName(func_name);
+            export_rva = image->GetExportRvaByName(func_name.data());
         }
         // 可能返回一个字符串，需要二次加载
         // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
@@ -764,9 +779,12 @@ public:
             auto func_name = full_name.substr(offset + 1);
             if (!dll_name.empty() && !func_name.empty()) {
                 auto image_base = LoadLibrary(Geek::String::AnsiToUtf16le(dll_name).c_str());
-                auto import_image = LoadImageFromImageBase(image_base);
-                if (!import_image.IsValid()) return 0;
-                va = (uintptr_t)GetExportProcAddress(&import_image, func_name.c_str());
+                if (!image_base)return {};
+                auto import_image = LoadImageFromImageBase(image_base.value());
+                if (!import_image) return {};
+                auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
+                if (!va_res) return {};
+                return va_res.value();
             }
         }
         return va;
@@ -946,11 +964,11 @@ public:
             }
 
             auto thread = CreateThread((PTHREAD_START_ROUTINE)(exec_page + exec_offset), NULL);
-            if (!thread.IsVaild()) {
+            if (!thread) {
                 break;
             }
 
-            if (!thread.WaitExit()) {
+            if (!thread.value().WaitExit()) {
                 break;
             }
 
@@ -966,8 +984,11 @@ public:
     }
 
     bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
-        uint64_t exec_page = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-
+        auto exec_page_res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        if (!exec_page_res) {
+            return false;
+        }
+        auto& exec_page = *exec_page_res;
         if (!exec_page) {
             return false;
         }
@@ -986,10 +1007,11 @@ private:
         IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->FirstThunk);
         Image import_image;
         if (import_image_base) {
-            import_image = LoadImageFromImageBase(import_image_base);
-            if (!import_image.IsValid()) {
+            auto import_image_res = LoadImageFromImageBase(import_image_base);
+            if (!import_image_res) {
                 return false;
             }
+            import_image = std::move(*import_image_res);
         }
         else if (!skip_not_loaded) {
             return false;
@@ -1001,11 +1023,15 @@ private:
             }
             uint32_t export_rva;
             if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
-                import_address_table->u1.Function = (uintptr_t)GetExportProcAddress(&import_image, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+                auto export_addr = GetExportProcAddress(&import_image, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+                if (!export_addr) return false;
+                import_address_table->u1.Function = export_addr.value();
             }
             else {
                 IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)image->RvaToPoint(import_name_table->u1.AddressOfData);
-                import_address_table->u1.Function = (uintptr_t)GetExportProcAddress(&import_image, (char*)func_name->Name);
+                auto export_addr = GetExportProcAddress(&import_image, (char*)func_name->Name);
+                if (!export_addr) return false;
+                import_address_table->u1.Function = export_addr.value();
             }
             //import_address_table->u1.Function = import_module_base + export_rva;
         }
@@ -1020,14 +1046,15 @@ public:
         for (; import_descriptor->FirstThunk; import_descriptor++) {
             if(import_descriptor->OriginalFirstThunk == NULL) import_descriptor->OriginalFirstThunk = import_descriptor->FirstThunk;
             char* import_module_name = (char*)image->RvaToPoint(import_descriptor->Name);
-            uint64_t import_module_base = LoadLibrary(Geek::String::AnsiToUtf16le(import_module_name).c_str());
+            auto import_module_base_res = LoadLibrary(Geek::String::AnsiToUtf16le(import_module_name).c_str());
+            if (!import_module_base_res) return false;
             if (image->IsPE32()) {
-                if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA32>(image, import_descriptor, import_module_base, skip_not_loaded)) {
+                if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA32>(image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
                     return false;
                 }
             }
             else {
-                if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA64>(image, import_descriptor, import_module_base, skip_not_loaded)) {
+                if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA64>(image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
                     return false;
                 }
             }
@@ -1125,126 +1152,126 @@ public:
     /*
     * Module
     */
-    std::vector<ModuleInfo> GetModuleInfoList() const {
+    std::optional<std::vector<ModuleInfo>> GetModuleInfoList() const {
         /*
         * https://blog.csdn.net/wh445306/article/details/107867375
         */
 
         std::vector<ModuleInfo> moduleList;
         if (IsX86()) {
-            do {
-                HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-                pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
+            HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
+            pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
 
-                PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
+            PROCESS_BASIC_INFORMATION32 pbi32 = { 0 };
 
-                if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
-                    break;
-                }
+            if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL))) {
+                return {};
+            }
 
-                DWORD Ldr32 = 0;
-                LIST_ENTRY32 ListEntry32 = { 0 };
-                LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
+            DWORD Ldr32 = 0;
+            LIST_ENTRY32 ListEntry32 = { 0 };
+            LDR_DATA_TABLE_ENTRY32 LDTE32 = { 0 };
 
-                if (!ReadMemory((pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32))) {
-                    break;
-                }
-                if (!ReadMemory((Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32))) {
-                    break;
-                }
-                if (!ReadMemory((ListEntry32.Flink), &LDTE32, sizeof(LDTE32))) {
-                    break;
-                }
+            if (!ReadMemory((pbi32.PebBaseAddress + offsetof(PEB32, Ldr)), &Ldr32, sizeof(Ldr32))) {
+                return {};
+            }
+            if (!ReadMemory((Ldr32 + offsetof(PEB_LDR_DATA32, InLoadOrderModuleList)), &ListEntry32, sizeof(ListEntry32))) {
+                return {};
+            }
+            if (!ReadMemory((ListEntry32.Flink), &LDTE32, sizeof(LDTE32))) {
+                return {};
+            }
 
-                while (true) {
-                    if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
-                    std::vector<wchar_t>    full_name(LDTE32.FullDllName.Length + 1, 0);
-                    if (!ReadMemory(LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
-                        continue;
-                    }
-                    std::vector<wchar_t>    base_name(LDTE32.BaseDllName.Length + 1, 0);
-                    if (!ReadMemory(LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
-                        continue;
-                    }
-                    ModuleInfo module(LDTE32, base_name.data(), full_name.data());
-                    moduleList.push_back(module);
-                    if (!ReadMemory(LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
+            while (true) {
+                if (LDTE32.InLoadOrderLinks.Flink == ListEntry32.Flink) break;
+                std::vector<wchar_t> full_name(LDTE32.FullDllName.Length + 1, 0);
+                if (!ReadMemory(LDTE32.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE32.FullDllName.Length)) {
+                    continue;
                 }
-            } while (false);
+                std::vector<wchar_t> base_name(LDTE32.BaseDllName.Length + 1, 0);
+                if (!ReadMemory(LDTE32.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE32.BaseDllName.Length)) {
+                    continue;
+                }
+                ModuleInfo module(LDTE32, base_name.data(), full_name.data());
+                moduleList.push_back(module);
+                if (!ReadMemory(LDTE32.InLoadOrderLinks.Flink, &LDTE32, sizeof(LDTE32))) break;
+            }
         }
         else {
-            do {
-                HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
-                PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
-                if (ms_wow64.Wow64Operation(Get())) {
-                    pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
-                    if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
-                        break;
-                    }
+            HMODULE NtdllModule = GetModuleHandleW(L"ntdll.dll");
+            PROCESS_BASIC_INFORMATION64 pbi64 = { 0 };
+            if (ms_wow64.Wow64Operation(Get())) {
+                pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
+                if (!NT_SUCCESS(NtWow64QueryInformationProcess64(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
+                    return {};
                 }
-                else {
-                    pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
-                    if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
-                        break;
-                    }
+            }
+            else {
+                pfnNtQueryInformationProcess NtQueryInformationProcess = (pfnNtQueryInformationProcess)GetProcAddress(NtdllModule, "NtQueryInformationProcess");
+                if (!NT_SUCCESS(NtQueryInformationProcess(Get(), ProcessBasicInformation, &pbi64, sizeof(pbi64), NULL))) {
+                    return {};
                 }
+            }
 
-                DWORD64 Ldr64 = 0;
-                LIST_ENTRY64 ListEntry64 = { 0 };
-                LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
-                wchar_t ProPath64[256];
+            DWORD64 Ldr64 = 0;
+            LIST_ENTRY64 ListEntry64 = { 0 };
+            LDR_DATA_TABLE_ENTRY64 LDTE64 = { 0 };
+            wchar_t ProPath64[256];
 
-                if (!ReadMemory((pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
-                    break;
-                }
-                if (!ReadMemory((Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
-                    break;
-                }
-                if (!ReadMemory((ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
-                    break;
-                }
+            if (!ReadMemory((pbi64.PebBaseAddress + offsetof(PEB64, Ldr)), &Ldr64, sizeof(Ldr64))) {
+                return {};
+            }
+            if (!ReadMemory((Ldr64 + offsetof(PEB_LDR_DATA64, InLoadOrderModuleList)), &ListEntry64, sizeof(LIST_ENTRY64))) {
+                return {};
+            }
+            if (!ReadMemory((ListEntry64.Flink), &LDTE64, sizeof(LDTE64))) {
+                return {};
+            }
 
-                while (true) {
-                    if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
-                    std::vector<wchar_t> full_name(LDTE64.FullDllName.Length + 1, 0);
-                    if (!ReadMemory(LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
-                        if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
-                        continue;
-                    }
-                    std::vector<wchar_t> base_name(LDTE64.BaseDllName.Length + 1, 0);
-                    if (!ReadMemory(LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
-                        if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
-                        continue;
-                    }
-                    ModuleInfo module(LDTE64, base_name.data(), full_name.data());
-                    moduleList.push_back(module);
+            while (true) {
+                if (LDTE64.InLoadOrderLinks.Flink == ListEntry64.Flink) break;
+                std::vector<wchar_t> full_name(LDTE64.FullDllName.Length + 1, 0);
+                if (!ReadMemory(LDTE64.FullDllName.Buffer, (wchar_t*)full_name.data(), LDTE64.FullDllName.Length)) {
                     if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+                    continue;
                 }
+                std::vector<wchar_t> base_name(LDTE64.BaseDllName.Length + 1, 0);
+                if (!ReadMemory(LDTE64.BaseDllName.Buffer, (wchar_t*)base_name.data(), LDTE64.BaseDllName.Length)) {
+                    if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+                    continue;
+                }
+                ModuleInfo module(LDTE64, base_name.data(), full_name.data());
+                moduleList.push_back(module);
+                if (!ReadMemory(LDTE64.InLoadOrderLinks.Flink, &LDTE64, sizeof(LDTE64))) break;
+            }
 
-            } while (false);
         }
         return moduleList;
     }
 
-    ModuleInfo GetModuleInfoByModuleName(const std::wstring& name) {
-        std::wstring find_name = Geek::String::ToUppercase(name);
+    std::optional<ModuleInfo> GetModuleInfoByModuleName(std::wstring_view name) {
+        std::wstring find_name = Geek::String::ToUppercase(std::wstring(name.data()));
         if (find_name == L"NTDLL") find_name += L".DLL";
-        for (auto& it : GetModuleInfoList()) {
+        auto module_list_res = GetModuleInfoList();
+        if (!module_list_res) return {};
+        for (auto& it : module_list_res.value()) {
             auto base_name_up = Geek::String::ToUppercase(it.base_name);
             if (base_name_up == find_name) {
                 return it;
             }
         }
-        return ModuleInfo();
+        return {};
     }
 
-    ModuleInfo GetModuleInfoByModuleBase(uint64_t base) {
-        for (auto& it : GetModuleInfoList()) {
+    std::optional<ModuleInfo> GetModuleInfoByModuleBase(uint64_t base) {
+        auto module_list = GetModuleInfoList();
+        if (!module_list)return {};
+        for (auto& it : module_list.value()) {
             if (it.base == base) {
                 return it;
             }
         }
-        return ModuleInfo();
+        return {};
     }
 
     static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
@@ -1312,7 +1339,7 @@ public:
     //inline static const HANDLE kCurrentProcess = (HANDLE)-1;
 
 private:
-    UniqueHandle m_handle;
+    UniqueHandle process_handle_;
 
 private:
     //inline static Wow64 ms_wow64;
@@ -1320,22 +1347,22 @@ private:
 public:
 
     static bool CurIsX86() {
-        Process process;
+        Process process{ kCurrentProcess };
         return process.IsX86();
     }
 
-    static DWORD GetProcessIdOfThread(Thread* thread) {
+    static DWORD GetProcessIdFromThread(Thread* thread) {
         return ::GetProcessIdOfThread(thread->Get());
     }
 
-    static std::vector<ProcessInfo> GetProcessInfoList() {
+    static std::optional<std::vector<ProcessInfo>> GetProcessInfoList() {
         PROCESSENTRY32W pe32 = { 0 };
         pe32.dwSize = sizeof(PROCESSENTRY32W);
         std::vector<ProcessInfo> processEntryList;
 
         UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
         if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
-            return processEntryList;
+            return {};
         }
         do {
             processEntryList.push_back(ProcessInfo(pe32));
@@ -1343,14 +1370,14 @@ public:
         return processEntryList;
     }
 
-    static std::map<DWORD, ProcessInfo> GetProcessIdMap() {
+    static std::optional<std::map<DWORD, ProcessInfo>> GetProcessIdMap() {
         PROCESSENTRY32W pe32 = { 0 };
         pe32.dwSize = sizeof(PROCESSENTRY32W);
         std::map<DWORD, ProcessInfo> process_map;
 
         UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
         if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
-            return process_map;
+            return {};
         }
         do {
             process_map.insert(std::make_pair(pe32.th32ProcessID, ProcessInfo(pe32)));
@@ -1358,58 +1385,49 @@ public:
         return process_map;
     }
 
-    static std::wstring GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr) {
+    static std::optional<std::wstring> GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr) {
         std::vector<ProcessInfo>* process_list = cache;
         std::vector<ProcessInfo> copy;
         if (process_list == nullptr) {
-            copy = GetProcessInfoList();
+            auto copy_res = GetProcessInfoList();
+            if (!copy_res) return {};
+            copy = std::move(*copy_res);
             process_list = &copy;
-        }
-        else if(process_list->empty()) {
-            *process_list = GetProcessInfoList();
         }
         for (auto& process : *process_list) {
             if (pid == process.process_id) {
                 return std::wstring(process.process_name);
             }
         }
-        return L"";
+        return {};
     }
 
-    static DWORD GetProcessIdByProcessName(const std::wstring& processName, int count = 1) {
-        auto processEntryList = GetProcessInfoList();
-        std::wstring processName_ = processName;
-        if (processEntryList.empty()) {
-            return NULL;
-        }
+    static std::optional<DWORD> GetProcessIdByProcessName(std::wstring_view processName, int count = 1) {
+        auto process_entry_list = GetProcessInfoList();
+        if (!process_entry_list) return {};
+
+        std::wstring processName_copy = processName.data();
         int i = 0;
-        for (auto& entry : processEntryList) {
+        for (auto& entry : process_entry_list.value()) {
             auto exeFile_str = Geek::String::ToUppercase(entry.process_name);
-            processName_ = Geek::String::ToUppercase(processName_);
-            if (exeFile_str == processName_) {
+            processName_copy = Geek::String::ToUppercase(processName_copy);
+            if (exeFile_str == processName_copy) {
                 if (++i < count) {
                     continue;
                 }
                 return entry.process_id;
             }
         }
-        return NULL;
+        return {};
     }
 
-    static bool Terminate(const std::wstring& processName) {
-        auto pid = GetProcessIdByProcessName(processName);
-        if (pid == 0) {
-            return false;
-        }
-        Process process;
-        if (!process.Open(pid)) {
-            return false;
-        }
-        process.Terminate(0);
-        return true;
+    static bool Terminate(std::wstring_view processName) {
+        auto process = Open(processName);
+        if (!process) return false;
+        return process.value().Terminate(0);
     }
 };
 
 } // namespace Geek
 
-#endif // GEEK_PROCESS_PROCESS_H_
+#endif // GEEK_PROCESS_PROCESS_HPP_

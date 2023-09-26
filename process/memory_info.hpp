@@ -10,20 +10,13 @@
 namespace Geek {
 
 struct MemoryInfo {
-    MemoryInfo() {
-        base = 0;
-        size = 0;
-        protect = 0;
-        state = 0;
-    }
-
-    MemoryInfo(const MEMORY_BASIC_INFORMATION32& entry) {
+    explicit MemoryInfo(const MEMORY_BASIC_INFORMATION32& entry) {
         base = entry.BaseAddress;
         size = entry.RegionSize;
         protect = entry.Protect;
         state = entry.State;
     }
-    MemoryInfo(const MEMORY_BASIC_INFORMATION64& entry) {
+    explicit MemoryInfo(const MEMORY_BASIC_INFORMATION64& entry) {
         base = entry.BaseAddress;
         size = entry.RegionSize;
         protect = entry.Protect;

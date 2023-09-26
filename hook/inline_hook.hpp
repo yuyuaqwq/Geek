@@ -69,7 +69,7 @@ public:
     typedef bool (*HookCallbackAmd64)(HookContextAmd64* context);
 
 public:
-    explicit InlineHook(Process* process = nullptr) : m_process{ process }, m_hook_addr{ 0 }, m_forward_page{ 0 }, m_tls_id{ TLS_OUT_OF_INDEXES }  { }
+    explicit InlineHook(Process* process = nullptr) : process_{ process }, hook_addr_{ 0 }, forward_page_{ 0 }, tls_id_{ TLS_OUT_OF_INDEXES }  { }
     ~InlineHook() { }
 
 public:
@@ -133,8 +133,8 @@ public:
     bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, bool save_volatile_register = true, Architecture arch = Architecture::kCurrentRunning,
         uint64_t forward_page_size = 0x1000
     ) {
-        m_tls_id = TlsAlloc();
-        if (m_tls_id == TLS_OUT_OF_INDEXES) {
+        tls_id_ = TlsAlloc();
+        if (tls_id_ == TLS_OUT_OF_INDEXES) {
             return false;
         }
 
@@ -149,20 +149,22 @@ public:
         Uninstall();
 
 
-        m_forward_page = m_process->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-        if (!m_forward_page) {
+        auto forward_page_res = process_->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        if (!forward_page_res) {
             return false;
         }
+
+        forward_page_ = forward_page_res.value();
 
         // 处理转发页面指令
         std::vector<uint8_t> forward_page(forward_page_size, 0);
         auto forward_page_temp = forward_page.data();
 
-        uint64_t forward_page_uint = (uint64_t)m_forward_page;
+        uint64_t forward_page_uint = (uint64_t)forward_page_;
 
         // 保存原指令
-        m_old_instr.resize(instr_size);
-        if (!m_process->ReadMemory(hook_addr, m_old_instr.data(), instr_size)) {
+        old_instr_.resize(instr_size);
+        if (!process_->ReadMemory(hook_addr, old_instr_.data(), instr_size)) {
             return false;
         }
         
@@ -199,7 +201,7 @@ public:
                 forward_page_temp[i++] = 0x00;
                 // je _next
                 forward_page_temp[i++] = 0x74;
-                forward_page_temp[i++] = 4 + m_old_instr.size() + 5;
+                forward_page_temp[i++] = 4 + old_instr_.size() + 5;
 
                 // 低1位为1，是重入，执行原指令并转回
                 forward_page_temp[i++] = 0x9d;        // popfd
@@ -207,8 +209,8 @@ public:
                 forward_page_temp[i++] = 0x59;        // pop rcx
                 forward_page_temp[i++] = 0x58;        // pop rax
 
-                memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-                i += m_old_instr.size();
+                memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
+                i += old_instr_.size();
 
                 // 跳回原函数正常执行
                 std::vector<uint8_t> temp;
@@ -465,12 +467,12 @@ public:
 
             // je _skip_exec_old_insrt
             forward_page_temp[i++] = 0x74;
-            forward_page_temp[i++] = 1 + m_old_instr.size() + 2;
+            forward_page_temp[i++] = 1 + old_instr_.size() + 2;
 
             forward_page_temp[i++] = 0x9d;      // popfd
             // 执行原指令
-            memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-            i += m_old_instr.size();
+            memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
+            i += old_instr_.size();
             // jmp _next_exec_old_insrt
             forward_page_temp[i++] = 0xeb;
             forward_page_temp[i++] = 0x01;      // +1
@@ -562,7 +564,7 @@ public:
                 forward_page_temp[i++] = 0x00;
                 // je _next
                 forward_page_temp[i++] = 0x74;
-                forward_page_temp[i++] = 7 + 13 + m_old_instr.size() + 14;
+                forward_page_temp[i++] = 7 + 13 + old_instr_.size() + 14;
 
                 // 低1位为1，是重入，执行原指令并转回
                 
@@ -588,8 +590,8 @@ public:
                 forward_page_temp[i++] = 0x59;        // pop rcx
                 forward_page_temp[i++] = 0x58;        // pop rax
 
-                memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-                i += m_old_instr.size();
+                memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
+                i += old_instr_.size();
 
                 // 跳回原函数正常执行
                 std::vector<uint8_t> temp;
@@ -1052,12 +1054,12 @@ public:
 
             // je _skip_exec_old_insrt
             forward_page_temp[i++] = 0x74;
-            forward_page_temp[i++] = 1 + m_old_instr.size() + 2;
+            forward_page_temp[i++] = 1 + old_instr_.size() + 2;
 
             forward_page_temp[i++] = 0x9d;      // popfd
             // 执行原指令
-            memcpy(&forward_page_temp[i], m_old_instr.data(), m_old_instr.size());
-            i += m_old_instr.size();
+            memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
+            i += old_instr_.size();
             // jmp _next_exec_old_insrt
             forward_page_temp[i++] = 0xeb;
             forward_page_temp[i++] = 0x01;      // +1
@@ -1139,27 +1141,27 @@ public:
             break;
         }
         }
-        m_process->WriteMemory(m_forward_page, forward_page_temp, forward_page_size);
+        process_->WriteMemory(forward_page_, forward_page_temp, forward_page_size);
 
         // 为目标地址挂hook
-        m_hook_addr = hook_addr;
+        hook_addr_ = hook_addr;
 
         
-        if (m_process->IsCur() && 
+        if (process_->IsCur() && 
             (
                 arch == Architecture::kX86 && instr_size <= 8 || 
                 arch == Architecture::kAmd64 && instr_size <= 16
             )
         ) {
             DWORD old_protect;
-            if (!m_process->SetMemoryProtect(hook_addr, 0x1000, PAGE_EXECUTE_READWRITE, &old_protect)) {
+            if (!process_->SetMemoryProtect(hook_addr, 0x1000, PAGE_EXECUTE_READWRITE, &old_protect)) {
                 return false;
             }
             // 通过原子指令进行hook，降低错误的概率
             bool success = true;
             switch (arch) {
             case Architecture::kX86: {
-                MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
+                MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
                 if (jmp_instr.size() < 8) {
                     jmp_instr.reserve(8);
                     memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 8 - jmp_instr.size());
@@ -1173,7 +1175,7 @@ public:
                     jmp_instr.reserve(16);
                     memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 16 - jmp_instr.size());
                 }
-                MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
+                MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
                 uint8_t buf[16];
                 memcpy(buf, (void*)hook_addr, 16);
                 success = InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[8], *(LONGLONG*)&jmp_instr[0], (long long*)buf);
@@ -1182,12 +1184,12 @@ public:
 #endif
                 break;
             }
-            m_process->SetMemoryProtect(hook_addr, 0x1000, old_protect, &old_protect);
+            process_->SetMemoryProtect(hook_addr, 0x1000, old_protect, &old_protect);
             if (success == false) return false;
         }
         else {
-            MakeJmp(arch, &jmp_instr, hook_addr, m_forward_page);
-            m_process->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
+            MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
+            process_->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
         }
         return true;
     }
@@ -1197,29 +1199,29 @@ public:
     * 卸载Hook
     */
     void Uninstall() {
-        if (m_hook_addr) {
-            m_process->WriteMemory(m_hook_addr, m_old_instr.data(), m_old_instr.size(), true);
-            m_hook_addr = 0;
+        if (hook_addr_) {
+            process_->WriteMemory(hook_addr_, old_instr_.data(), old_instr_.size(), true);
+            hook_addr_ = 0;
         }
-        if (m_forward_page) {
-            m_process->FreeMemory(m_forward_page);
-            m_forward_page = 0;
+        if (forward_page_) {
+            process_->FreeMemory(forward_page_);
+            forward_page_ = 0;
         }
 
-        if (m_tls_id != TLS_OUT_OF_INDEXES) {
-            TlsFree(m_tls_id);
+        if (tls_id_ != TLS_OUT_OF_INDEXES) {
+            TlsFree(tls_id_);
         }
     }
 
     uint64_t GetForwardPage() {
-        return m_forward_page;
+        return forward_page_;
     }
 
 
 private:
     Architecture GetCurrentRunningArch() {
         Architecture arch;
-        if (m_process->IsX86()) {
+        if (process_->IsX86()) {
             arch = Architecture::kX86;
         }
         else {
@@ -1338,9 +1340,9 @@ private:
         switch (arch) {
         case Architecture::kX86: {
             // call TlsSetValue
-            // push m_tls_id
+            // push tls_id_
             buf[i++] = 0x68;
-            *(uint32_t*)&buf[i] = m_tls_id;
+            *(uint32_t*)&buf[i] = tls_id_;
             i += 4;
 
             // mov eax, TlsSetValue
@@ -1355,10 +1357,10 @@ private:
         }
         case Architecture::kAmd64: {
             // call TlsSetValue
-            // mov rcx, m_tls_id
+            // mov rcx, tls_id_
             buf[i++] = 0x48;
             buf[i++] = 0xb9;
-            *(uint64_t*)&buf[i] = m_tls_id;
+            *(uint64_t*)&buf[i] = tls_id_;
             i += 8;
             // mov rax, TlsSetValue
             buf[i++] = 0x48;
@@ -1380,9 +1382,9 @@ private:
         int i = 0;
         switch (arch) {
         case Architecture::kX86: {
-            // push m_tls_id
+            // push tls_id_
             buf[i++] = 0x68;
-            *(uint32_t*)&buf[i] = m_tls_id;
+            *(uint32_t*)&buf[i] = tls_id_;
             i += 4;
 
             // mov eax, TlsGetValue
@@ -1396,10 +1398,10 @@ private:
             break;
         }
         case Architecture::kAmd64: {
-            // mov rcx, m_tls_id
+            // mov rcx, tls_id_
             buf[i++] = 0x48;
             buf[i++] = 0xb9;
-            *(uint64_t*)&buf[i] = (uint64_t)m_tls_id;
+            *(uint64_t*)&buf[i] = (uint64_t)tls_id_;
             i += 8;
 
             // mov rax, TlsGetValue
@@ -1419,11 +1421,11 @@ private:
 
 
 private:
-    Process* m_process;
-    uint64_t m_hook_addr;
-    uint64_t m_forward_page;
-    std::vector<char> m_old_instr;
-    uint32_t m_tls_id;
+    Process* process_;
+    uint64_t hook_addr_;
+    uint64_t forward_page_;
+    std::vector<char> old_instr_;
+    uint32_t tls_id_;
 
 private:
     static uint64_t GetInstrOffset(uint64_t instr_addr, size_t instr_size, uint64_t dst_addr) {
