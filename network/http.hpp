@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <functional>
 
 #include <algorithm>
 
@@ -163,6 +164,18 @@ public:
         headers_[name].push_back(value);
     }
 
+    std::optional<size_t> GetInt(std::wstring name) {
+        if (!Hash(name)) {
+            return {};
+        }
+        auto& vec = operator[](name);
+        if (vec.size() != 1) {
+            return {};
+        }
+
+        return std::stoll(vec[0]);
+    }
+
     std::vector<std::wstring>& operator[](const std::wstring& name) {
         return headers_[name];
     }
@@ -309,6 +322,12 @@ public:
         Clear();
     }
 
+    Connect(const std::wstring& url, bool ignore_error = true) {
+        auto connect_res = Create(url, ignore_error);
+        if (!connect_res) throw std::runtime_error("Connect::Create");
+        operator=(std::move(*connect_res));
+    }
+
     Connect(Connect&& other) noexcept {
         operator=(std::forward<Connect>(other));
     }
@@ -362,7 +381,7 @@ public:
     }
 
 
-    static std::optional<Connect> Create(const std::wstring& url, bool set_ignore_error = true) {
+    static std::optional<Connect> Create(const std::wstring& url, bool ignore_error = true) {
         Connect connect;
 
         // 拆解URL
@@ -394,7 +413,7 @@ public:
         connect.host_name_ = host_name;
         connect.port_ = url_comp.nPort;
 
-        connect.set_ignore_error_ = set_ignore_error;
+        connect.set_ignore_error_ = ignore_error;
 
         connect.flags_ = 0;
         connect.https_ = url_comp.nScheme == INTERNET_SCHEME_HTTPS;
@@ -456,7 +475,7 @@ public:
         return request_headers_;
     }
 
-    bool Send() {
+    bool Send(bool redirects = false) {
         if (!request_handle_) {
             return false;
         }
@@ -464,6 +483,15 @@ public:
         InitSend();
 
         LoadRequestHeaders();
+
+        DWORD flags = 0;
+        if (redirects == false) {
+            // 禁止重定向
+            DWORD flags = WINHTTP_DISABLE_REDIRECTS;
+            if (!WinHttpSetOption(request_handle_, WINHTTP_OPTION_DISABLE_FEATURE, &flags, sizeof(flags))) {
+                return false;
+            }
+        }
 
         bool success = WinHttpSendRequest(request_handle_, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
         if (!success) {
@@ -533,16 +561,42 @@ public:
         return &response_headers_;
     }
 
-    std::optional<std::string> GetResponseContent() {
+    std::optional<size_t> GetResponseContentLength() {
+        auto response_headers_res = GetResponseHeaders();
+        if (!response_headers_res) return {};
+
+        auto& response_headers = *response_headers_res;
+
+        return response_headers->GetInt(L"Content-Length");
+    }
+
+    std::optional<std::vector<uint8_t>> GetResponseContent(std::function<bool(size_t total_read_size, size_t content_length)> read_callback = {}) {
         if (!request_handle_) {
             return {};
         }
         if (!mark_send_) {
             return {};
         }
-        size_t buff_size = 0;
+        auto response_headers_res = GetResponseHeaders();
+        if (!response_headers_res) return {};
+
+        auto content_length_res = GetResponseContentLength();
+        
+        size_t buff_size, content_length = 0;
+        if (content_length_res) {
+            content_length = *content_length_res;
+            buff_size = content_length;
+            if (buff_size == 0) {
+                buff_size = 1024;
+            }
+        }
+        else {
+            buff_size = 1024;
+        }
+
+       
         size_t total_read_size = 0;
-        std::unique_ptr<char> buff{};
+        std::vector<uint8_t> buff(buff_size);
         do {
             DWORD availablelen = 0;
             if (!WinHttpQueryDataAvailable(request_handle_, &availablelen) || availablelen == 0) {
@@ -563,27 +617,27 @@ public:
             }
 
             if (old_buff_size != buff_size) {
-                std::unique_ptr<char> newBuff(new char[buff_size]);
-
-                memcpy(newBuff.get(), buff.get(), total_read_size);
-
-                buff = std::move(newBuff);
+                buff.resize(buff_size);
             }
 
             DWORD read_size = 0;
-            if (!WinHttpReadData(request_handle_, buff.get() + total_read_size, availablelen, &read_size)) {
+            if (!WinHttpReadData(request_handle_, &buff[total_read_size], availablelen, &read_size)) {
                 return {};
+            }
+            if (read_callback) {
+                read_callback(total_read_size, content_length);
             }
             if (read_size == 0) {
                 break;
             }
             total_read_size += read_size;
 
-        } while (false);
+        } while (true);
 
 
         if (total_read_size) {
-            return std::string(buff.get(), total_read_size);
+            buff.resize(total_read_size);
+            return buff;
         }
         return {};
 
@@ -664,15 +718,7 @@ private:
 
         SetProxyInternal();
 
-
-        // 禁止重定向
-        flags = WINHTTP_DISABLE_REDIRECTS;
-        if (!WinHttpSetOption(request_handle_, WINHTTP_OPTION_DISABLE_FEATURE, &flags, sizeof(flags))) {
-            return;
-        }
-
-
-        // 设置禁止Winhttp内部自动处理Cookies
+        // 禁止Winhttp内部自动处理Cookies
         flags = WINHTTP_DISABLE_COOKIES;
         if (!WinHttpSetOption(request_handle_, WINHTTP_OPTION_DISABLE_FEATURE, &flags, sizeof(flags))) {
             return;
@@ -745,10 +791,10 @@ private:
 private:
     Session session_;
 
-    bool auto_cookie_;      // 自动补全cookie
-    bool auto_request_header_;      // 自动不全请求头
-    bool https_;        // 是https连接
-    bool set_ignore_error_;     // 是否忽略证书错误
+    bool auto_cookie_;               // 自动补全cookie
+    bool auto_request_header_;       // 自动不全请求头
+    bool https_;                     // 是https连接
+    bool set_ignore_error_;          // 是否忽略证书错误
 
     bool set_proxy_info_;
     std::wstring set_proxy_;
