@@ -382,7 +382,7 @@ public:
     /* ImportAddressTable */
 private:
     template<typename IMAGE_THUNK_DATA_T>
-    void** GetImportAddressPointByNameFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, const char* lib_name, const char* func_name) {
+    std::optional<uint32_t> GetImportAddressRawByNameFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, const std::string& func_name) {
         IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->OriginalFirstThunk);
         IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->FirstThunk);
         for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
@@ -391,55 +391,63 @@ private:
             }
             else {
                 IMAGE_IMPORT_BY_NAME* cur_func_name = (IMAGE_IMPORT_BY_NAME*)RvaToPoint(import_name_table->u1.AddressOfData);
-                if (std::string((char*)cur_func_name->Name) == func_name) {
-                    return (void**)&import_address_table->u1.Function;
+                if (func_name == cur_func_name->Name) {
+                    auto raw = PointToRaw(&import_address_table->u1.Function);
+                    if (raw == 0) return {};
+                    return raw;
                 }
             }
         }
-        return nullptr;
+        return {};
     }
     template<typename IMAGE_THUNK_DATA_T>
-    void** GetImportAddressPointByAddressFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* address) {
+    std::optional<uint32_t> GetImportAddressRawByAddressFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor, void* address) {
         IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->OriginalFirstThunk);
         IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->FirstThunk);
         for (; import_name_table->u1.Function; import_name_table++, import_address_table++) {
             if ((void*)import_address_table->u1.Function == address) {
-                auto offset = VaToOffset(&import_address_table->u1.Function);
-                if (offset == 0) return nullptr;
-                return (void**)((uintptr_t)m_memory_image_base + offset);
+                auto raw = PointToRaw(&import_address_table->u1.Function);
+                if (raw == 0) return {};
+                return raw;
             }
         }
-        return nullptr;
+        return {};
     }
 public:
-    void** GetImportAddressPointByName(const char* lib_name, const char* func_name) {
-        if (!m_memory_image_base) return nullptr;
+    std::optional<uint32_t> GetImportAddressRawByName(const std::string& lib_name, const std::string& func_name) {
+        //if (!m_memory_image_base) return {};
         auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
         for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
-            char* import_module_name = (char*)RvaToPoint(import_descriptor->Name);
-            if (import_module_name != lib_name) {
+            const char* import_module_name = (char*)RvaToPoint(import_descriptor->Name);
+            if (lib_name != import_module_name) {
                 continue;
             }
             if (IsPE32()) {
-                return GetImportAddressPointByNameFromDll<IMAGE_THUNK_DATA32>(import_descriptor, lib_name, func_name);
+                return GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA32>(import_descriptor, func_name);
             }
             else {
-                return GetImportAddressPointByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, lib_name, func_name);
+                return GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, func_name);
             }
         }
     }
-    void** GetImportAddressPointByAddr(void* address) {
-        if (!m_memory_image_base) return nullptr;
+    std::optional<uint32_t> GetImportAddressRawByAddr(void* address) {
+        //if (!m_memory_image_base) return nullptr;
         auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
         for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
             if (IsPE32()) {
-                return GetImportAddressPointByAddressFromDll<IMAGE_THUNK_DATA32>(import_descriptor, address);
+                auto raw = GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA32>(import_descriptor, address);
+                if (raw) {
+                    return raw;
+                }
             }
             else {
-                return GetImportAddressPointByAddressFromDll<IMAGE_THUNK_DATA64>(import_descriptor, address);
+                auto raw = GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA64>(import_descriptor, address);
+                if (raw) {
+                    return raw;
+                }
             }
         }
-        return nullptr;
+        return {};
     }
 
 
@@ -625,11 +633,11 @@ private:
         return i;
     }
 
-    uint32_t VaToOffset(void* va) {
+    uint32_t PointToRaw(void* point) {
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             auto addr = &m_section_list[i][0];
-            if ((uint8_t*)va >= addr && (uint8_t*)va < &m_section_list[i][m_section_list[i].size()]) {
-                return m_section_header_table[i].VirtualAddress + ((uintptr_t)va - (uintptr_t)m_section_list[i].data());
+            if ((uint8_t*)point >= addr && (uint8_t*)point < &m_section_list[i][m_section_list[i].size() - 1]) {
+                return m_section_header_table[i].VirtualAddress + ((uintptr_t)point - (uintptr_t)m_section_list[i].data());
             }
         }
         return 0;

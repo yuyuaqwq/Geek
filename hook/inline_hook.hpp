@@ -7,6 +7,7 @@
 #include <Windows.h>
 
 #include <geek/process/process.hpp>
+#include <Geek/hook/insn_len.h>
 
 
 namespace Geek {
@@ -105,7 +106,7 @@ public:
         * pop_stack_top = true
         * callback中 context->esp += 4 / context->rsp += 8;	// 跳过外部call到该函数的返回地址
             * 注：x86下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要。
-        * callback中指定 jmp_addr = context->stack[0];      // 直接返回到调用被hook函数的调用处
+        * callback中指定 context->jmp_addr = context->stack[0];      // 直接返回到调用被hook函数的调用处
         * callback中返回false      // 不执行原指令
         *
     *
@@ -130,9 +131,11 @@ public:
     *
     * Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
     */
-    bool Install(uint64_t hook_addr, size_t instr_size, uint64_t callback, bool save_volatile_register = true, Architecture arch = Architecture::kCurrentRunning,
+    bool Install(uint64_t hook_addr, uint64_t callback, size_t instr_size = 0, bool save_volatile_register = true, Architecture arch = Architecture::kCurrentRunning,
         uint64_t forward_page_size = 0x1000
     ) {
+        Uninstall();
+
         tls_id_ = TlsAlloc();
         if (tls_id_ == TLS_OUT_OF_INDEXES) {
             return false;
@@ -146,7 +149,7 @@ public:
             return false;
         }
 
-        Uninstall();
+        
 
 
         auto forward_page_res = process_->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
@@ -162,6 +165,28 @@ public:
 
         uint64_t forward_page_uint = (uint64_t)forward_page_;
 
+        if (arch == Architecture::kCurrentRunning) arch = GetCurrentRunningArch();
+
+        std::vector<uint8_t> temp(64);
+        if (!process_->ReadMemory(hook_addr, temp.data(), 64)) {
+            return false;
+        }
+
+        if (instr_size == 0) {
+            switch (arch) {
+            case Architecture::kX86: {
+                while (instr_size < 5) {
+                    instr_size += insn_len_x86_32(&temp[instr_size]);
+                }
+            }
+            case Architecture::kAmd64:
+                while (instr_size < 14) {
+                    instr_size += insn_len_x86_64(&temp[instr_size]);
+                }
+                break;
+            }
+        }
+
         // 保存原指令
         old_instr_.resize(instr_size);
         if (!process_->ReadMemory(hook_addr, old_instr_.data(), instr_size)) {
@@ -169,8 +194,7 @@ public:
         }
         
         std::vector<uint8_t> jmp_instr(instr_size);
-        if (arch == Architecture::kCurrentRunning) arch = GetCurrentRunningArch();
-
+        
         
 
         switch (arch) {
@@ -1163,19 +1187,21 @@ public:
             case Architecture::kX86: {
                 MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
                 if (jmp_instr.size() < 8) {
-                    jmp_instr.reserve(8);
-                    memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 8 - jmp_instr.size());
+                    size_t old_size = jmp_instr.size();
+                    jmp_instr.resize(8);
+                    memcpy(&jmp_instr[old_size], ((uint8_t*)hook_addr) + old_size, 8 - old_size);
                 }
                 InterlockedExchange64((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0]);
                 break;
             }
             case Architecture::kAmd64:
 #ifdef _WIN64
-                if (jmp_instr.size() < 16) {
-                    jmp_instr.reserve(16);
-                    memcpy(&jmp_instr[jmp_instr.size()], ((uint8_t*)hook_addr) + jmp_instr.size(), 16 - jmp_instr.size());
-                }
                 MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
+                if (jmp_instr.size() < 16) {
+                    size_t old_size = jmp_instr.size();
+                    jmp_instr.resize(16);
+                    memcpy(&jmp_instr[old_size], ((uint8_t*)hook_addr) + old_size, 16 - old_size);
+                }
                 uint8_t buf[16];
                 memcpy(buf, (void*)hook_addr, 16);
                 success = InterlockedCompareExchange128((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[8], *(LONGLONG*)&jmp_instr[0], (long long*)buf);

@@ -20,10 +20,6 @@ struct ProcessInfo {
 
     }
 
-    bool IsValid() {
-        return process_id != 0;
-    }
-
     uint64_t process_id;
     uint64_t parent_process_id;
     std::wstring process_name;

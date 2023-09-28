@@ -29,20 +29,9 @@
 
 namespace Geek {
 
-static Wow64 ms_wow64;
-static const HANDLE kCurrentProcess = (HANDLE)-1;
-
-
-
+static inline Wow64 ms_wow64;
+static inline const HANDLE kCurrentProcess = (HANDLE)-1;
 class Process {
-public:
-    enum class Status {
-        kOk,
-        kProcessInvalid,
-        kOther,
-        kApiCallFailed,
-    };
-
 public:
     static std::optional<Process> Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS) {
         auto hProcess = OpenProcess(desiredAccess, FALSE, pid);
@@ -758,6 +747,14 @@ public:
         } while (false);
     }
 
+    std::optional<Image> GetImageByModuleInfo(const Geek::ModuleInfo& info) {
+        Image image;
+        auto buf = ReadMemory(info.base, info.size);
+        if (!buf) return {};
+
+        return image.LoadFromImageBuf(buf.value().data(), info.base);
+    }
+
     std::optional<uint64_t> GetExportProcAddress(Image* image, std::string_view func_name) {
         uint32_t export_rva;
         if ((uintptr_t)func_name.data() <= 0xffff) {
@@ -779,7 +776,7 @@ public:
             auto func_name = full_name.substr(offset + 1);
             if (!dll_name.empty() && !func_name.empty()) {
                 auto image_base = LoadLibrary(Geek::String::AnsiToUtf16le(dll_name).c_str());
-                if (!image_base)return {};
+                if (!image_base) return {};
                 auto import_image = LoadImageFromImageBase(image_base.value());
                 if (!import_image) return {};
                 auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
@@ -800,7 +797,7 @@ public:
         kStdCall,
         kFastCall,
     };
-    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
+    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
         std::vector<uint8_t> temp_data(0x1000, 0);
         auto temp = temp_data.data();
 
@@ -983,7 +980,7 @@ public:
         return success;
     }
 
-    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
+    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
         auto exec_page_res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
         if (!exec_page_res) {
             return false;
@@ -1427,6 +1424,9 @@ public:
         return process.value().Terminate(0);
     }
 };
+
+static inline Process CurrentProcess{ kCurrentProcess };
+
 
 } // namespace Geek
 
