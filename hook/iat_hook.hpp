@@ -13,9 +13,7 @@ public:
         auto func_addr_ptr_rew = image->GetImportAddressRawByName(import_lib_name.data(), import_func_name.data());
         if (!func_addr_ptr_rew) return false;
         func_addr_raw = *func_addr_ptr_rew;
-
         memory_image_base = image->GetMemoryImageBase();
-
         void** func_addr_ptr = (void**)(memory_image_base + func_addr_raw);
         DWORD old_protect;
         CurrentProcess.SetMemoryProtect((uint64_t)func_addr_ptr, sizeof(void*), PAGE_READWRITE, &old_protect);
