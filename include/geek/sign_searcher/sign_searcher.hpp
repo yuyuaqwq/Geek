@@ -1,5 +1,5 @@
-#ifndef GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_
-#define GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_
+#ifndef GEEK_SIGN_SEARCHER_HPP_
+#define GEEK_SIGN_SEARCHER_HPP_
 
 #include <string>
 #include <vector>
@@ -10,29 +10,28 @@
 
 namespace Geek{
 
-
-class SignatureCode {
+class SignSearcher {
 private:
-    enum class SignatureElementType {
+    enum class SignElementType {
         kNone,
         kWhole,
         kVague
     };
 
-    struct SignatureElement {
-        SignatureElementType type;
+    struct SignElement {
+        SignElementType type;
         size_t length;
         std::vector<unsigned char> data;
     };
 
 public:
-    SignatureCode() : process_handle_ { nullptr } { }
-    explicit SignatureCode(Process* process) : process_handle_{ process } { }
-    ~SignatureCode() { }
+    SignSearcher() : process_handle_ { nullptr } { }
+    explicit SignSearcher(Process* process) : process_handle_{ process } { }
+    ~SignSearcher() { }
 
 public:
     std::optional<uint64_t> Search(uint64_t start_address, size_t size, const std::string& hex_string_data) {
-        std::vector<SignatureElement> signature;
+        std::vector<SignElement> signature;
         size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 
         size_t signature_size = signature.size();
@@ -57,7 +56,7 @@ public:
             bool match = true;
             for (size_t j = 0; j < signature_size; ++j) {
                 size_t length = signature[j].length;
-                if (signature[j].type == SignatureElementType::kWhole) {
+                if (signature[j].type == SignElementType::kWhole) {
                     if (IsBadReadPtr((void*)cur_pos, length)) {
                         match = false;
                         break;
@@ -129,12 +128,12 @@ private:
     * *20表示重复20次，是十进制
     * ??表示模糊匹配
     */
-    size_t StringToElement(const std::string& hex_string_data, std::vector<SignatureElement>& signature, size_t& offset) {
+    size_t StringToElement(const std::string& hex_string_data, std::vector<SignElement>& signature, size_t& offset) {
         bool first = true;
         unsigned char sum = 0;
-        SignatureElement temp_signature_element;
+        SignElement temp_signature_element;
         temp_signature_element.length = 0;
-        SignatureElementType oldType = SignatureElementType::kNone, newType = SignatureElementType::kNone;
+        SignElementType oldType = SignElementType::kNone, newType = SignElementType::kNone;
         size_t total_length = 0;
 
         for (size_t i = 0; i < hex_string_data.length(); ++i) {
@@ -142,18 +141,18 @@ private:
             bool validChar = true;
             if (c >= '0' && c <= '9') {
                 c -= '0';
-                newType = SignatureElementType::kWhole;
+                newType = SignElementType::kWhole;
             }
             else if (c >= 'a' && c <= 'f') {
                 c = c - 'a' + 10;
-                newType = SignatureElementType::kWhole;
+                newType = SignElementType::kWhole;
             }
             else if (c >= 'A' && c <= 'F') {
                 c = c - 'A' + 10;
-                newType = SignatureElementType::kWhole;
+                newType = SignElementType::kWhole;
             }
             else if (c == '?') {
-                newType = SignatureElementType::kVague;
+                newType = SignElementType::kVague;
             }
             else {
                 if (c == '&') {
@@ -163,7 +162,7 @@ private:
                     size_t countInt;
                     unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
                     if (countInt) {
-                        if (oldType == SignatureElementType::kWhole && temp_signature_element.data.size() > 0) {
+                        if (oldType == SignElementType::kWhole && temp_signature_element.data.size() > 0) {
                             unsigned char repC = temp_signature_element.data[temp_signature_element.data.size() - 1];
                             for (size_t j = 0; j < lenInt; ++j) {
                                 temp_signature_element.data.push_back(repC);
@@ -178,7 +177,7 @@ private:
                 goto _PushChar;
             }
 
-            if (oldType == SignatureElementType::kNone) {
+            if (oldType == SignElementType::kNone) {
                 oldType = newType;
             }
 
@@ -193,7 +192,7 @@ private:
             }
 
         _PushChar:
-            if (oldType == SignatureElementType::kWhole) {
+            if (oldType == SignElementType::kWhole) {
                 if (first && validChar) {
                     sum = c << 4;
                     first = false;
@@ -206,7 +205,7 @@ private:
                 }
             }
 
-            else if (oldType == SignatureElementType::kVague) {
+            else if (oldType == SignElementType::kVague) {
                 if (first && validChar) {
                     first = false;
                 }
@@ -219,7 +218,7 @@ private:
         }
 
         if (!first) {
-            if (oldType == SignatureElementType::kWhole) {
+            if (oldType == SignElementType::kWhole) {
                 temp_signature_element.data.push_back(sum >> 4);
             }
             ++temp_signature_element.length;
@@ -240,4 +239,4 @@ private:
 
 } // namespace Geek
 
-#endif // GEEK_SIGNATURE_CODE_SIGNATURE_CODE_HPP_
+#endif // GEEK_SIGN_SEARCHER_HPP_
