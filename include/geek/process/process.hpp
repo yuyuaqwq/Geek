@@ -539,7 +539,8 @@ public:
         else {
             if (ms_wow64.Wow64Operation(Get())) {
                 auto RtlCreateUserThread = ms_wow64.GetProcAddress64(ms_wow64.GetNTDLL64(), "RtlCreateUserThread");
-                ms_wow64.X64Call(RtlCreateUserThread, reinterpret_cast<DWORD64>(Get()), static_cast<DWORD64>(NULL), 
+                ms_wow64.X64Call(RtlCreateUserThread, 
+                    reinterpret_cast<DWORD64>(Get()), static_cast<DWORD64>(NULL), 
                     static_cast<LONG>(FALSE), static_cast<LONG>(0), static_cast<DWORD64>(NULL), 
                     static_cast<DWORD64>(NULL), reinterpret_cast<DWORD64>(start_routine), 
                     reinterpret_cast<DWORD64>(parameter), reinterpret_cast<DWORD64>(&thread_handle),
