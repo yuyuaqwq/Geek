@@ -243,13 +243,15 @@ typedef struct _UNICODE_STRING32
     PWSTR Buffer;
 } UNICODE_STRING32, * PUNICODE_STRING32;
 
+#pragma pack(push)
+#pragma pack(8)
 typedef struct _UNICODE_STRING64
 {
     USHORT Length;
     USHORT MaximumLength;
     ULONG64 Buffer;
 } UNICODE_STRING64, * PUNICODE_STRING64;
-
+#pragma pack(pop)
 
 typedef _LDR_DATA_TABLE_ENTRY_T<DWORD> LDR_DATA_TABLE_ENTRY32;
 //typedef struct _LDR_DATA_TABLE_ENTRY32

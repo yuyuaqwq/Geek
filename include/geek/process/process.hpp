@@ -530,24 +530,79 @@ public:
     /*
     * Thread
     */
-    std::optional<Thread> CreateThread(PTHREAD_START_ROUTINE start_routine, PVOID64 parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
+    std::optional<Thread> CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
         DWORD thread_id = 0;
         HANDLE thread_handle = NULL;
         if (IsCur()) {
-            thread_handle = ::CreateThread(NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+            thread_handle = ::CreateThread(NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(start_routine), reinterpret_cast<PVOID64>(parameter), dwCreationFlags, &thread_id);
         }
         else {
             if (ms_wow64.Wow64Operation(Get())) {
-                auto RtlCreateUserThread = ms_wow64.GetProcAddress64(ms_wow64.GetNTDLL64(), "RtlCreateUserThread");
-                ms_wow64.X64Call(RtlCreateUserThread, 
-                    reinterpret_cast<DWORD64>(Get()), static_cast<DWORD64>(NULL), 
-                    static_cast<LONG>(FALSE), static_cast<LONG>(0), static_cast<DWORD64>(NULL), 
-                    static_cast<DWORD64>(NULL), reinterpret_cast<DWORD64>(start_routine), 
-                    reinterpret_cast<DWORD64>(parameter), reinterpret_cast<DWORD64>(&thread_handle),
-                    static_cast<DWORD64>(NULL));
+                auto ntdll64 = ms_wow64.GetNTDLL64();
+                auto RtlCreateUserThread = ms_wow64.GetProcAddress64(ntdll64, "RtlCreateUserThread");
+                auto ntdll_RtlExitThread = ms_wow64.GetProcAddress64(ntdll64, "RtlExitUserThread");
+
+                unsigned char shell_code[] = {
+                    0x48, 0x89, 0x4c, 0x24, 0x08,                               // mov       qword ptr [rsp+8],rcx 
+                    0x57,                                                       // push      rdi
+                    0x48, 0x83, 0xec, 0x20,                                     // sub       rsp,20h
+                    0x48, 0x8b, 0xfc,                                           // mov       rdi,rsp
+                    0xb9, 0x08, 0x00, 0x00, 0x00,                               // mov       ecx,8
+                    0xb8, 0xcc, 0xcc, 0xcc, 0xcc,                               // mov       eac,0CCCCCCCCh
+                    0xf3, 0xab,                                                 // rep stos  dword ptr [rdi]
+                    0x48, 0x8b, 0x4c, 0x24, 0x30,                               // mov       rcx,qword ptr [__formal]
+                    0x48, 0xb9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rcx,   parameter
+                    0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rax,0 
+                    0xff, 0xd0,                                                 // call      rax    start_routine
+                    0x48, 0xb9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rcx,0
+                    0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rax,0
+                    0xff, 0xd0                                                  // call      rax
+                    
+                };
+
+                auto buf_addr = AllocMemory(size_t{ 4096 }, DWORD{ MEM_RESERVE | MEM_COMMIT }, PAGE_EXECUTE_READWRITE);
+                if (!buf_addr) {
+                    return {};
+                }
+
+                //r8
+                memcpy(shell_code + 32, &parameter, sizeof(parameter));
+
+                memcpy(shell_code + 42, &start_routine, sizeof(start_routine));
+
+                //RtlExitUserThread
+                memcpy(shell_code + 64, &ntdll_RtlExitThread, sizeof(DWORD64));
+                size_t write_size = 0;
+
+                if (!WriteMemory(*buf_addr, shell_code, sizeof(shell_code))) {
+                    FreeMemory(*buf_addr);
+                    return {};
+                }
+
+                struct {
+                    DWORD64 UniqueProcess;
+                    DWORD64 UniqueThread;
+                } client_id { 0 };
+
+                auto error = ms_wow64.X64Call(RtlCreateUserThread, 10,
+                    reinterpret_cast<DWORD64>(Get()), 
+                    static_cast<DWORD64>(NULL), static_cast<DWORD64>(FALSE),
+                    static_cast<DWORD64>(0), static_cast<DWORD64>(NULL), static_cast<DWORD64>(NULL),
+                    static_cast<DWORD64>(*buf_addr), static_cast<DWORD64>(0),
+                    reinterpret_cast<DWORD64>(&thread_handle),
+                    reinterpret_cast<DWORD64>(&client_id));
+                
+                if (thread_handle) {
+                    ::WaitForSingleObject(thread_handle, INFINITE);
+                }
+
+                FreeMemory(*buf_addr);
+                if (!NT_SUCCESS(error)) {
+                    return {};
+                }
             }
             else {
-                thread_handle = ::CreateRemoteThread(Get(), NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+                thread_handle = ::CreateRemoteThread(Get(), NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(start_routine), reinterpret_cast<PVOID64>(parameter), dwCreationFlags, &thread_id);
             }
         }
         if (thread_handle == NULL) {
@@ -691,7 +746,7 @@ public:
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base) {
         Image image;
         if (IsCur()) {
-            image.LoadFromImageBuf((void*)image_base, image_base);
+            image.ReloadFromImageBuf((void*)image_base, image_base);
         }
         else {
             auto module_info = GetModuleInfoByModuleBase(image_base);
@@ -700,7 +755,7 @@ public:
             if (!buf) {
                 return {};
             }
-            image.LoadFromImageBuf(buf.value().data(), image_base);
+            image.ReloadFromImageBuf(buf.value().data(), image_base);
         }
         return image;
     }
@@ -724,24 +779,69 @@ public:
 
         uint64_t addr = NULL;
         
-        auto len = lib_name.size() * 2 + 2;
-        auto lib_name_buf_res = AllocMemory(len);
-        if (!lib_name_buf_res) {
-            return {};
-        }
-        auto& lib_name_buf = *lib_name_buf_res;
-        do {
-            if (!lib_name_buf) {
-                break;
+        if (ms_wow64.Wow64Operation(Get())) {
+            auto ntdll64 = ms_wow64.GetNTDLL64();
+            auto LdrLoadDll = ms_wow64.GetProcAddress64(ntdll64, "LdrLoadDll");
+            UNICODE_STRING64 us64;
+            auto str_len = lib_name.size() * 2;
+            if (str_len % 8 != 0) {
+                str_len += 8 - str_len % 8;
             }
-            if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
-                break;
+            auto len = str_len + sizeof(UNICODE_STRING64) + sizeof(DWORD64);
+            auto lib_name_buf_res = AllocMemory(len);
+            if (!lib_name_buf_res) {
+                return {};
             }
-            Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
-        } while (false);
-        if (lib_name_buf) {
-            FreeMemory(lib_name_buf);
+            auto& lib_name_buf = *lib_name_buf_res;
+            do {
+                if (!lib_name_buf) {
+                    break;
+                }
+
+                if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
+                    break;
+                }
+                auto unicode_str_addr = lib_name_buf + str_len;
+               
+                auto raw_str_len = lib_name.size() * 2;
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->Length) }, &raw_str_len, 2)) {
+                    break;
+                }
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->MaximumLength) }, &raw_str_len, 2)) {
+                    break;
+                }
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->Buffer) }, &lib_name_buf, 8)) {
+                    break;
+                }
+
+                Call(LdrLoadDll, { 0, 0, unicode_str_addr, unicode_str_addr + sizeof(UNICODE_STRING64) }, &addr);
+            } while (false);
+            if (lib_name_buf) {
+                FreeMemory(lib_name_buf);
+            }
+
         }
+        else {
+            auto len = lib_name.size() * 2 + 2;
+            auto lib_name_buf_res = AllocMemory(len);
+            if (!lib_name_buf_res) {
+                return {};
+            }
+            auto& lib_name_buf = *lib_name_buf_res;
+            do {
+                if (!lib_name_buf) {
+                    break;
+                }
+                if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
+                    break;
+                }
+                Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
+            } while (false);
+            if (lib_name_buf) {
+                FreeMemory(lib_name_buf);
+            }
+        }
+        
         return addr;
     }
 
@@ -750,7 +850,7 @@ public:
             return ::FreeLibrary((HMODULE)module_base);
         }
         do {
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)::FreeLibrary, (PVOID64)module_base);
+            auto thread = CreateThread((uint64_t)::FreeLibrary, module_base);
             if (!thread) {
                 return false;
             }
@@ -776,8 +876,8 @@ public:
         }
         // 可能返回一个字符串，需要二次加载
         // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
-        uint64_t va = (uintptr_t)image->GetMemoryImageBase() + export_rva;
-        auto export_directory = (uintptr_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        uint64_t va = (uint64_t)image->GetMemoryImageBase() + export_rva;
+        auto export_directory = (uint64_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
         auto export_directory_size = image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
         // 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
         if (va > export_directory && va < export_directory + export_directory_size) {
@@ -971,7 +1071,7 @@ public:
                 break;
             }
 
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)(exec_page + exec_offset), NULL);
+            auto thread = CreateThread(exec_page + exec_offset, NULL);
             if (!thread) {
                 break;
             }
