@@ -859,11 +859,9 @@ public:
     }
 
     std::optional<Image> GetImageByModuleInfo(const Geek::ModuleInfo& info) {
-        Image image;
         auto buf = ReadMemory(info.base, info.size);
         if (!buf) return {};
-
-        return image.LoadFromImageBuf(buf.value().data(), info.base);
+        return Image::LoadFromImageBuf(buf.value().data(), info.base);
     }
 
     std::optional<uint64_t> GetExportProcAddress(Image* image, std::string_view func_name) {
