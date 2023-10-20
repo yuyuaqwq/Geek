@@ -12,7 +12,6 @@
 namespace Geek {
 static const HANDLE kCurrentThread = (HANDLE)-2;
 
-
 class Thread {
 public:
     Thread(UniqueHandle thread_handle) : thread_handle_ { std::move(thread_handle) } {
@@ -62,7 +61,7 @@ public:
         }
         return code;
     }
-    
+
 
 private:
     UniqueHandle thread_handle_;

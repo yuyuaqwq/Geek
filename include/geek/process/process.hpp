@@ -616,17 +616,16 @@ public:
             return {};
         }
         unsigned char jmpSelf[] = { 0xeb, 0xfe };
-        bool isX86;
-        auto context_buf_res = GetThreadContext(thread);
-        auto& context_buf = *context_buf_res;
         uint64_t ip;
-        if (isX86) {
-            auto context = (_CONTEXT32*)context_buf.data();
-            ip = context->Eip;
+        if (IsX86()) {
+            _CONTEXT32 context;
+            GetThreadContext(thread, context);
+            ip = context.Eip;
         }
         else {
-            auto context = (_CONTEXT64*)context_buf.data();
-            ip = context->Rip;
+            _CONTEXT64 context;
+            GetThreadContext(thread, context);
+            ip = context.Rip;
         }
         auto old_instr = LockAddress(ip);
         thread->Resume();
@@ -638,17 +637,16 @@ public:
             return false;
         }
         uint16_t oldInstr;
-        bool isX86;
-        auto context_buf_res = GetThreadContext(thread);
-        auto& context_buf = *context_buf_res;
         uint64_t ip;
-        if (isX86) {
-            auto context = (_CONTEXT32*)context_buf.data();
-            ip = context->Eip;
+        if (IsX86()) {
+            _CONTEXT32 context;
+            GetThreadContext(thread, context);
+            ip = context.Eip;
         }
         else {
-            auto context = (_CONTEXT64*)context_buf.data();
-            ip = context->Rip;
+            _CONTEXT64 context;
+            GetThreadContext(thread, context);
+            ip = context.Rip;
         }
         auto success = UnlockAddress(ip, instr);
         thread->Resume();
@@ -660,36 +658,55 @@ public:
     }
 
 
-    std::optional<std::vector<char>> GetThreadContext(Thread* thread, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
-        std::vector<char> context;
+    bool GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
         bool success;
-        if (!IsTheOwningThread(thread)) {
-            return {};
-        }
-        if (ms_wow64.Wow64Operation(Get())) {
-            context.resize(sizeof(_CONTEXT64));
-            ((_CONTEXT64*)context.data())->ContextFlags = flags;
-            success = ms_wow64.GetThreadContext64(thread->Get(), (_CONTEXT64*)context.data());
+        context.ContextFlags = flags;
+        if (!CurIsX86()) {
+            success = ::Wow64GetThreadContext(thread->Get(), &context);
         }
         else {
-            if (IsX86() && !CurIsX86()) {
-                
-                context.resize(sizeof(WOW64_CONTEXT));
-                ((WOW64_CONTEXT*)context.data())->ContextFlags = flags;
-                success = ::Wow64GetThreadContext(thread->Get(), (PWOW64_CONTEXT)context.data());
-            }
-            else {
-                
-                context.resize(sizeof(CONTEXT));
-                ((CONTEXT*)context.data())->ContextFlags = flags;
-                success = ::GetThreadContext(thread->Get(), (LPCONTEXT)context.data());
-            }
+            success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
         }
-        if (!success) {
-            return {};
-        }
-        return context;
+        return success;
     }
+
+    bool GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        bool success;
+        context.ContextFlags = flags;
+        if (ms_wow64.Wow64Operation(Get())) {
+            success = ms_wow64.GetThreadContext64(thread->Get(), &context);
+        }
+        else {
+            success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+    bool SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        bool success; 
+        context.ContextFlags = flags;
+        if (!CurIsX86()) {
+            success = ::Wow64SetThreadContext(thread->Get(), &context);
+        }
+        else {
+            success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+    bool SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        bool success;
+        context.ContextFlags = flags;
+        if (ms_wow64.Wow64Operation(Get())) {
+            success = ms_wow64.SetThreadContext64(thread->Get(), &context);
+        }
+        else {
+            success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+
 
     bool WaitExit(DWORD dwMilliseconds = INFINITE) {
         if (IsCur()) {
@@ -763,7 +780,7 @@ public:
     /*
     * library
     */
-    std::optional<uint64_t> LoadLibrary(std::wstring_view lib_name) {
+    std::optional<uint64_t> LoadLibrary(std::wstring_view lib_name, bool sync = true) {
         if (IsCur()) {
             auto addr = ::LoadLibraryW(lib_name.data());
             if (!addr) {
@@ -787,17 +804,14 @@ public:
             if (str_len % 8 != 0) {
                 str_len += 8 - str_len % 8;
             }
-            auto len = str_len + sizeof(UNICODE_STRING64) + sizeof(DWORD64);
-            auto lib_name_buf_res = AllocMemory(len);
+            auto len = 0x1000 + str_len + sizeof(UNICODE_STRING64) + sizeof(DWORD64);
+            auto lib_name_buf_res = AllocMemory(NULL, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
             if (!lib_name_buf_res) {
                 return {};
             }
-            auto& lib_name_buf = *lib_name_buf_res;
+            auto lib_name_buf = *lib_name_buf_res;
+            lib_name_buf += 0x1000;
             do {
-                if (!lib_name_buf) {
-                    break;
-                }
-
                 if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
                     break;
                 }
@@ -814,30 +828,28 @@ public:
                     break;
                 }
 
-                Call(LdrLoadDll, { 0, 0, unicode_str_addr, unicode_str_addr + sizeof(UNICODE_STRING64) }, &addr);
+                Call(lib_name_buf - 0x1000, LdrLoadDll, { 0, 0, unicode_str_addr, unicode_str_addr + sizeof(UNICODE_STRING64) }, &addr, Process::CallConvention::kStdCall, sync);
             } while (false);
-            if (lib_name_buf) {
+            if (sync && lib_name_buf) {
                 FreeMemory(lib_name_buf);
             }
 
         }
         else {
-            auto len = lib_name.size() * 2 + 2;
-            auto lib_name_buf_res = AllocMemory(len);
+            auto len = 0x1000 + lib_name.size() * 2 + 2;
+            auto lib_name_buf_res = AllocMemory(NULL, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
             if (!lib_name_buf_res) {
                 return {};
             }
-            auto& lib_name_buf = *lib_name_buf_res;
+            auto lib_name_buf = *lib_name_buf_res;
+            lib_name_buf += 0x1000;
             do {
-                if (!lib_name_buf) {
-                    break;
-                }
                 if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
                     break;
                 }
-                Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
+                Call(lib_name_buf - 0x1000, (uint64_t)::LoadLibraryW, { lib_name_buf }, &addr, Process::CallConvention::kStdCall, false);
             } while (false);
-            if (lib_name_buf) {
+            if (sync && lib_name_buf) {
                 FreeMemory(lib_name_buf);
             }
         }
@@ -906,7 +918,7 @@ public:
         kStdCall,
         kFastCall,
     };
-    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
+    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall, bool sync = true) {
         std::vector<uint8_t> temp_data(0x1000, 0);
         auto temp = temp_data.data();
 
@@ -1074,15 +1086,20 @@ public:
                 break;
             }
 
-            if (!thread.value().WaitExit()) {
-                break;
+            if (sync) {
+                if (!thread.value().WaitExit()) {
+                    break;
+                }
+                if (ret_value) {
+                    *ret_value = 0;
+                    ReadMemory(exec_page, ret_value, exec_offset);
+                }
             }
-
-            if (ret_value) {
-                *ret_value = 0;
-                ReadMemory(exec_page, ret_value, exec_offset);
+            else {
+                if (ret_value) {
+                    *ret_value = 0;
+                }
             }
-
             success = true;
         }
         while (false);
@@ -1099,7 +1116,7 @@ public:
             return false;
         }
 
-        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention);
+        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention, true);
 
         FreeMemory(exec_page);
         return success;
