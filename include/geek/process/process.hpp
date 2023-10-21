@@ -52,15 +52,14 @@ public:
     /*
     * CREATE_SUSPENDED:挂起目标进程
     */
-    static std::optional<Process> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
+    static std::optional<std::tuple<Process, Thread>> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
         std::wstring command_ = command.data();
         STARTUPINFOW startupInfo{ sizeof(startupInfo) };
         PROCESS_INFORMATION processInformation{ 0 };
         if (!CreateProcessW(NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
             return {};
         }
-        CloseHandle(processInformation.hThread);
-        return Process{ UniqueHandle(processInformation.hProcess) };
+        return std::tuple{ Process{ UniqueHandle{processInformation.hProcess} },  Thread{ UniqueHandle{processInformation.hThread} } };
     }
 
     /*
@@ -511,6 +510,7 @@ public:
     /*
     * Run
     */
+
     std::optional<uint16_t> LockAddress(uint64_t addr) {
         uint16_t instr;
         if (!ReadMemory(addr, &instr, 2)) {

@@ -1,6 +1,7 @@
 #ifndef GEEK_PROCESS_DEBUG_H_
 #define GEEK_PROCESS_DEBUG_H_
 
+#include <format>
 #include <string>
 #include <functional>
 #include <unordered_map>
@@ -36,20 +37,19 @@ public:
 public:
     Debug(Process& bind_process) noexcept : process_{ bind_process } {
         thread_id_ = 0;
-        active_ = false;
+        
         continue_ = false;
         suspend_ = false;
         first_break_point_ = false;
+        active_ = false;
     }
 
-    bool Loop(bool active = false) {
-        active_ = active;
-        if (active_) {
-            if (!DebugActiveProcess(process_.GetId())) {
-                return false;
-            }
-        }
+    bool Active() {
+        active_ = true;
+        return DebugActiveProcess(process_.GetId());
+    }
 
+    bool Loop() {
         bool success = true;
         continue_ = true;
         while (continue_) {
