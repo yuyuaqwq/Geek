@@ -542,9 +542,8 @@ public:
         if (hRes) {
             UnlockResource(hRes);
             FreeResource(hRes);
-            hRes = NULL;
         }
-        if (!hRes || !pRes) return {};
+        if (buf.empty()) return {};
         return buf;
     }
 
