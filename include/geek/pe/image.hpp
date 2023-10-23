@@ -12,6 +12,9 @@
 #include <ntimage.h>
 #endif
 
+#undef min
+#undef max
+
 
 namespace Geek {
 
@@ -96,7 +99,7 @@ public:
         // 保存节区和头节区
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
-            auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+            auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
 
@@ -123,7 +126,7 @@ public:
         // 保存节区和头节区
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
-            auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+            auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
             if (virtual_size % SectionAlignment) {

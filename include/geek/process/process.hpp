@@ -16,6 +16,8 @@
 #include <ntifs.h>
 #endif
 
+#undef min
+#undef max
 
 #include <Geek/process/ntinc.h>
 #include <Geek/process/module_info.hpp>
@@ -59,13 +61,13 @@ public:
         if (!CreateProcessW(NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
             return {};
         }
-        return std::tuple{ Process{ UniqueHandle{processInformation.hProcess} },  Thread{ UniqueHandle{processInformation.hThread} } };
+        return std::tuple{ Process{ UniqueHandle{ processInformation.hProcess } },  Thread{ UniqueHandle{ processInformation.hThread } } };
     }
 
     /*
     * L"explorer.exe"
     */
-    static std::optional<Process> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, HANDLE* thread = NULL, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+    static std::optional<std::tuple<Process, Thread>> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
         HANDLE hToken_ = NULL;
         auto pid = GetProcessIdByProcessName(tokenProcessName);
         if (!pid) {
@@ -95,19 +97,12 @@ public:
         if (!ret) {
             return {};
         }
-        if (!thread) {
-            CloseHandle(pi->hThread);
-        }
-        else {
-            *thread = pi->hThread;
-        }
-        return Process{ UniqueHandle(pi->hProcess) };
+        return std::tuple { Process{ UniqueHandle(pi->hProcess) }, Thread{ UniqueHandle(pi->hThread) } };
     }
+    
 
-
-
-    Process(UniqueHandle process_handle) : process_handle_ { std::move(process_handle) } {
-        
+    explicit Process(UniqueHandle process_handle) noexcept :
+        process_handle_ { std::move(process_handle) } {
     }
 
 
@@ -659,6 +654,9 @@ public:
 
 
     bool GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (IsX86()) {
+            return false;
+        }
         bool success;
         context.ContextFlags = flags;
         if (!CurIsX86()) {
@@ -671,6 +669,9 @@ public:
     }
 
     bool GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (IsX86()) {
+            return false;
+        }
         bool success;
         context.ContextFlags = flags;
         if (ms_wow64.Wow64Operation(Get())) {
@@ -683,6 +684,9 @@ public:
     }
 
     bool SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (!IsX86()) {
+            return false;
+        }
         bool success; 
         context.ContextFlags = flags;
         if (!CurIsX86()) {
@@ -695,6 +699,9 @@ public:
     }
 
     bool SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (!IsX86()) {
+            return false;
+        }
         bool success;
         context.ContextFlags = flags;
         if (ms_wow64.Wow64Operation(Get())) {
@@ -1017,7 +1024,7 @@ public:
                 0xb849,
                 0xb949,
             };
-            for (int j = 0; j < min(4, par_list.size()); j++) {
+            for (int j = 0; j < std::min(size_t{ 4 }, par_list.size()); j++) {
                 // 寄存器传参
                 // mov reg, par[j]
                 *((uint16_t*)&temp[i]) = reg_code[j];
