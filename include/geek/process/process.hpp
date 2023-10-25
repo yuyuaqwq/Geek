@@ -28,6 +28,7 @@
 #include <Geek/thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 #include <Geek/string/string.hpp>
+#include <Geek/file/file.hpp>
 
 namespace Geek {
 
@@ -764,6 +765,7 @@ public:
             FreeMemory(image_base);
             image_base = 0;
         }
+        image->SetMemoryImageBase(image_base);
         return image_base;
     }
 
@@ -883,13 +885,13 @@ public:
         return Image::LoadFromImageBuf(buf.value().data(), info.base);
     }
 
-    std::optional<uint64_t> GetExportProcAddress(Image* image, std::string_view func_name) {
+    std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name) {
         uint32_t export_rva;
-        if ((uintptr_t)func_name.data() <= 0xffff) {
-            export_rva = image->GetExportRvaByOrdinal((uint16_t)func_name.data());
+        if (reinterpret_cast<uintptr_t>(func_name) <= 0xffff) {
+            export_rva = image->GetExportRvaByOrdinal(reinterpret_cast<uint16_t>(func_name));
         }
         else {
-            export_rva = image->GetExportRvaByName(func_name.data());
+            export_rva = image->GetExportRvaByName(func_name);
         }
         // 可能返回一个字符串，需要二次加载
         // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
@@ -1404,8 +1406,9 @@ public:
         return {};
     }
 
-    static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
+    static std::optional<std::vector<uint8_t>> GetResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type) {
         bool success = false;
+        std::vector<uint8_t> res;
         HRSRC hResID = NULL;
         HRSRC hRes = NULL;
         HANDLE hResFile = INVALID_HANDLE_VALUE;
@@ -1421,33 +1424,18 @@ public:
             }
 
             LPVOID pRes = LockResource(hRes);
-            if (pRes == NULL)
-            {
+            if (pRes == NULL) {
                 break;
             }
 
             unsigned long dwResSize = SizeofResource(hModule, hResID);
-
-            hResFile = CreateFileW(saveFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (INVALID_HANDLE_VALUE == hResFile)
-            {
-                DWORD errorCode = GetLastError();
-                if (errorCode == 32) {
-                    success = true;
-                    break;
-                }
-                break;
-            }
-            DWORD dwWrited = 0;
-            if (FALSE == WriteFile(hResFile, pRes, dwResSize, &dwWrited, NULL))
-            {
-                break;
-            }
+            res.resize(dwResSize);
+            memcpy(&res[0], pRes, dwResSize);
             success = true;
         } while (false);
 
         if (hResFile != INVALID_HANDLE_VALUE) {
-            CloseHandle(hResFile);
+            
             hResFile = INVALID_HANDLE_VALUE;
         }
         if (hRes) {
@@ -1455,8 +1443,18 @@ public:
             FreeResource(hRes);
             hRes = NULL;
         }
-        return success;
+        if (!success) {
+            return {};
+        }
+        return res;
+    }
 
+    static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
+        auto resource = GetResource(hModule, ResourceID, type);
+        if (!resource) {
+            return false;
+        }
+        return Geek::File::WriteFile(saveFilePath, resource->data(), resource->size());
     }
 
     

@@ -275,6 +275,10 @@ public:
         return m_memory_image_base;
     }
 
+    void SetMemoryImageBase(uint64_t imageBase) {
+        m_memory_image_base = imageBase;
+    }
+
     void SetImageBase(uint64_t imageBase) {
         SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
     }
