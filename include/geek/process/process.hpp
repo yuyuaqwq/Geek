@@ -754,10 +754,10 @@ public:
                 break;
             }
             if (exec_tls_callback) {
-                ExecuteTls(image, image_base, &image_buf);
+                ExecuteTls(image, image_base);
             }
             if (call_dll_entry) {
-                CallEntryPoint(image, image_base, &image_buf, init_parameter);
+                CallEntryPoint(image, image_base, init_parameter);
             }
             success = true;
         } while (false);
@@ -770,20 +770,40 @@ public:
     }
 
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base) {
-        Image image;
         if (IsCur()) {
-            image.ReloadFromImageBuf((void*)image_base, image_base);
+            return Image::LoadFromImageBuf((void*)image_base, image_base);
         }
         else {
             auto module_info = GetModuleInfoByModuleBase(image_base);
-            if (!module_info) return image;
+            if (!module_info) return {};
             auto buf = ReadMemory(image_base, module_info.value().size);
             if (!buf) {
                 return {};
             }
-            image.ReloadFromImageBuf(buf.value().data(), image_base);
+            return Image::LoadFromImageBuf(buf->data(), image_base);
         }
-        return image;
+    }
+
+    bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) {
+        if (call_dll_entry) {
+            //if (!CallEntryPoint(image, image->GetMemoryImageBase(), DLL_PROCESS_DETACH)) {
+            //    return false;
+            //}
+        }
+        FreeMemory(image->GetMemoryImageBase());
+        return true;
+    }
+
+    bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true) {
+        auto module_info = GetModuleInfoByModuleBase(base);
+        if (!module_info) {
+            return false;
+        }
+        auto image = GetImageByModuleInfo(*module_info);
+        if (!image) {
+            return false;
+        }
+        return FreeLibraryFromImage(&*image, call_dll_entry);
     }
 
     /*
@@ -856,7 +876,7 @@ public:
                 if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
                     break;
                 }
-                Call(lib_name_buf - 0x1000, (uint64_t)::LoadLibraryW, { lib_name_buf }, &addr, Process::CallConvention::kStdCall, false);
+                Call(lib_name_buf - 0x1000, (uint64_t)::LoadLibraryW, { lib_name_buf }, &addr, Process::CallConvention::kStdCall, sync);
             } while (false);
             if (sync && lib_name_buf) {
                 FreeMemory(lib_name_buf);
@@ -882,7 +902,7 @@ public:
     std::optional<Image> GetImageByModuleInfo(const Geek::ModuleInfo& info) {
         auto buf = ReadMemory(info.base, info.size);
         if (!buf) return {};
-        return Image::LoadFromImageBuf(buf.value().data(), info.base);
+        return Image::LoadFromImageBuf(buf->data(), info.base);
     }
 
     std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name) {
@@ -906,7 +926,7 @@ public:
             auto func_name = full_name.substr(offset + 1);
             if (!dll_name.empty() && !func_name.empty()) {
                 auto image_base = LoadLibrary(Geek::String::AnsiToUtf16le(dll_name).c_str());
-                if (!image_base) return {};
+                if (image_base == 0) return {};
                 auto import_image = LoadImageFromImageBase(image_base.value());
                 if (!import_image) return {};
                 auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
@@ -1202,7 +1222,7 @@ private:
     typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK32)(uint32_t DllHandle, DWORD Reason, PVOID Reserved);
     typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK64)(uint64_t DllHandle, DWORD Reason, PVOID Reserved);
 public:
-    bool ExecuteTls(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf) {
+    bool ExecuteTls(Image* image, uint64_t image_base) {
         auto tls_dir = (IMAGE_TLS_DIRECTORY*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
         if (tls_dir == nullptr) {
             return false;
@@ -1253,7 +1273,7 @@ private:
     typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
     typedef int (WINAPI* ExeEntryProc)(void);
 public:
-    bool CallEntryPoint(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf, uint64_t init_parameter = 0) {
+    bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0) {
         if (IsCur()) {
             uint32_t rva = image->GetEntryPoint();
             if (image->m_file_header->Characteristics & IMAGE_FILE_DLL) {

@@ -199,7 +199,12 @@ public:
 
     void SaveToImageBuf(uint8_t* save_buf = nullptr, uint64_t image_base = 0, bool zero_pe_header = false) {
         int offset = 0;
-        if (zero_pe_header == false) {
+        if (zero_pe_header) {
+            if (m_section_header_table.size() > 0) {
+                memset(&save_buf[0], 0, m_section_header_table[0].VirtualAddress - 1);
+            }
+        }
+        else{
             memcpy(&save_buf[offset], &m_dos_header, sizeof(m_dos_header));
             offset += sizeof(m_dos_header);
 
