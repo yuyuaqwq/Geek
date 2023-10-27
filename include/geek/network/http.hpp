@@ -139,7 +139,6 @@ public:
 
     void AddMultiLine(std::wstring_view headers) {
         auto linearr = Geek::String::Split(std::wstring(headers), L"\r\n", false);
-
         for (auto& line : linearr) {
             AddLine(line);
         }
@@ -155,6 +154,9 @@ public:
         std::wstring name, value;
         name = line.substr(0, offset);
         value = line.substr(offset + 1);
+        if (value.front() == L'\r') {
+            value.pop_back();
+        }
         value = Geek::String::DeleteHeadSpace(value);
 
         AddPair(name, value);
@@ -317,16 +319,17 @@ private:
 };
 
 class Connect {
-public:
+private:
     Connect() {
-        Clear();
+
     }
 
-    Connect(const std::wstring& url, bool ignore_error = true) {
-        auto connect_res = Create(url, ignore_error);
-        if (!connect_res) throw std::runtime_error("Connect::Create");
-        operator=(std::move(*connect_res));
-    }
+public:
+    //Connect(const std::wstring& url, bool ignore_error = true) {
+    //    auto connect_res = Create(url, ignore_error);
+    //    if (!connect_res) throw std::runtime_error("Connect::Create");
+    //    operator=(std::move(*connect_res));
+    //}
 
     Connect(Connect&& other) noexcept {
         operator=(std::forward<Connect>(other));
@@ -394,6 +397,9 @@ public:
         if (!WinHttpCrackUrl(url.c_str(), url.size(), NULL, &url_comp)) {
             return {};
         }
+        if (!url_comp.lpszHostName) {
+            return {};
+        }
         std::wstring host_name = url_comp.lpszHostName;
         size_t offset = host_name.find('/');
         if (offset != -1) {
@@ -412,6 +418,8 @@ public:
         }
         connect.host_name_ = host_name;
         connect.port_ = url_comp.nPort;
+        connect.path_ = url_comp.lpszUrlPath;
+
 
         connect.set_ignore_error_ = ignore_error;
 
@@ -425,7 +433,7 @@ public:
     }
 
 
-    bool Open(std::wstring_view path, Method method = Method::kGet) {
+    bool Open(std::wstring_view path = L"", Method method = Method::kGet) {
         const wchar_t* method_str;
         switch (method) {
         case Method::kGet:
@@ -459,10 +467,13 @@ public:
             return false;
         }
 
+        if (!path_.empty() && path.empty()) {
+            path = std::move(path_);
+        }
+
         auto_cookie_ = true;
         auto_request_header_ = true;
         InitOpen();
-
 
         request_handle_ = WinHttpOpenRequest(connection_handle_, method_str, path.data(), 0, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags_);
         if (!request_handle_) {
@@ -806,6 +817,7 @@ private:
 
     std::wstring url_;
     std::wstring host_name_;
+    std::wstring path_;
     INTERNET_PORT port_;
     DWORD flags_;
 

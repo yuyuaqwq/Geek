@@ -734,7 +734,7 @@ public:
     /*
     * Image
     */
-    std::optional<uint64_t> LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+    std::optional<uint64_t> LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true, bool entry_call_sync = true) {
         if (IsX86() != image->IsPE32()) {
             return 0;
         }
@@ -753,11 +753,14 @@ public:
             if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
                 break;
             }
+            /*
+            * tls的调用必须同步，否则出现并发执行的问题
+            */
             if (exec_tls_callback) {
                 ExecuteTls(image, image_base);
             }
             if (call_dll_entry) {
-                CallEntryPoint(image, image_base, init_parameter);
+                CallEntryPoint(image, image_base, init_parameter, entry_call_sync);
             }
             success = true;
         } while (false);
@@ -1273,7 +1276,7 @@ private:
     typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
     typedef int (WINAPI* ExeEntryProc)(void);
 public:
-    bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0) {
+    bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true) {
         if (IsCur()) {
             uint32_t rva = image->GetEntryPoint();
             if (image->m_file_header->Characteristics & IMAGE_FILE_DLL) {
@@ -1293,7 +1296,7 @@ public:
         }
         else {
             uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-            if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter })) {
+            if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter }, nullptr, CallConvention::kStdCall, sync)) {
                 return false;
             }
         }
