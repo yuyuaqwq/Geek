@@ -1187,8 +1187,8 @@ public:
         uint32_t ebx = 0;
         uint32_t esi = 0;
         uint32_t edi = 0;
-        std::vector<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来
         int32_t balanced_esp = 0;
+        std::vector<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来
     };
     bool CallX86(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true) {
         if (!IsX86()) {
@@ -1331,7 +1331,7 @@ public:
                 using Func = uint64_t(*)();
                 Func func = reinterpret_cast<Func>(exec_page + exec_offset);
                 uint64_t ret = func();
-                ReadMemory(exec_page + context_offset, context, sizeof(*context) - offsetof(CallContextX86, stack));
+                ReadMemory(exec_page + context_offset, context, offsetof(CallContextX86, balanced_esp));
 
             }
             else {
