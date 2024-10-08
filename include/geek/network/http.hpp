@@ -325,13 +325,7 @@ private:
 
 class Connect {
 private:
-<<<<<<< HEAD
     Connect() = default;
-=======
-    Connect() {
-
-    }
->>>>>>> a11b09f6090423b3f6dea351e68d02acbffe7aef
 
 public:
     //Connect(const std::wstring& url, bool ignore_error = true) {
@@ -428,11 +422,7 @@ public:
         }
         connect.host_name_ = host_name;
         connect.port_ = url_comp.nPort;
-<<<<<<< HEAD
-        connect.path_ = std::wstring(url_comp.lpszUrlPath);
-=======
         connect.path_ = url_comp.lpszUrlPath;
->>>>>>> a11b09f6090423b3f6dea351e68d02acbffe7aef
 
 
         connect.set_ignore_error_ = ignore_error;
@@ -482,11 +472,7 @@ public:
         }
 
         if (!path_.empty() && path.empty()) {
-<<<<<<< HEAD
-            path = path_;
-=======
             path = std::move(path_);
->>>>>>> a11b09f6090423b3f6dea351e68d02acbffe7aef
         }
 
         auto_cookie_ = true;
