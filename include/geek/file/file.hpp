@@ -62,7 +62,7 @@ public:
     /*
     * static method
     */
-    static std::wstring GetAppPath() {
+    static std::wstring GetAppDirectory() {
         std::vector<wchar_t> buf(MAX_PATH, L'\0');
         do {
             buf.resize(buf.size() * 2, L'\0');
