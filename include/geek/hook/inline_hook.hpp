@@ -150,8 +150,6 @@ public:
             return false;
         }
 
-        
-
 
         auto forward_page_res = process_->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
         if (!forward_page_res) {
@@ -179,6 +177,7 @@ public:
                 while (instr_size < 5) {
                     instr_size += insn_len_x86_32(&temp[instr_size]);
                 }
+                break;
             }
             case Architecture::kAmd64:
                 while (instr_size < 14) {
@@ -533,7 +532,7 @@ public:
                 // call TlsSetValue
                 // push 0
                 forward_page_temp[i++] = 0x6a;
-                forward_page_temp[i++] = 0x01;
+                forward_page_temp[i++] = 0x00;
                 i += MakeTlsSetValue(arch, &forward_page_temp[i]);
             }
 
