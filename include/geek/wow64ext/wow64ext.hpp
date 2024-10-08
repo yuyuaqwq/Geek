@@ -84,8 +84,8 @@ public:
         {
             ;// reset FS segment, to properly handle RFG
             mov    back_fs, fs
-                mov    eax, 0x2B
-                mov    fs, ax
+            mov    eax, 0x2B
+            mov    fs, ax
 
                 ;// keep original esp in back_esp variable
             mov    back_esp, esp
@@ -96,7 +96,7 @@ public:
             ;// number of arguments above 4
             and esp, 0xFFFFFFF0
 
-                X64_Start();
+            X64_Start();
 
             ;// below code is compiled as x86 inline asm, but it is executed as x64 code
             ;// that's why it need sometimes REX_W() macro, right column contains detailed
@@ -153,12 +153,12 @@ public:
             X64_End();
 
             mov    ax, ds
-                mov    ss, ax
-                mov    esp, back_esp
+            mov    ss, ax
+            mov    esp, back_esp
 
                 ;// restore FS segment
             mov    ax, back_fs
-                mov    fs, ax
+            mov    fs, ax
         }
         return _rax.v;
 #endif // !_WIN64

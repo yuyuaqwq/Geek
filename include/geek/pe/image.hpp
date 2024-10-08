@@ -12,6 +12,9 @@
 #include <ntimage.h>
 #endif
 
+#undef min
+#undef max
+
 
 namespace Geek {
 
@@ -96,7 +99,7 @@ public:
         // 保存节区和头节区
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
-            auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+            auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
 
@@ -123,7 +126,7 @@ public:
         // 保存节区和头节区
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
-            auto virtual_size = max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
+            auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
             if (virtual_size % SectionAlignment) {
@@ -196,7 +199,12 @@ public:
 
     void SaveToImageBuf(uint8_t* save_buf = nullptr, uint64_t image_base = 0, bool zero_pe_header = false) {
         int offset = 0;
-        if (zero_pe_header == false) {
+        if (zero_pe_header) {
+            if (m_section_header_table.size() > 0) {
+                memset(&save_buf[0], 0, m_section_header_table[0].VirtualAddress - 1);
+            }
+        }
+        else{
             memcpy(&save_buf[offset], &m_dos_header, sizeof(m_dos_header));
             offset += sizeof(m_dos_header);
 
@@ -270,6 +278,10 @@ public:
 
     uint64_t GetMemoryImageBase() {
         return m_memory_image_base;
+    }
+
+    void SetMemoryImageBase(uint64_t imageBase) {
+        m_memory_image_base = imageBase;
     }
 
     void SetImageBase(uint64_t imageBase) {
@@ -539,9 +551,8 @@ public:
         if (hRes) {
             UnlockResource(hRes);
             FreeResource(hRes);
-            hRes = NULL;
         }
-        if (!hRes || !pRes) return {};
+        if (buf.empty()) return {};
         return buf;
     }
 

@@ -11,6 +11,12 @@ namespace Geek {
 
 struct ModuleInfo {
 
+    ModuleInfo(uint64_t base_, uint32_t size_) {
+        base = base_;
+        size = size_;
+        entry_point = 0;
+    }
+
     ModuleInfo(const LDR_DATA_TABLE_ENTRY64& entry, const std::wstring& base_name_, const std::wstring& full_name_) {
         base = entry.DllBase;
         size = entry.SizeOfImage;

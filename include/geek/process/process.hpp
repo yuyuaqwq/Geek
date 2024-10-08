@@ -2,11 +2,12 @@
 #define GEEK_PROCESS_PROCESS_HPP_
 
 #include <string>
+#include <array>
 #include <vector>
 #include <map>
 #include <optional>
 #include <functional>
-
+#include <cstddef>
 
 #ifndef WINNT
 #include <Windows.h>
@@ -16,6 +17,8 @@
 #include <ntifs.h>
 #endif
 
+#undef min
+#undef max
 
 #include <Geek/process/ntinc.h>
 #include <Geek/process/module_info.hpp>
@@ -26,6 +29,7 @@
 #include <Geek/thread/thread.hpp>
 #include <Geek/wow64ext/wow64ext.hpp>
 #include <Geek/string/string.hpp>
+#include <Geek/file/file.hpp>
 
 namespace Geek {
 
@@ -52,21 +56,20 @@ public:
     /*
     * CREATE_SUSPENDED:挂起目标进程
     */
-    static std::optional<Process> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
+    static std::optional<std::tuple<Process, Thread>> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0) {
         std::wstring command_ = command.data();
         STARTUPINFOW startupInfo{ sizeof(startupInfo) };
         PROCESS_INFORMATION processInformation{ 0 };
         if (!CreateProcessW(NULL, (LPWSTR)command_.c_str(), NULL, NULL, inheritHandles, creationFlags, NULL, NULL, &startupInfo, &processInformation)) {
             return {};
         }
-        CloseHandle(processInformation.hThread);
-        return Process{ UniqueHandle(processInformation.hProcess) };
+        return std::tuple{ Process{ UniqueHandle{ processInformation.hProcess } },  Thread{ UniqueHandle{ processInformation.hThread } } };
     }
 
     /*
     * L"explorer.exe"
     */
-    static std::optional<Process> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, HANDLE* thread = NULL, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
+    static std::optional<std::tuple<Process, Thread>> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL) {
         HANDLE hToken_ = NULL;
         auto pid = GetProcessIdByProcessName(tokenProcessName);
         if (!pid) {
@@ -96,19 +99,12 @@ public:
         if (!ret) {
             return {};
         }
-        if (!thread) {
-            CloseHandle(pi->hThread);
-        }
-        else {
-            *thread = pi->hThread;
-        }
-        return Process{ UniqueHandle(pi->hProcess) };
+        return std::tuple { Process{ UniqueHandle(pi->hProcess) }, Thread{ UniqueHandle(pi->hThread) } };
     }
+    
 
-
-
-    Process(UniqueHandle process_handle) : process_handle_ { std::move(process_handle) } {
-        
+    explicit Process(UniqueHandle process_handle) noexcept :
+        process_handle_ { std::move(process_handle) } {
     }
 
 
@@ -511,6 +507,7 @@ public:
     /*
     * Run
     */
+
     std::optional<uint16_t> LockAddress(uint64_t addr) {
         uint16_t instr;
         if (!ReadMemory(addr, &instr, 2)) {
@@ -530,14 +527,80 @@ public:
     /*
     * Thread
     */
-    std::optional<Thread> CreateThread(PTHREAD_START_ROUTINE start_routine, PVOID64 parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
+    std::optional<Thread> CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) {
         DWORD thread_id = 0;
         HANDLE thread_handle = NULL;
         if (IsCur()) {
-            thread_handle = ::CreateThread(NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+            thread_handle = ::CreateThread(NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(start_routine), reinterpret_cast<PVOID64>(parameter), dwCreationFlags, &thread_id);
         }
         else {
-            thread_handle = ::CreateRemoteThread(Get(), NULL, 0, start_routine, parameter, dwCreationFlags, &thread_id);
+            if (ms_wow64.Wow64Operation(Get())) {
+                auto ntdll64 = ms_wow64.GetNTDLL64();
+                auto RtlCreateUserThread = ms_wow64.GetProcAddress64(ntdll64, "RtlCreateUserThread");
+                auto ntdll_RtlExitThread = ms_wow64.GetProcAddress64(ntdll64, "RtlExitUserThread");
+
+                unsigned char shell_code[] = {
+                    0x48, 0x89, 0x4c, 0x24, 0x08,                               // mov       qword ptr [rsp+8],rcx 
+                    0x57,                                                       // push      rdi
+                    0x48, 0x83, 0xec, 0x20,                                     // sub       rsp,20h
+                    0x48, 0x8b, 0xfc,                                           // mov       rdi,rsp
+                    0xb9, 0x08, 0x00, 0x00, 0x00,                               // mov       ecx,8
+                    0xb8, 0xcc, 0xcc, 0xcc, 0xcc,                               // mov       eac,0CCCCCCCCh
+                    0xf3, 0xab,                                                 // rep stos  dword ptr [rdi]
+                    0x48, 0x8b, 0x4c, 0x24, 0x30,                               // mov       rcx,qword ptr [__formal]
+                    0x48, 0xb9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rcx,   parameter
+                    0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rax,0 
+                    0xff, 0xd0,                                                 // call      rax    start_routine
+                    0x48, 0xb9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rcx,0
+                    0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov       rax,0
+                    0xff, 0xd0                                                  // call      rax
+                    
+                };
+
+                auto buf_addr = AllocMemory(size_t{ 4096 }, DWORD{ MEM_RESERVE | MEM_COMMIT }, PAGE_EXECUTE_READWRITE);
+                if (!buf_addr) {
+                    return {};
+                }
+
+                //r8
+                memcpy(shell_code + 32, &parameter, sizeof(parameter));
+
+                memcpy(shell_code + 42, &start_routine, sizeof(start_routine));
+
+                //RtlExitUserThread
+                memcpy(shell_code + 64, &ntdll_RtlExitThread, sizeof(DWORD64));
+                size_t write_size = 0;
+
+                if (!WriteMemory(*buf_addr, shell_code, sizeof(shell_code))) {
+                    FreeMemory(*buf_addr);
+                    return {};
+                }
+
+                struct {
+                    DWORD64 UniqueProcess;
+                    DWORD64 UniqueThread;
+                } client_id { 0 };
+
+                auto error = ms_wow64.X64Call(RtlCreateUserThread, 10,
+                    reinterpret_cast<DWORD64>(Get()), 
+                    static_cast<DWORD64>(NULL), static_cast<DWORD64>(FALSE),
+                    static_cast<DWORD64>(0), static_cast<DWORD64>(NULL), static_cast<DWORD64>(NULL),
+                    static_cast<DWORD64>(*buf_addr), static_cast<DWORD64>(0),
+                    reinterpret_cast<DWORD64>(&thread_handle),
+                    reinterpret_cast<DWORD64>(&client_id));
+                
+                if (thread_handle) {
+                    ::WaitForSingleObject(thread_handle, INFINITE);
+                }
+
+                FreeMemory(*buf_addr);
+                if (!NT_SUCCESS(error)) {
+                    return {};
+                }
+            }
+            else {
+                thread_handle = ::CreateRemoteThread(Get(), NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(start_routine), reinterpret_cast<PVOID64>(parameter), dwCreationFlags, &thread_id);
+            }
         }
         if (thread_handle == NULL) {
             return {};
@@ -550,17 +613,16 @@ public:
             return {};
         }
         unsigned char jmpSelf[] = { 0xeb, 0xfe };
-        bool isX86;
-        auto context_buf_res = GetThreadContext(thread);
-        auto& context_buf = *context_buf_res;
         uint64_t ip;
-        if (isX86) {
-            auto context = (_CONTEXT32*)context_buf.data();
-            ip = context->Eip;
+        if (IsX86()) {
+            _CONTEXT32 context;
+            GetThreadContext(thread, context);
+            ip = context.Eip;
         }
         else {
-            auto context = (_CONTEXT64*)context_buf.data();
-            ip = context->Rip;
+            _CONTEXT64 context;
+            GetThreadContext(thread, context);
+            ip = context.Rip;
         }
         auto old_instr = LockAddress(ip);
         thread->Resume();
@@ -572,17 +634,16 @@ public:
             return false;
         }
         uint16_t oldInstr;
-        bool isX86;
-        auto context_buf_res = GetThreadContext(thread);
-        auto& context_buf = *context_buf_res;
         uint64_t ip;
-        if (isX86) {
-            auto context = (_CONTEXT32*)context_buf.data();
-            ip = context->Eip;
+        if (IsX86()) {
+            _CONTEXT32 context;
+            GetThreadContext(thread, context);
+            ip = context.Eip;
         }
         else {
-            auto context = (_CONTEXT64*)context_buf.data();
-            ip = context->Rip;
+            _CONTEXT64 context;
+            GetThreadContext(thread, context);
+            ip = context.Rip;
         }
         auto success = UnlockAddress(ip, instr);
         thread->Resume();
@@ -594,36 +655,67 @@ public:
     }
 
 
-    std::optional<std::vector<char>> GetThreadContext(Thread* thread, DWORD flags = CONTEXT_CONTROL | CONTEXT64_INTEGER) {
-        std::vector<char> context;
-        bool success;
-        if (!IsTheOwningThread(thread)) {
-            return {};
+    bool GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (IsX86()) {
+            return false;
         }
-        if (ms_wow64.Wow64Operation(Get())) {
-            context.resize(sizeof(_CONTEXT64));
-            ((_CONTEXT64*)context.data())->ContextFlags = flags;
-            success = ms_wow64.GetThreadContext64(thread->Get(), (_CONTEXT64*)context.data());
+        bool success;
+        context.ContextFlags = flags;
+        if (!CurIsX86()) {
+            success = ::Wow64GetThreadContext(thread->Get(), &context);
         }
         else {
-            if (IsX86() && !CurIsX86()) {
-                
-                context.resize(sizeof(WOW64_CONTEXT));
-                ((WOW64_CONTEXT*)context.data())->ContextFlags = flags;
-                success = ::Wow64GetThreadContext(thread->Get(), (PWOW64_CONTEXT)context.data());
-            }
-            else {
-                
-                context.resize(sizeof(CONTEXT));
-                ((CONTEXT*)context.data())->ContextFlags = flags;
-                success = ::GetThreadContext(thread->Get(), (LPCONTEXT)context.data());
-            }
+            success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
         }
-        if (!success) {
-            return {};
-        }
-        return context;
+        return success;
     }
+
+    bool GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (IsX86()) {
+            return false;
+        }
+        bool success;
+        context.ContextFlags = flags;
+        if (ms_wow64.Wow64Operation(Get())) {
+            success = ms_wow64.GetThreadContext64(thread->Get(), &context);
+        }
+        else {
+            success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+    bool SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (!IsX86()) {
+            return false;
+        }
+        bool success; 
+        context.ContextFlags = flags;
+        if (!CurIsX86()) {
+            success = ::Wow64SetThreadContext(thread->Get(), &context);
+        }
+        else {
+            success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+    bool SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) {
+        if (!IsX86()) {
+            return false;
+        }
+        bool success;
+        context.ContextFlags = flags;
+        if (ms_wow64.Wow64Operation(Get())) {
+            success = ms_wow64.SetThreadContext64(thread->Get(), &context);
+        }
+        else {
+            success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+        }
+        return success;
+    }
+
+
 
     bool WaitExit(DWORD dwMilliseconds = INFINITE) {
         if (IsCur()) {
@@ -643,7 +735,7 @@ public:
     /*
     * Image
     */
-    std::optional<uint64_t> LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true) {
+    std::optional<uint64_t> LoadLibraryFromImage(Image* image, bool exec_tls_callback = true, bool call_dll_entry = true, uint64_t init_parameter = 0, bool skip_not_loaded = false, bool zero_pe_header = true, bool entry_call_sync = true) {
         if (IsX86() != image->IsPE32()) {
             return 0;
         }
@@ -662,11 +754,14 @@ public:
             if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
                 break;
             }
+            /*
+            * tls的调用必须同步，否则出现并发执行的问题
+            */
             if (exec_tls_callback) {
-                ExecuteTls(image, image_base, &image_buf);
+                ExecuteTls(image, image_base);
             }
             if (call_dll_entry) {
-                CallEntryPoint(image, image_base, &image_buf, init_parameter);
+                CallEntryPoint(image, image_base, init_parameter, entry_call_sync);
             }
             success = true;
         } while (false);
@@ -674,30 +769,51 @@ public:
             FreeMemory(image_base);
             image_base = 0;
         }
+        image->SetMemoryImageBase(image_base);
         return image_base;
     }
 
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base) {
-        Image image;
         if (IsCur()) {
-            image.LoadFromImageBuf((void*)image_base, image_base);
+            return Image::LoadFromImageBuf((void*)image_base, image_base);
         }
         else {
             auto module_info = GetModuleInfoByModuleBase(image_base);
-            if (!module_info) return image;
+            if (!module_info) return {};
             auto buf = ReadMemory(image_base, module_info.value().size);
             if (!buf) {
                 return {};
             }
-            image.LoadFromImageBuf(buf.value().data(), image_base);
+            return Image::LoadFromImageBuf(buf->data(), image_base);
         }
-        return image;
+    }
+
+    bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) {
+        if (call_dll_entry) {
+            //if (!CallEntryPoint(image, image->GetMemoryImageBase(), DLL_PROCESS_DETACH)) {
+            //    return false;
+            //}
+        }
+        FreeMemory(image->GetMemoryImageBase());
+        return true;
+    }
+
+    bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true) {
+        auto module_info = GetModuleInfoByModuleBase(base);
+        if (!module_info) {
+            return false;
+        }
+        auto image = GetImageByModuleInfo(*module_info);
+        if (!image) {
+            return false;
+        }
+        return FreeLibraryFromImage(&*image, call_dll_entry);
     }
 
     /*
     * library
     */
-    std::optional<uint64_t> LoadLibrary(std::wstring_view lib_name) {
+    std::optional<uint64_t> LoadLibrary(std::wstring_view lib_name, bool sync = true) {
         if (IsCur()) {
             auto addr = ::LoadLibraryW(lib_name.data());
             if (!addr) {
@@ -713,24 +829,64 @@ public:
 
         uint64_t addr = NULL;
         
-        auto len = lib_name.size() * 2 + 2;
-        auto lib_name_buf_res = AllocMemory(len);
-        if (!lib_name_buf_res) {
-            return {};
-        }
-        auto& lib_name_buf = *lib_name_buf_res;
-        do {
-            if (!lib_name_buf) {
-                break;
+        if (ms_wow64.Wow64Operation(Get())) {
+            auto ntdll64 = ms_wow64.GetNTDLL64();
+            auto LdrLoadDll = ms_wow64.GetProcAddress64(ntdll64, "LdrLoadDll");
+            UNICODE_STRING64 us64;
+            auto str_len = lib_name.size() * 2;
+            if (str_len % 8 != 0) {
+                str_len += 8 - str_len % 8;
             }
-            if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
-                break;
+            auto len = 0x1000 + str_len + sizeof(UNICODE_STRING64) + sizeof(DWORD64);
+            auto lib_name_buf_res = AllocMemory(NULL, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            if (!lib_name_buf_res) {
+                return {};
             }
-            Call((uint64_t)::LoadLibraryW, { lib_name_buf }, &addr);
-        } while (false);
-        if (lib_name_buf) {
-            FreeMemory(lib_name_buf);
+            auto lib_name_buf = *lib_name_buf_res;
+            lib_name_buf += 0x1000;
+            do {
+                if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
+                    break;
+                }
+                auto unicode_str_addr = lib_name_buf + str_len;
+               
+                auto raw_str_len = lib_name.size() * 2;
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->Length) }, &raw_str_len, 2)) {
+                    break;
+                }
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->MaximumLength) }, &raw_str_len, 2)) {
+                    break;
+                }
+                if (!WriteMemory(uint64_t{ unicode_str_addr + reinterpret_cast<uint64_t>(&((UNICODE_STRING64*)0)->Buffer) }, &lib_name_buf, 8)) {
+                    break;
+                }
+
+                Call(lib_name_buf - 0x1000, LdrLoadDll, { 0, 0, unicode_str_addr, unicode_str_addr + sizeof(UNICODE_STRING64) }, &addr, Process::CallConvention::kStdCall, sync);
+            } while (false);
+            if (sync && lib_name_buf) {
+                FreeMemory(lib_name_buf);
+            }
+
         }
+        else {
+            auto len = 0x1000 + lib_name.size() * 2 + 2;
+            auto lib_name_buf_res = AllocMemory(NULL, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            if (!lib_name_buf_res) {
+                return {};
+            }
+            auto lib_name_buf = *lib_name_buf_res;
+            lib_name_buf += 0x1000;
+            do {
+                if (!WriteMemory(lib_name_buf, lib_name.data(), len)) {
+                    break;
+                }
+                Call(lib_name_buf - 0x1000, (uint64_t)::LoadLibraryW, { lib_name_buf }, &addr, Process::CallConvention::kStdCall, sync);
+            } while (false);
+            if (sync && lib_name_buf) {
+                FreeMemory(lib_name_buf);
+            }
+        }
+        
         return addr;
     }
 
@@ -739,7 +895,7 @@ public:
             return ::FreeLibrary((HMODULE)module_base);
         }
         do {
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)::FreeLibrary, (PVOID64)module_base);
+            auto thread = CreateThread((uint64_t)::FreeLibrary, module_base);
             if (!thread) {
                 return false;
             }
@@ -748,25 +904,23 @@ public:
     }
 
     std::optional<Image> GetImageByModuleInfo(const Geek::ModuleInfo& info) {
-        Image image;
         auto buf = ReadMemory(info.base, info.size);
         if (!buf) return {};
-
-        return image.LoadFromImageBuf(buf.value().data(), info.base);
+        return Image::LoadFromImageBuf(buf->data(), info.base);
     }
 
-    std::optional<uint64_t> GetExportProcAddress(Image* image, std::string_view func_name) {
+    std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name) {
         uint32_t export_rva;
-        if ((uintptr_t)func_name.data() <= 0xffff) {
-            export_rva = image->GetExportRvaByOrdinal((uint16_t)func_name.data());
+        if (reinterpret_cast<uintptr_t>(func_name) <= 0xffff) {
+            export_rva = image->GetExportRvaByOrdinal(reinterpret_cast<uint16_t>(func_name));
         }
         else {
-            export_rva = image->GetExportRvaByName(func_name.data());
+            export_rva = image->GetExportRvaByName(func_name);
         }
         // 可能返回一个字符串，需要二次加载
         // 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
-        uint64_t va = (uintptr_t)image->GetMemoryImageBase() + export_rva;
-        auto export_directory = (uintptr_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        uint64_t va = (uint64_t)image->GetMemoryImageBase() + export_rva;
+        auto export_directory = (uint64_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
         auto export_directory_size = image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
         // 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
         if (va > export_directory && va < export_directory + export_directory_size) {
@@ -776,7 +930,7 @@ public:
             auto func_name = full_name.substr(offset + 1);
             if (!dll_name.empty() && !func_name.empty()) {
                 auto image_base = LoadLibrary(Geek::String::AnsiToUtf16le(dll_name).c_str());
-                if (!image_base) return {};
+                if (image_base == 0) return {};
                 auto import_image = LoadImageFromImageBase(image_base.value());
                 if (!import_image) return {};
                 auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
@@ -791,15 +945,24 @@ public:
     /*
     * call
     */
+
+    // 注：如果调用的是X86，par_list传递uint64_t会被截断为uint32_t
     enum class CallConvention {
         kCdeclCall,
         kThisCall,
         kStdCall,
         kFastCall,
     };
-    bool Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
-        std::vector<uint8_t> temp_data(0x1000, 0);
-        auto temp = temp_data.data();
+    bool Call(uint64_t exec_page, uint64_t call_addr
+        , const std::vector<uint64_t>& par_list = {}
+        , uint64_t* ret_value = nullptr
+        , CallConvention call_convention = CallConvention::kStdCall
+        , bool sync = true) {
+        std::array<uint8_t, 0x1000> temp_data = { 0 };
+        uint8_t* temp = temp_data.data();
+        if (IsCur()) {
+            temp = reinterpret_cast<uint8_t*>(exec_page);
+        }
 
         int exec_offset = 0;
         if (IsX86()) {
@@ -829,9 +992,7 @@ public:
                 0xba,
             };
             for (int j = not_push_count - 1; j >= 0; j--) {
-                *((uint8_t*)&temp[i]) = reg_code[j];
-                i += 1;
-
+                temp[i++] = reg_code[j];
                 *((uint32_t*)&temp[i]) = par_list[j];
                 i += 4;
             }
@@ -866,10 +1027,15 @@ public:
             temp[i++] = 0x31;
             temp[i++] = 0xc0;
 
-            temp[i++] = 0xc2;        // ret 4
-            *(uint16_t*)&temp[i] = 4;
-            i += 2;
-
+            if (IsCur()) {
+                temp[i++] = 0xc3;
+            }
+            else {
+                // 创建线程需要平栈
+                temp[i++] = 0xc2;        // ret 4
+                *(uint16_t*)&temp[i] = 4;
+                i += 2;
+            }
         }
         else {
             exec_offset = 8;
@@ -896,7 +1062,7 @@ public:
                 0xb849,
                 0xb949,
             };
-            for (int j = 0; j < min(4, par_list.size()); j++) {
+            for (int j = 0; j < std::min(size_t{ 4 }, par_list.size()); j++) {
                 // 寄存器传参
                 // mov reg, par[j]
                 *((uint16_t*)&temp[i]) = reg_code[j];
@@ -956,31 +1122,48 @@ public:
         
         bool success = false;
         do {
-            if (!WriteMemory(exec_page, temp, 0x1000)) {
-                break;
+            if (sync && IsCur()) {
+                using Func = uint64_t(*)();
+                Func func = reinterpret_cast<Func>(exec_page + exec_offset);
+                uint64_t ret = func();
+                if (ret_value) {
+                    *ret_value = ret;
+                }
             }
+            else {
+                if (!WriteMemory(exec_page, temp, 0x1000)) {
+                    break;
+                }
+                auto thread = CreateThread(exec_page + exec_offset, NULL);
+                if (!thread) {
+                    break;
+                }
 
-            auto thread = CreateThread((PTHREAD_START_ROUTINE)(exec_page + exec_offset), NULL);
-            if (!thread) {
-                break;
+                if (sync) {
+                    if (!thread.value().WaitExit()) {
+                        break;
+                    }
+                    if (ret_value) {
+                        *ret_value = 0;
+                        ReadMemory(exec_page, ret_value, exec_offset);
+                    }
+                }
+                else {
+                    if (ret_value) {
+                        *ret_value = 0;
+                    }
+                }
             }
-
-            if (!thread.value().WaitExit()) {
-                break;
-            }
-
-            if (ret_value) {
-                *ret_value = 0;
-                ReadMemory(exec_page, ret_value, exec_offset);
-            }
-
             success = true;
         }
         while (false);
         return success;
     }
 
-    bool Call(uint64_t call_addr, const std::vector<uint64_t>& par_list = {}, uint64_t* ret_value = nullptr, CallConvention call_convention = CallConvention::kStdCall) {
+    bool Call(uint64_t call_addr
+        , const std::vector<uint64_t>& par_list = {}
+        , uint64_t* ret_value = nullptr
+        , CallConvention call_convention = CallConvention::kStdCall) {
         auto exec_page_res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
         if (!exec_page_res) {
             return false;
@@ -990,12 +1173,189 @@ public:
             return false;
         }
 
-        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention);
+        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention, true);
 
         FreeMemory(exec_page);
         return success;
     }
 
+
+    struct CallContextX86 {
+        uint32_t eax = 0;
+        uint32_t ecx = 0;
+        uint32_t edx = 0;
+        uint32_t ebx = 0;
+        uint32_t esi = 0;
+        uint32_t edi = 0;
+        std::vector<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来
+        int32_t balanced_esp = 0;
+    };
+    bool CallX86(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true) {
+        if (!IsX86()) {
+            return false;
+        }
+        std::array<uint8_t, 0x1000> temp_data = { 0 };
+        uint8_t* temp = temp_data.data();
+        if (IsCur()) {
+            temp = reinterpret_cast<uint8_t*>(exec_page);
+        }
+
+        // 调用地址(4字节), ret_call_context_x86
+        int context_offset = 0x4;
+        int exec_offset = 0x100;
+        int i = exec_offset;
+
+        for (int j = context->stack.size() - 1; j >= 0; j--) {
+            temp[i++] = 0x68;        // push par[j]
+            *(uint32_t*)&temp[i] = context->stack[j];
+            i += 4;
+        }
+
+        // 保存非易变寄存器
+        // push ebx
+        temp[i++] = 0x53;
+        // push ebp
+        temp[i++] = 0x55;
+        // push esi
+        temp[i++] = 0x56;
+        // push edi
+        temp[i++] = 0x57;
+
+        // mov eax, call_addr
+        temp[i++] = 0xb8;
+        *(uint32_t*)&temp[i] = (uint32_t)call_addr;
+        i += 4;
+        // mov [exec_page], eax
+        temp[i++] = 0xa3;
+        *(uint32_t*)&temp[i] = (uint32_t)exec_page;
+        i += 4;
+
+        // mov eax, context.eax
+        temp[i++] = 0xb8;
+        *((uint32_t*)&temp[i]) = context->eax;
+        i += 4;
+        // mov ecx, context.ecx
+        temp[i++] = 0xb9;
+        *((uint32_t*)&temp[i]) = context->ecx;
+        i += 4;
+        // mov edx, context.edx
+        temp[i++] = 0xba;
+        *((uint32_t*)&temp[i]) = context->edx;
+        i += 4;
+        // mov ebx, context.ebx
+        temp[i++] = 0xbb;
+        *((uint32_t*)&temp[i]) = context->ebx;
+        i += 4;
+        // mov esi, context.esi
+        temp[i++] = 0xbe;
+        *((uint32_t*)&temp[i]) = context->esi;
+        i += 4;
+        // mov edi, context.edi
+        temp[i++] = 0xbf;
+        *((uint32_t*)&temp[i]) = context->edi;
+        i += 4;
+
+        // call [exec_page]
+        temp[i++] = 0xff;
+        temp[i++] = 0x15;
+        *((uint32_t*)&temp[i]) = exec_page;
+        i += 4;
+
+        // 暂时不做栈拷贝
+        // add esp, context.balanced_esp
+        temp[i++] = 0x81;
+        temp[i++] = 0xc4;
+        *((uint32_t*)&temp[i]) = context->balanced_esp;
+        i += 4;
+
+        // 不能直接访问，可能是其他进程的exec_page
+        CallContextX86* ret_context = reinterpret_cast<CallContextX86*>(exec_page + 4);
+
+        // mov [ret_context.eax], eax
+        temp[i++] = 0xa3;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->eax);
+        i += 4;
+
+        // mov [ret_context.ecx], ecx
+        temp[i++] = 0x89;
+        temp[i++] = 0x0d;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->ecx);
+        i += 4;
+
+        // mov [ret_context.edx], edx
+        temp[i++] = 0x89;
+        temp[i++] = 0x15;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->edx);
+        i += 4;
+
+        // mov [ret_context.ebx], ebx
+        temp[i++] = 0x89;
+        temp[i++] = 0x1d;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->ebx);
+        i += 4;
+
+        // mov [ret_context.esi], esi
+        temp[i++] = 0x89;
+        temp[i++] = 0x35;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->esi);
+        i += 4;
+
+        // mov [ret_context.edi], edi
+        temp[i++] = 0x89;
+        temp[i++] = 0x3d;
+        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->edi);
+        i += 4;
+
+        // push edi
+        temp[i++] = 0x5f;
+        // push esi
+        temp[i++] = 0x5e;
+        // push ebp
+        temp[i++] = 0x5d;
+        // push ebx
+        temp[i++] = 0x5b;
+
+        if (IsCur()) {
+            temp[i++] = 0xc3;
+        }
+        else {
+            // 创建线程需要平栈
+            temp[i++] = 0xc2;        // ret 4
+            *(uint16_t*)&temp[i] = 4;
+            i += 2;
+        }
+
+        bool success = false;
+        do {
+            if (sync && IsCur()) {
+                using Func = uint64_t(*)();
+                Func func = reinterpret_cast<Func>(exec_page + exec_offset);
+                uint64_t ret = func();
+                ReadMemory(exec_page + context_offset, context, sizeof(*context) - offsetof(CallContextX86, stack));
+
+            }
+            else {
+                if (!WriteMemory(exec_page, temp, 0x1000)) {
+                    break;
+                }
+
+                auto thread = CreateThread(exec_page + exec_offset, NULL);
+                if (!thread) {
+                    break;
+                }
+
+                if (sync) {
+                    if (!thread.value().WaitExit()) {
+                        break;
+                    }
+                    ReadMemory(exec_page + context_offset, context, sizeof(*context) - offsetof(CallContextX86, stack));
+
+                }
+            }
+            success = true;
+        } while (false);
+        return success;
+    }
 
 private:
     template<typename IMAGE_THUNK_DATA_T>
@@ -1067,7 +1427,7 @@ private:
     typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK32)(uint32_t DllHandle, DWORD Reason, PVOID Reserved);
     typedef VOID(NTAPI* PIMAGE_TLS_CALLBACK64)(uint64_t DllHandle, DWORD Reason, PVOID Reserved);
 public:
-    bool ExecuteTls(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf) {
+    bool ExecuteTls(Image* image, uint64_t image_base) {
         auto tls_dir = (IMAGE_TLS_DIRECTORY*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
         if (tls_dir == nullptr) {
             return false;
@@ -1118,7 +1478,7 @@ private:
     typedef BOOL(WINAPI* DllEntryProc64)(uint64_t hinstDLL, DWORD fdwReason, uint64_t lpReserved);
     typedef int (WINAPI* ExeEntryProc)(void);
 public:
-    bool CallEntryPoint(Image* image, uint64_t image_base, std::vector<uint8_t>* image_buf, uint64_t init_parameter = 0) {
+    bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true) {
         if (IsCur()) {
             uint32_t rva = image->GetEntryPoint();
             if (image->m_file_header->Characteristics & IMAGE_FILE_DLL) {
@@ -1138,7 +1498,7 @@ public:
         }
         else {
             uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
-            if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter })) {
+            if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter }, nullptr, CallConvention::kStdCall, sync)) {
                 return false;
             }
         }
@@ -1271,8 +1631,9 @@ public:
         return {};
     }
 
-    static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
+    static std::optional<std::vector<uint8_t>> GetResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type) {
         bool success = false;
+        std::vector<uint8_t> res;
         HRSRC hResID = NULL;
         HRSRC hRes = NULL;
         HANDLE hResFile = INVALID_HANDLE_VALUE;
@@ -1288,33 +1649,18 @@ public:
             }
 
             LPVOID pRes = LockResource(hRes);
-            if (pRes == NULL)
-            {
+            if (pRes == NULL) {
                 break;
             }
 
             unsigned long dwResSize = SizeofResource(hModule, hResID);
-
-            hResFile = CreateFileW(saveFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (INVALID_HANDLE_VALUE == hResFile)
-            {
-                DWORD errorCode = GetLastError();
-                if (errorCode == 32) {
-                    success = true;
-                    break;
-                }
-                break;
-            }
-            DWORD dwWrited = 0;
-            if (FALSE == WriteFile(hResFile, pRes, dwResSize, &dwWrited, NULL))
-            {
-                break;
-            }
+            res.resize(dwResSize);
+            memcpy(&res[0], pRes, dwResSize);
             success = true;
         } while (false);
 
         if (hResFile != INVALID_HANDLE_VALUE) {
-            CloseHandle(hResFile);
+            
             hResFile = INVALID_HANDLE_VALUE;
         }
         if (hRes) {
@@ -1322,8 +1668,18 @@ public:
             FreeResource(hRes);
             hRes = NULL;
         }
-        return success;
+        if (!success) {
+            return {};
+        }
+        return res;
+    }
 
+    static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath) {
+        auto resource = GetResource(hModule, ResourceID, type);
+        if (!resource) {
+            return false;
+        }
+        return Geek::File::WriteFile(saveFilePath, resource->data(), resource->size());
     }
 
     

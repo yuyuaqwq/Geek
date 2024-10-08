@@ -128,7 +128,7 @@ public:
     template<typename T1, typename T2>
     static std::vector<T1> Split(const T1& str, const T2& token, bool no_empty = false) {
         std::vector<T1> ret_arr;
-        auto token_ = (T1)token;
+        auto token_ = T1{ token };
         if (str.size() == 0) {
             return ret_arr;
         }

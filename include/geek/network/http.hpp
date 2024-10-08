@@ -100,9 +100,13 @@ enum class Method {
 
 class Headers {
 public:
-    void Parse(std::wstring_view headers) {
-        headers_.clear();
-        AddMultiLine(headers);
+    Headers() = default;
+
+    static Headers Parse(std::wstring_view headers_text) {
+        Headers headers;
+        headers.headers_.clear();
+        headers.AddMultiLine(headers_text);
+        return headers;
     }
 
     std::wstring Print() const {
@@ -139,7 +143,6 @@ public:
 
     void AddMultiLine(std::wstring_view headers) {
         auto linearr = Geek::String::Split(std::wstring(headers), L"\r\n", false);
-
         for (auto& line : linearr) {
             AddLine(line);
         }
@@ -155,6 +158,9 @@ public:
         std::wstring name, value;
         name = line.substr(0, offset);
         value = line.substr(offset + 1);
+        if (value.front() == L'\r') {
+            value.pop_back();
+        }
         value = Geek::String::DeleteHeadSpace(value);
 
         AddPair(name, value);
@@ -183,6 +189,7 @@ public:
     const std::vector<std::wstring>& operator[](const std::wstring& name) const {
         return headers_.at(name);
     }
+
 
 private:
     std::map<std::wstring, std::vector<std::wstring>> headers_;
@@ -317,16 +324,15 @@ private:
 };
 
 class Connect {
-public:
-    Connect() {
-        Clear();
-    }
+private:
+    Connect() = default;
 
-    Connect(const std::wstring& url, bool ignore_error = true) {
-        auto connect_res = Create(url, ignore_error);
-        if (!connect_res) throw std::runtime_error("Connect::Create");
-        operator=(std::move(*connect_res));
-    }
+public:
+    //Connect(const std::wstring& url, bool ignore_error = true) {
+    //    auto connect_res = Create(url, ignore_error);
+    //    if (!connect_res) throw std::runtime_error("Connect::Create");
+    //    operator=(std::move(*connect_res));
+    //}
 
     Connect(Connect&& other) noexcept {
         operator=(std::forward<Connect>(other));
@@ -352,6 +358,7 @@ public:
         url_ = std::move(other.url_);
         host_name_ = std::move(other.host_name_);
         port_ = other.port_;
+        path_ = other.path_;
         flags_ = other.flags_;
 
         request_handle_ = other.request_handle_;
@@ -394,6 +401,9 @@ public:
         if (!WinHttpCrackUrl(url.c_str(), url.size(), NULL, &url_comp)) {
             return {};
         }
+        if (!url_comp.lpszHostName) {
+            return {};
+        }
         std::wstring host_name = url_comp.lpszHostName;
         size_t offset = host_name.find('/');
         if (offset != -1) {
@@ -412,6 +422,8 @@ public:
         }
         connect.host_name_ = host_name;
         connect.port_ = url_comp.nPort;
+        connect.path_ = std::wstring(url_comp.lpszUrlPath);
+
 
         connect.set_ignore_error_ = ignore_error;
 
@@ -425,7 +437,7 @@ public:
     }
 
 
-    bool Open(std::wstring_view path, Method method = Method::kGet) {
+    bool Open(std::wstring_view path = L"", Method method = Method::kGet) {
         const wchar_t* method_str;
         switch (method) {
         case Method::kGet:
@@ -453,16 +465,19 @@ public:
             method_str = L"TRACE";
             break;
         case Method::kPatch:
-            method_str = L"PATCH ";
+            method_str = L"PATCH";
             break;
         default:
             return false;
         }
 
+        if (!path_.empty() && path.empty()) {
+            path = path_;
+        }
+
         auto_cookie_ = true;
         auto_request_header_ = true;
         InitOpen();
-
 
         request_handle_ = WinHttpOpenRequest(connection_handle_, method_str, path.data(), 0, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags_);
         if (!request_handle_) {
@@ -471,8 +486,12 @@ public:
         return true;
     }
 
-    Headers& RequestHeaders() {
+    Headers& GetRequestHeaders() {
         return request_headers_;
+    }
+
+    void SetRequestHeaders(const Headers& headers) {
+        request_headers_ = headers;
     }
 
     bool Send(bool redirects = false) {
@@ -544,13 +563,13 @@ public:
         return status_code;
     }
 
-    std::optional<Cookies*> GetResponseCookies() {
+    std::optional<Cookies> GetResponseCookies() {
         if (!request_handle_) {
             return {};
         }
         LoadResponseHeaders();
         cookies_.ParseByResponseHeaders(response_headers_, !auto_cookie_);
-        return &cookies_;
+        return cookies_;
     }
 
     std::optional<Headers*> GetResponseHeaders() {
@@ -727,6 +746,12 @@ private:
     }
 
     void LoadRequestHeaders() {
+        std::wstring headers_string = request_headers_.Print();
+
+        if (!WinHttpAddRequestHeaders(request_handle_, headers_string.c_str(), headers_string.size(), WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
+            throw std::runtime_error("SetRequestHeaders.WinHttpAddRequestHeaders");
+        }
+
         if (auto_cookie_ && !cookies_.Empty()) {
             request_headers_[L"Cookie"] = cookies_.Merge();
         }
@@ -738,12 +763,6 @@ private:
             if (!request_headers_.Hash(L"Referer")) {
                 request_headers_.AddLine(L"Referer:" + url_);
             }
-        }
-
-        std::wstring headers_string = request_headers_.Print();
-
-        if (!WinHttpAddRequestHeaders(request_handle_, headers_string.c_str(), headers_string.size(), WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
-            throw std::runtime_error("SetRequestHeaders.WinHttpAddRequestHeaders");
         }
     }
 
@@ -768,7 +787,7 @@ private:
             return;
         }
 
-        response_headers_.Parse(buf.get());
+        response_headers_ = http::Headers::Parse(buf.get());
     }
 
     void Clear() {
@@ -806,6 +825,7 @@ private:
 
     std::wstring url_;
     std::wstring host_name_;
+    std::wstring path_;
     INTERNET_PORT port_;
     DWORD flags_;
 
