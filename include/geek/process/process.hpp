@@ -946,6 +946,33 @@ public:
     * call
     */
 
+    class CallPage {
+    public:
+        CallPage(Process* process)
+            : process_(process) {
+            auto res = process->AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            if (res) {
+                exec_page_ = *res;
+            }
+        }
+
+        ~CallPage() {
+            if (exec_page_) {
+                process_->FreeMemory(exec_page_);
+                exec_page_ = 0;
+            }
+        }
+
+        CallPage(const CallPage&) = delete;
+        void operator=(const CallPage&) = delete;
+
+        uint64_t exec_page() const { return exec_page_; }
+
+    private:
+        Process* process_;
+        uint64_t exec_page_ = 0;
+    };
+
     // 注：如果调用的是X86，par_list传递uint64_t会被截断为uint32_t
     enum class CallConvention {
         kCdeclCall,
@@ -1176,18 +1203,11 @@ public:
         , const std::vector<uint64_t>& par_list = {}
         , uint64_t* ret_value = nullptr
         , CallConvention call_convention = CallConvention::kStdCall) {
-        auto exec_page_res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-        if (!exec_page_res) {
+        thread_local CallPage call_page(this);
+        if (!call_page.exec_page()) {
             return false;
         }
-        auto& exec_page = *exec_page_res;
-        if (!exec_page) {
-            return false;
-        }
-
-        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention, true, true);
-
-        FreeMemory(exec_page);
+        bool success = Call(call_page.exec_page(), call_addr, par_list, ret_value, call_convention, true, true);
         return success;
     }
 
@@ -1201,7 +1221,7 @@ public:
         int32_t balanced_esp = 0;
         std::vector<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来
     };
-    bool CallX86(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) {
+    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) {
         if (!IsX86()) {
             return false;
         }
@@ -1371,6 +1391,16 @@ public:
         } while (false);
         return success;
     }
+
+    bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) {
+        thread_local CallPage call_page(this);
+        if (!call_page.exec_page()) {
+            return false;
+        }
+        bool success = Call(call_page.exec_page(), call_addr, context, sync, init_exec_page);
+        return success;
+    }
+
 
 private:
     template<typename IMAGE_THUNK_DATA_T>
@@ -1796,7 +1826,7 @@ public:
     }
 };
 
-static inline Process CurrentProcess{ kCurrentProcess };
+static inline Process ThisProcess{ kCurrentProcess };
 
 
 } // namespace Geek
