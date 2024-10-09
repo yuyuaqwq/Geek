@@ -989,269 +989,319 @@ public:
     };
 
     // 注：如果调用的是X86，par_list传递uint64_t会被截断为uint32_t
-    enum class CallConvention {
-        kCdeclCall,
-        kThisCall,
-        kStdCall,
-        kFastCall,
+    //enum class CallConvention {
+    //    kCdeclCall,
+    //    kThisCall,
+    //    kStdCall,
+    //    kFastCall,
+    //};
+    //bool CallGenerateCode(uint64_t exec_page, uint64_t call_addr
+    //    , const std::initializer_list<uint64_t>& par_list = {}
+    //    , uint64_t* ret_value = nullptr
+    //    , CallConvention call_convention = CallConvention::kStdCall) {
+    //    constexpr int32_t exec_offset = 0x100;
+
+    //    std::array<uint8_t, 0x1000> temp_data = { 0 };
+    //    uint8_t* temp = temp_data.data();
+    //    if (IsCur()) {
+    //        temp = reinterpret_cast<uint8_t*>(exec_page);
+    //    }
+
+    //    if (IsX86()) {
+    //        int32_t not_push_count = 0;
+    //        switch (call_convention) {
+    //        case CallConvention::kFastCall: {
+    //            not_push_count = 2;
+    //            break;
+    //        }
+    //        case CallConvention::kThisCall: {
+    //            not_push_count = 1;
+    //            break;
+    //        }
+    //        }
+
+    //        int32_t i = exec_offset;
+
+    //        const auto* par_list_ = par_list.begin();
+    //        for (int j = par_list.size() - 1; j >= not_push_count; j--) {
+    //            temp[i++] = 0x68;        // push par[j]
+    //            *(uint32_t*)&temp[i] = par_list_[j];
+    //            i += 4;
+    //        }
+
+    //        // mov reg, par_list[j]
+    //        uint8_t reg_code[] = {
+    //            0xb9,
+    //            0xba,
+    //        };
+    //        for (int j = not_push_count - 1; j >= 0; j--) {
+    //            temp[i++] = reg_code[j];
+    //            *((uint32_t*)&temp[i]) = par_list_[j];
+    //            i += 4;
+    //        }
+
+    //        temp[i++] = 0xb8;        // mov eax, entry_point
+    //        *(uint32_t*)&temp[i] = (uint32_t)call_addr;
+    //        i += 4;
+
+    //        temp[i++] = 0xff;        // call eax
+    //        temp[i++] = 0xd0;
+
+    //        switch (call_convention) {
+    //        case CallConvention::kFastCall:
+    //        case CallConvention::kStdCall: {
+    //            break;
+    //        }
+    //        case CallConvention::kCdeclCall:
+    //        case CallConvention::kThisCall: {
+    //            temp[i++] = 0x83;        // add esp, par_list.size() * 4
+    //            temp[i++] = 0xc4;
+    //            temp[i++] = (par_list.size() - not_push_count) * 4;
+    //            break;
+    //        }
+    //        }
+
+    //        // mov [exec_page], eax
+    //        temp[i++] = 0xa3;
+    //        *(uint32_t*)&temp[i] = (uint32_t)exec_page;
+    //        i += 4;
+
+    //        // xor eax, eax
+    //        temp[i++] = 0x31;
+    //        temp[i++] = 0xc0;
+
+    //        if (IsCur()) {
+    //            temp[i++] = 0xc3;
+    //        }
+    //        else {
+    //            // 创建线程需要平栈
+    //            temp[i++] = 0xc2;        // ret 4
+    //            *(uint16_t*)&temp[i] = 4;
+    //            i += 2;
+    //        }
+    //    }
+    //    else {
+    //        int32_t i = exec_offset;      // 返回值的位置
+    //        int8_t stack_size = par_list.size() * 8;
+
+    //        if ((stack_size & 8) == 0) {
+    //            stack_size += 8;
+    //        }
+
+    //        if (stack_size < 0x28) {
+    //            stack_size = 0x28;
+    //        }
+
+    //        // 构建栈帧
+    //        temp[i++] = 0x48;        // sub rsp, size
+    //        temp[i++] = 0x83;
+    //        temp[i++] = 0xec;
+    //        temp[i++] = stack_size;
+
+    //        uint16_t reg_code[] = {
+    //            0xb948,
+    //            0xba48,
+    //            0xb849,
+    //            0xb949,
+    //        };
+    //        const auto* par_list_ = par_list.begin();
+    //        for (int j = 0; j < std::min(size_t{ 4 }, par_list.size()); j++) {
+    //            // 寄存器传参
+    //            // mov reg, par[j]
+    //            *((uint16_t*)&temp[i]) = reg_code[j];
+    //            i += 2;
+
+    //            *((uint64_t*)&temp[i]) = par_list_[j];
+    //            i += 8;
+    //        }
+
+    //        for (int j = 4; j < par_list.size(); j++) {
+    //            // 栈传参
+    //            // mov rax, par[j]
+    //            temp[i++] = 0x48;
+    //            temp[i++] = 0xb8;
+    //            *((uint64_t*)&temp[i]) = par_list_[j];
+    //            i += 8;
+    //            // mov [rsp+ j * 8], rax
+    //            temp[i++] = 0x48;
+    //            temp[i++] = 0x89;
+    //            temp[i++] = 0x44;
+    //            temp[i++] = 0x24;
+    //            temp[i++] = j * 8;
+
+    //        }
+
+    //        temp[i++] = 0x48;        // mov rax, call_addr
+    //        temp[i++] = 0xb8;
+    //        *(uint64_t*)&temp[i] = (uint64_t)call_addr;
+    //        i += 8;
+    //        // call rax
+    //        temp[i++] = 0xff;
+    //        temp[i++] = 0xd0;
+
+    //        // 还原栈帧
+    //        temp[i++] = 0x48;
+    //        temp[i++] = 0x83;
+    //        temp[i++] = 0xc4;
+    //        temp[i++] = stack_size;
+
+    //        // mov rcx, exec_page
+    //        temp[i++] = 0x48;
+    //        temp[i++] = 0xb9;
+    //        *(uint64_t*)&temp[i] = (uint64_t)exec_page;
+    //        i += 8;
+    //        // mov [rcx], rax
+    //        temp[i++] = 0x48;
+    //        temp[i++] = 0x89;
+    //        temp[i++] = 0x01;
+
+    //        // xor rax, rax
+    //        temp[i++] = 0x48;
+    //        temp[i++] = 0x31;
+    //        temp[i++] = 0xc0;
+
+    //        temp[i++] = 0xc3;        // ret
+    //    }
+
+    //    if (!IsCur()) {
+    //        if (!WriteMemory(exec_page, temp, 0x1000)) {
+    //            return false;
+    //        }
+    //    }
+    //    return true;
+    //}
+    //bool Call(uint64_t exec_page, uint64_t call_addr
+    //    , const std::initializer_list<uint64_t>& par_list = {}
+    //    , uint64_t* ret_value = nullptr
+    //    , CallConvention call_convention = CallConvention::kStdCall
+    //    , bool sync = true
+    //    , bool init_exec_page = true) {
+
+    //    constexpr int32_t exec_offset = 0x100;
+
+    //    if (init_exec_page) {
+    //        if (!CallGenerateCode(exec_page, call_addr, par_list, ret_value)) {
+    //            return false;
+    //        }
+    //    }
+    //    
+    //    bool success = false;
+    //    do {
+    //        if (sync && IsCur()) {
+    //            using Func = uint64_t(*)();
+    //            Func func = reinterpret_cast<Func>(exec_page + exec_offset);
+    //            uint64_t ret = func();
+    //            if (ret_value) {
+    //                *ret_value = ret;
+    //            }
+    //        }
+    //        else {
+    //            auto thread = CreateThread(exec_page + exec_offset, NULL);
+    //            if (!thread) {
+    //                break;
+    //            }
+
+    //            if (sync) {
+    //                if (!thread.value().WaitExit()) {
+    //                    break;
+    //                }
+    //                if (ret_value) {
+    //                    *ret_value = 0;
+    //                    ReadMemory(exec_page, ret_value, exec_offset);
+    //                }
+    //            }
+    //            else {
+    //                if (ret_value) {
+    //                    *ret_value = 0;
+    //                }
+    //            }
+    //        }
+    //        success = true;
+    //    }
+    //    while (false);
+    //    return success;
+    //}
+    //bool Call(uint64_t call_addr
+    //    , const std::initializer_list<uint64_t>& par_list = {}
+    //    , uint64_t* ret_value = nullptr
+    //    , CallConvention call_convention = CallConvention::kStdCall) {
+
+    //    // 等待参考下面的Call重构
+    //    return false;
+
+    //    uint64_t exec_page = 0;
+    //    bool init_exec_page = true;
+    //    //if (IsCur()) {
+    //    //    // 当前进程的调用才使用优化策略
+    //    //    // 跨进程调用的主要开销不在这里
+    //    //    thread_local std::unordered_map<uint64_t, CallPage> map_;
+    //    //    auto iter = map_.find(call_addr);
+    //    //    if (iter == map_.end()) {
+    //    //        auto page = CallPage(this);
+    //    //        exec_page = page.exec_page();
+    //    //        map_.insert(std::make_pair(call_addr, std::move(page)));
+    //    //    }
+    //    //    else {
+    //    //        exec_page = iter->second.exec_page();
+    //    //        init_exec_page = false;
+    //    //    }
+    //    // 
+    //    // // or
+    //    // 
+    //    // thread_local CallPage call_page(this);
+    //    // exec_page = call_page.exec_page();
+    //    //}
+    //    //else {
+
+    //    //}
+
+    //    if (!exec_page) {
+    //        return false;
+    //    }
+    //    bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention, true, true);
+    //    return success;
+    //}
+
+
+    class CallPage_Context {
+    public:
+        CallPage_Context(Process* process, bool sync)
+            : process_(process) {
+            auto res = process->AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            if (res) {
+                exec_page_ = *res;
+                process->CallGenerateCode(exec_page_, sync);
+            }
+        }
+
+        ~CallPage_Context() {
+            Close();
+        }
+
+        CallPage_Context(const CallPage_Context&) = delete;
+        void operator=(const CallPage_Context&) = delete;
+
+        CallPage_Context(CallPage_Context&& rv) {
+            Close();
+            process_ = rv.process_;
+            exec_page_ = rv.exec_page_;
+            rv.exec_page_ = 0;
+        }
+
+        uint64_t exec_page() const { return exec_page_; }
+
+
+    private:
+        void Close() {
+            if (exec_page_) {
+                process_->FreeMemory(exec_page_);
+                exec_page_ = 0;
+            }
+        }
+    private:
+        Process* process_;
+        uint64_t exec_page_ = 0;
     };
-    bool CallGenerateCode(uint64_t exec_page, uint64_t call_addr
-        , const std::initializer_list<uint64_t>& par_list = {}
-        , uint64_t* ret_value = nullptr
-        , CallConvention call_convention = CallConvention::kStdCall) {
-        constexpr int32_t exec_offset = 0x100;
-
-        std::array<uint8_t, 0x1000> temp_data = { 0 };
-        uint8_t* temp = temp_data.data();
-        if (IsCur()) {
-            temp = reinterpret_cast<uint8_t*>(exec_page);
-        }
-
-        if (IsX86()) {
-            int32_t not_push_count = 0;
-            switch (call_convention) {
-            case CallConvention::kFastCall: {
-                not_push_count = 2;
-                break;
-            }
-            case CallConvention::kThisCall: {
-                not_push_count = 1;
-                break;
-            }
-            }
-
-            int32_t i = exec_offset;
-
-            const auto* par_list_ = par_list.begin();
-            for (int j = par_list.size() - 1; j >= not_push_count; j--) {
-                temp[i++] = 0x68;        // push par[j]
-                *(uint32_t*)&temp[i] = par_list_[j];
-                i += 4;
-            }
-
-            // mov reg, par_list[j]
-            uint8_t reg_code[] = {
-                0xb9,
-                0xba,
-            };
-            for (int j = not_push_count - 1; j >= 0; j--) {
-                temp[i++] = reg_code[j];
-                *((uint32_t*)&temp[i]) = par_list_[j];
-                i += 4;
-            }
-
-            temp[i++] = 0xb8;        // mov eax, entry_point
-            *(uint32_t*)&temp[i] = (uint32_t)call_addr;
-            i += 4;
-
-            temp[i++] = 0xff;        // call eax
-            temp[i++] = 0xd0;
-
-            switch (call_convention) {
-            case CallConvention::kFastCall:
-            case CallConvention::kStdCall: {
-                break;
-            }
-            case CallConvention::kCdeclCall:
-            case CallConvention::kThisCall: {
-                temp[i++] = 0x83;        // add esp, par_list.size() * 4
-                temp[i++] = 0xc4;
-                temp[i++] = (par_list.size() - not_push_count) * 4;
-                break;
-            }
-            }
-
-            // mov [exec_page], eax
-            temp[i++] = 0xa3;
-            *(uint32_t*)&temp[i] = (uint32_t)exec_page;
-            i += 4;
-
-            // xor eax, eax
-            temp[i++] = 0x31;
-            temp[i++] = 0xc0;
-
-            if (IsCur()) {
-                temp[i++] = 0xc3;
-            }
-            else {
-                // 创建线程需要平栈
-                temp[i++] = 0xc2;        // ret 4
-                *(uint16_t*)&temp[i] = 4;
-                i += 2;
-            }
-        }
-        else {
-            int32_t i = exec_offset;      // 返回值的位置
-            int8_t stack_size = par_list.size() * 8;
-
-            if ((stack_size & 8) == 0) {
-                stack_size += 8;
-            }
-
-            if (stack_size < 0x28) {
-                stack_size = 0x28;
-            }
-
-            // 构建栈帧
-            temp[i++] = 0x48;        // sub rsp, size
-            temp[i++] = 0x83;
-            temp[i++] = 0xec;
-            temp[i++] = stack_size;
-
-            uint16_t reg_code[] = {
-                0xb948,
-                0xba48,
-                0xb849,
-                0xb949,
-            };
-            const auto* par_list_ = par_list.begin();
-            for (int j = 0; j < std::min(size_t{ 4 }, par_list.size()); j++) {
-                // 寄存器传参
-                // mov reg, par[j]
-                *((uint16_t*)&temp[i]) = reg_code[j];
-                i += 2;
-
-                *((uint64_t*)&temp[i]) = par_list_[j];
-                i += 8;
-            }
-
-            for (int j = 4; j < par_list.size(); j++) {
-                // 栈传参
-                // mov rax, par[j]
-                temp[i++] = 0x48;
-                temp[i++] = 0xb8;
-                *((uint64_t*)&temp[i]) = par_list_[j];
-                i += 8;
-                // mov [rsp+ j * 8], rax
-                temp[i++] = 0x48;
-                temp[i++] = 0x89;
-                temp[i++] = 0x44;
-                temp[i++] = 0x24;
-                temp[i++] = j * 8;
-
-            }
-
-            temp[i++] = 0x48;        // mov rax, call_addr
-            temp[i++] = 0xb8;
-            *(uint64_t*)&temp[i] = (uint64_t)call_addr;
-            i += 8;
-            // call rax
-            temp[i++] = 0xff;
-            temp[i++] = 0xd0;
-
-            // 还原栈帧
-            temp[i++] = 0x48;
-            temp[i++] = 0x83;
-            temp[i++] = 0xc4;
-            temp[i++] = stack_size;
-
-            // mov rcx, exec_page
-            temp[i++] = 0x48;
-            temp[i++] = 0xb9;
-            *(uint64_t*)&temp[i] = (uint64_t)exec_page;
-            i += 8;
-            // mov [rcx], rax
-            temp[i++] = 0x48;
-            temp[i++] = 0x89;
-            temp[i++] = 0x01;
-
-            // xor rax, rax
-            temp[i++] = 0x48;
-            temp[i++] = 0x31;
-            temp[i++] = 0xc0;
-
-            temp[i++] = 0xc3;        // ret
-        }
-
-        if (!IsCur()) {
-            if (!WriteMemory(exec_page, temp, 0x1000)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool Call(uint64_t exec_page, uint64_t call_addr
-        , const std::initializer_list<uint64_t>& par_list = {}
-        , uint64_t* ret_value = nullptr
-        , CallConvention call_convention = CallConvention::kStdCall
-        , bool sync = true
-        , bool init_exec_page = true) {
-
-        constexpr int32_t exec_offset = 0x100;
-
-        if (init_exec_page) {
-            if (!CallGenerateCode(exec_page, call_addr, par_list, ret_value)) {
-                return false;
-            }
-        }
-        
-        bool success = false;
-        do {
-            if (sync && IsCur()) {
-                using Func = uint64_t(*)();
-                Func func = reinterpret_cast<Func>(exec_page + exec_offset);
-                uint64_t ret = func();
-                if (ret_value) {
-                    *ret_value = ret;
-                }
-            }
-            else {
-                auto thread = CreateThread(exec_page + exec_offset, NULL);
-                if (!thread) {
-                    break;
-                }
-
-                if (sync) {
-                    if (!thread.value().WaitExit()) {
-                        break;
-                    }
-                    if (ret_value) {
-                        *ret_value = 0;
-                        ReadMemory(exec_page, ret_value, exec_offset);
-                    }
-                }
-                else {
-                    if (ret_value) {
-                        *ret_value = 0;
-                    }
-                }
-            }
-            success = true;
-        }
-        while (false);
-        return success;
-    }
-    bool Call(uint64_t call_addr
-        , const std::initializer_list<uint64_t>& par_list = {}
-        , uint64_t* ret_value = nullptr
-        , CallConvention call_convention = CallConvention::kStdCall) {
-        uint64_t exec_page = 0;
-        bool init_exec_page = true;
-        if (IsCur()) {
-            // 当前进程的调用才使用优化策略
-            // 跨进程调用的主要开销不在这里
-            thread_local std::unordered_map<uint64_t, CallPage> map_;
-            auto iter = map_.find(call_addr);
-            if (iter == map_.end()) {
-                auto page = CallPage(this);
-                exec_page = page.exec_page();
-                map_.insert(std::make_pair(call_addr, std::move(page)));
-            }
-            else {
-                exec_page = iter->second.exec_page();
-                init_exec_page = false;
-            }
-        }
-        // thread_local CallPage call_page(this);
-        // exec_page = call_page.exec_page();
-
-        if (!exec_page) {
-            return false;
-        }
-        bool success = Call(exec_page, call_addr, par_list, ret_value, call_convention, true, true);
-        return success;
-    }
-
     struct CallContextX86 {
         uint32_t eax = 0;
         uint32_t ecx = 0;
@@ -1260,12 +1310,15 @@ public:
         uint32_t esi = 0;
         uint32_t edi = 0;
         int32_t balanced_esp = 0;
-        std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来
+        std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来，如果是创建线程调用，则最多只能传递32个参数
     };
-    bool CallGenerateCode(uint64_t exec_page, uint64_t call_addr, CallContextX86* context) {
-
-        constexpr int32_t save_call_addr_offset = 0x0;
-        constexpr int32_t context_offset = 0x64;
+    struct ExecPageHeaderX86 {
+        uint32_t call_addr;
+        uint32_t context_addr;
+        uint32_t stack_count;
+        uint32_t stack_addr;
+    };
+    bool CallGenerateCode(uint64_t exec_page, bool sync) {
         constexpr int32_t exec_offset = 0x100;
 
         std::array<uint8_t, 0x1000> temp_data = { 0 };
@@ -1274,122 +1327,209 @@ public:
             temp = reinterpret_cast<uint8_t*>(exec_page);
         }
 
-        // *(uint32_t*)&temp[save_call_addr_offset] = (uint32_t)call_addr;
-
         int32_t i = exec_offset;
 
         // 保存非易变寄存器
-        // push ebx
-        temp[i++] = 0x53;
         // push ebp
         temp[i++] = 0x55;
+        // mov ebp, esp
+        temp[i++] = 0x89;
+        temp[i++] = 0xe5;
+
+        // 3个局部变量
+        // sub esp, 0xc
+        temp[i++] = 0x83;
+        temp[i++] = 0xec;
+        temp[i++] = 0x0c;
+
+        // push ebx
+        temp[i++] = 0x53;
         // push esi
         temp[i++] = 0x56;
         // push edi
         temp[i++] = 0x57;
 
-        // mov eax, call_addr
+        // mov eax, [ebp + 8]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x45;
+        temp[i++] = 0x08;
+
+        // copy stack
+        // mov ecx, [ExecPageHeaderX86.stack_count]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x48;
+        temp[i++] = offsetof(ExecPageHeaderX86, stack_count);
+
+        // mov esi, [ExecPageHeaderX86.stack_addr]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x70;
+        temp[i++] = offsetof(ExecPageHeaderX86, stack_addr);
+
+        // mov eax, 4
         temp[i++] = 0xb8;
-        *(uint32_t*)&temp[i] = (uint32_t)call_addr;
-        i += 4;
-        // mov [exec_page], eax
-        temp[i++] = 0xa3;
-        *(uint32_t*)&temp[i] = (uint32_t)exec_page;
+        *(uint32_t*)&temp[i] = 4;
         i += 4;
 
-        // mov eax, context.eax
-        temp[i++] = 0xb8;
-        *((uint32_t*)&temp[i]) = context->eax;
-        i += 4;
-        // mov ecx, context.ecx
-        temp[i++] = 0xb9;
-        *((uint32_t*)&temp[i]) = context->ecx;
-        i += 4;
-        // mov edx, context.edx
-        temp[i++] = 0xba;
-        *((uint32_t*)&temp[i]) = context->edx;
-        i += 4;
-        // mov ebx, context.ebx
-        temp[i++] = 0xbb;
-        *((uint32_t*)&temp[i]) = context->ebx;
-        i += 4;
-        // mov esi, context.esi
-        temp[i++] = 0xbe;
-        *((uint32_t*)&temp[i]) = context->esi;
-        i += 4;
-        // mov edi, context.edi
-        temp[i++] = 0xbf;
-        *((uint32_t*)&temp[i]) = context->edi;
-        i += 4;
+        // mul ecx
+        temp[i++] = 0xf7;
+        temp[i++] = 0xe1;
 
-        for (int j = context->stack.size() - 1; j >= 0; j--) {
-            const auto* stack = context->stack.begin();
-            temp[i++] = 0x68;        // push par[j]
-            *(uint32_t*)&temp[i] = stack[j];
-            i += 4;
-        }
+        // sub esp, eax
+        temp[i++] = 0x29;
+        temp[i++] = 0xc4;
 
-        // call [exec_page]
+        // mov edi, esp
+        temp[i++] = 0x89;
+        temp[i++] = 0xe7;
+
+        // cld
+        temp[i++] = 0xfc;
+
+        // rep movsd
+        temp[i++] = 0xf3;
+        temp[i++] = 0xa5;
+
+        // mov eax, [ebp + 8]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x45;
+        temp[i++] = 0x08;
+
+        // mov ecx, [ExecPageHeaderX86.context_addr]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x48;
+        temp[i++] = offsetof(ExecPageHeaderX86, context_addr);
+
+        // mov eax, [ExecPageHeaderX86.call_addr]
+        temp[i++] = 0x36;
+        temp[i++] = 0x8b;
+        temp[i++] = 0x40;
+        temp[i++] = offsetof(ExecPageHeaderX86, call_addr);
+
+        // mov [ebp - 4], eax
+        temp[i++] = 0x89;
+        temp[i++] = 0x45;
+        temp[i++] = -0x04;
+
+        // mov eax, [context.eax]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x41;
+        temp[i++] = offsetof(CallContextX86, eax);
+
+        // mov edx, [context.edx]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x51;
+        temp[i++] = offsetof(CallContextX86, edx);
+
+        // mov ebx, [context.ebx]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x59;
+        temp[i++] = offsetof(CallContextX86, ebx);
+
+        // mov esi, [context.esi]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x71;
+        temp[i++] = offsetof(CallContextX86, esi);
+
+        // mov edi, [context.edi]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x79;
+        temp[i++] = offsetof(CallContextX86, edi);
+
+        // mov ecx, [context.ecx]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x49;
+        temp[i++] = offsetof(CallContextX86, ecx);
+
+        // call [ebp - 4]
         temp[i++] = 0xff;
-        temp[i++] = 0x15;
-        *((uint32_t*)&temp[i]) = exec_page;
-        i += 4;
+        temp[i++] = 0x55;
+        temp[i++] = -0x04;
+
+        // mov [ebp - 8], ecx
+        temp[i++] = 0x89;
+        temp[i++] = 0x4d;
+        temp[i++] = -0x08;
+
+        // mov [ebp - 0xc], eax
+        temp[i++] = 0x89;
+        temp[i++] = 0x45;
+        temp[i++] = -0x0c;
+
+        // mov eax, [ebp + 8]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x45;
+        temp[i++] = 0x08;
+
+        // mov ecx, [ExecPageHeaderX86.context_addr]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x48;
+        temp[i++] = offsetof(ExecPageHeaderX86, context_addr);
 
         // 暂时不做栈拷贝
-        // add esp, context.balanced_esp
-        temp[i++] = 0x81;
-        temp[i++] = 0xc4;
-        *((uint32_t*)&temp[i]) = context->balanced_esp;
-        i += 4;
+        // add esp, [context.balanced_esp]
+        temp[i++] = 0x03;
+        temp[i++] = 0x61;
+        temp[i++] = offsetof(CallContextX86, balanced_esp);
 
-        // 不能直接访问，可能是其他进程的exec_page
-        CallContextX86* ret_context = reinterpret_cast<CallContextX86*>(exec_page + context_offset);
+        // mov eax, [ebp - 0xc]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x45;
+        temp[i++] = -0x0c;
 
-        // mov [ret_context.eax], eax
-        temp[i++] = 0xa3;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->eax);
-        i += 4;
-
-        // mov [ret_context.ecx], ecx
+        // mov [context.eax], eax
         temp[i++] = 0x89;
-        temp[i++] = 0x0d;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->ecx);
-        i += 4;
+        temp[i++] = 0x41;
+        temp[i++] = offsetof(CallContextX86, eax);
 
-        // mov [ret_context.edx], edx
+        // mov [context.edx], edx
         temp[i++] = 0x89;
-        temp[i++] = 0x15;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->edx);
-        i += 4;
+        temp[i++] = 0x51;
+        temp[i++] = offsetof(CallContextX86, edx);
 
-        // mov [ret_context.ebx], ebx
+        // mov [context.ebx], ebx
         temp[i++] = 0x89;
-        temp[i++] = 0x1d;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->ebx);
-        i += 4;
+        temp[i++] = 0x59;
+        temp[i++] = offsetof(CallContextX86, ebx);
 
-        // mov [ret_context.esi], esi
+        // mov [context.esi], esi
         temp[i++] = 0x89;
-        temp[i++] = 0x35;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->esi);
-        i += 4;
+        temp[i++] = 0x71;
+        temp[i++] = offsetof(CallContextX86, esi);
 
-        // mov [ret_context.edi], edi
+        // mov [context.edi], edi
         temp[i++] = 0x89;
-        temp[i++] = 0x3d;
-        *((uint32_t*)&temp[i]) = reinterpret_cast<uint32_t>(&ret_context->edi);
-        i += 4;
+        temp[i++] = 0x79;
+        temp[i++] = offsetof(CallContextX86, edi);
+
+        // mov eax(context), ecx
+        temp[i++] = 0x89;
+        temp[i++] = 0xC8;
+
+        // mov ecx, [ebp - 8]
+        temp[i++] = 0x8b;
+        temp[i++] = 0x4d;
+        temp[i++] = -0x08;
+
+        // mov [context.ecx], ecx
+        temp[i++] = 0x89;
+        temp[i++] = 0x48;
+        temp[i++] = offsetof(CallContextX86, ecx);
 
         // pop edi
         temp[i++] = 0x5f;
         // pop esi
         temp[i++] = 0x5e;
-        // pop ebp
-        temp[i++] = 0x5d;
         // pop ebx
         temp[i++] = 0x5b;
 
-        if (IsCur()) {
+        // mov esp, ebp
+        temp[i++] = 0x89;
+        temp[i++] = 0xec;
+
+        // pop ebp
+        temp[i++] = 0x5d;
+
+        if (sync && IsCur()) {
             temp[i++] = 0xc3;
         }
         else {
@@ -1410,12 +1550,14 @@ public:
         if (!IsX86()) {
             return false;
         }
-        // 调用地址(4字节), ret_call_context_x86
-        constexpr int32_t context_offset = 0x64;
+        constexpr int32_t header_offset = 0x0;
+        constexpr int32_t context_offset = 0x40;
+        constexpr int32_t stack_offset = 0x80; // 0x80 = 128 / 4 = 32个参数
+
         constexpr int32_t exec_offset = 0x100;
 
         if (init_exec_page) {
-            if (!CallGenerateCode(exec_page, call_addr, context)) {
+            if (!CallGenerateCode(exec_page, sync)) {
                 return false;
             }
         }
@@ -1423,13 +1565,33 @@ public:
         bool success = false;
         do {
             if (sync && IsCur()) {
-                using Func = uint64_t(*)();
+                ExecPageHeaderX86 header;
+                header.call_addr = call_addr;
+                header.context_addr = reinterpret_cast<uint32_t>(context);
+                header.stack_count = context->stack.size();
+                header.stack_addr = reinterpret_cast<uint32_t>(context->stack.begin());
+                using Func = void(*)(ExecPageHeaderX86*);
                 Func func = reinterpret_cast<Func>(exec_page + exec_offset);
-                uint64_t ret = func();
-                ReadMemory(exec_page + context_offset, context, offsetof(CallContextX86, balanced_esp));
+                func(&header);
             }
             else {
-                auto thread = CreateThread(exec_page + exec_offset, NULL);
+                if (!WriteMemory(exec_page + context_offset, context, offsetof(CallContextX86, stack))) {
+                    return false;
+                }
+                if (!WriteMemory(exec_page + stack_offset, context->stack.begin(), context->stack.size() * sizeof(uint32_t))) {
+                    return false;
+                }
+
+                ExecPageHeaderX86 header;
+                header.call_addr = call_addr;
+                header.context_addr = exec_page + context_offset;
+                header.stack_count = context->stack.size();
+                header.stack_addr = exec_page + stack_offset;
+                if (!WriteMemory(exec_page + header_offset, &header, sizeof(header))) {
+                    return false;
+                }
+
+                auto thread = CreateThread(exec_page + exec_offset, exec_page + header_offset);
                 if (!thread) {
                     break;
                 }
@@ -1438,7 +1600,7 @@ public:
                     if (!thread.value().WaitExit()) {
                         break;
                     }
-                    ReadMemory(exec_page + context_offset, context, sizeof(*context) - offsetof(CallContextX86, stack));
+                    ReadMemory(exec_page + context_offset, context, offsetof(CallContextX86, stack));
                 }
             }
             success = true;
@@ -1448,25 +1610,29 @@ public:
     bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true) {
         uint64_t exec_page = 0;
         bool init_exec_page = true;
-        if (IsCur()) {
-            // 当前进程的调用才使用优化策略
-            // 跨进程调用的主要开销不在这里
-            thread_local std::unordered_map<uint64_t, CallPage> map_;
-            auto iter = map_.find(call_addr);
-            if (iter == map_.end()) {
-                auto page = CallPage(this);
-                exec_page = page.exec_page();
-                map_.insert(std::make_pair(call_addr, std::move(page)));
+        bool success = false;
+        if (sync && IsCur()) {
+            thread_local CallPage_Context call_page(nullptr, true);
+            exec_page = call_page.exec_page();
+            if (!exec_page) {
+                return false;
             }
-            else {
-                exec_page = iter->second.exec_page();
-                init_exec_page = false;
+            success = Call(exec_page, call_addr, context, sync, false);
+        }
+        else {
+            auto res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            if (res) {
+                exec_page = *res;
+                CallGenerateCode(exec_page, sync);
+            }
+            if (!exec_page) {
+                return false;
+            }
+            success = Call(exec_page, call_addr, context, sync, false);
+            if (sync) {
+                FreeMemory(exec_page);
             }
         }
-        if (!exec_page) {
-            return false;
-        }
-        bool success = Call(exec_page, call_addr, context, sync, init_exec_page);
         return success;
     }
 
