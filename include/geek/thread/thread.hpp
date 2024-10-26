@@ -9,7 +9,7 @@
 
 #include <geek/handle.hpp>
 
-namespace Geek {
+namespace geek {
 static const HANDLE kCurrentThread = (HANDLE)-2;
 
 class Thread {
@@ -68,6 +68,6 @@ private:
 };
 
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_THREAD_THREAD_HPP_

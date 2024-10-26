@@ -1,12 +1,12 @@
 #ifndef GEEK_COMM_SHARE_MEMORY_H_
 #define GEEK_COMM_SHARE_MEMORY_H_
 
-#include <Geek/sync/event.hpp>
-#include <Geek/ring_queue.hpp>
-#include <Geek/process/process.hpp>
+#include <geek/sync/event.hpp>
+#include <geek/ring_queue.hpp>
+#include <geek/process/process.hpp>
 
 
-namespace Geek {
+namespace geek {
 namespace comm {
 
 

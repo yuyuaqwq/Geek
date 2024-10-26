@@ -15,7 +15,7 @@
 #define GEEK_STD std::
 #endif // GEEK_STD
 
-namespace Geek {
+namespace geek {
 
 class File {
 public:
@@ -190,7 +190,7 @@ public:
     }
 
     /*
-    * level < 0ï¼Œè¡¨ç¤ºä»åå‘å‰ï¼Œlevel > 0ï¼Œè¡¨ç¤ºä»å‰å‘å
+    * level < 0£¬±íÊ¾´ÓºóÏòÇ°£¬level > 0£¬±íÊ¾´ÓÇ°Ïòºó
     */
     static std::wstring GetFileDir(const std::wstring& filePath, int level = -1) {
         size_t pos;
@@ -247,7 +247,7 @@ public:
 
 
     static bool CopyFolder(const std::wstring& pstrFolder, const std::wstring& pstrDest) {
-        /* æ£€æŸ¥è¾“å…¥ç›®å½•æ˜¯å¦æ˜¯åˆæ³•ç›®å½• */
+        /* ¼ì²éÊäÈëÄ¿Â¼ÊÇ·ñÊÇºÏ·¨Ä¿Â¼ */
         if (!IsDirectory(pstrFolder)) {
             return false;
         }
@@ -267,8 +267,8 @@ public:
             strDest.append(L"\\");
         }
 
-        /* æ‰“å¼€æ–‡ä»¶æŸ¥æ‰¾ï¼ŒæŸ¥çœ‹æºç›®å½•ä¸­æ˜¯å¦å­˜åœ¨åŒ¹é…çš„æ–‡ä»¶ */
-        /* è°ƒç”¨FindFileåï¼Œå¿…é¡»è°ƒç”¨FindNextFileæ‰èƒ½è·å¾—æŸ¥æ‰¾æ–‡ä»¶çš„ä¿¡æ¯ */
+        /* ´ò¿ªÎÄ¼ş²éÕÒ£¬²é¿´Ô´Ä¿Â¼ÖĞÊÇ·ñ´æÔÚÆ¥ÅäµÄÎÄ¼ş */
+        /* µ÷ÓÃFindFileºó£¬±ØĞëµ÷ÓÃFindNextFile²ÅÄÜ»ñµÃ²éÕÒÎÄ¼şµÄĞÅÏ¢ */
         WIN32_FIND_DATAW wfd;
         HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
         if (hFind == INVALID_HANDLE_VALUE) {
@@ -294,14 +294,14 @@ public:
             }
         } while (FindNextFileW(hFind, &wfd));
 
-        /* åˆ é™¤ç©ºç›®å½• */
+        /* É¾³ı¿ÕÄ¿Â¼ */
         FindClose(hFind);
         return true;
     }
 
-    /* åˆ é™¤ç›®å½•åŠç›®å½•ä¸­çš„æ‰€æœ‰å†…å®¹ */
+    /* É¾³ıÄ¿Â¼¼°Ä¿Â¼ÖĞµÄËùÓĞÄÚÈİ */
     static bool DeleteFolder(const std::wstring& pstrFolder, bool recursive) {
-        /* æ£€æŸ¥è¾“å…¥ç›®å½•æ˜¯å¦æ˜¯åˆæ³•ç›®å½• */
+        /* ¼ì²éÊäÈëÄ¿Â¼ÊÇ·ñÊÇºÏ·¨Ä¿Â¼ */
         if (!IsDirectory(pstrFolder)) {
             return false;
         }
@@ -313,8 +313,8 @@ public:
         }
         strFind.append(L"*.*");
 
-        /* æ‰“å¼€æ–‡ä»¶æŸ¥æ‰¾ï¼ŒæŸ¥çœ‹æºç›®å½•ä¸­æ˜¯å¦å­˜åœ¨åŒ¹é…çš„æ–‡ä»¶ */
-        /* è°ƒç”¨FindFileåï¼Œå¿…é¡»è°ƒç”¨FindNextFileæ‰èƒ½è·å¾—æŸ¥æ‰¾æ–‡ä»¶çš„ä¿¡æ¯ */
+        /* ´ò¿ªÎÄ¼ş²éÕÒ£¬²é¿´Ô´Ä¿Â¼ÖĞÊÇ·ñ´æÔÚÆ¥ÅäµÄÎÄ¼ş */
+        /* µ÷ÓÃFindFileºó£¬±ØĞëµ÷ÓÃFindNextFile²ÅÄÜ»ñµÃ²éÕÒÎÄ¼şµÄĞÅÏ¢ */
         WIN32_FIND_DATAW wfd;
         HANDLE hFind = FindFirstFileW(strFind.c_str(), &wfd);
         if (hFind == INVALID_HANDLE_VALUE) {
@@ -337,7 +337,7 @@ public:
             }
         } while (FindNextFileW(hFind, &wfd));
 
-        /* åˆ é™¤ç©ºç›®å½• */
+        /* É¾³ı¿ÕÄ¿Â¼ */
         FindClose(hFind);
         return RemoveDirectoryW(pstrFolder.c_str()) == TRUE;
     }
@@ -376,6 +376,6 @@ private:
     GEEK_STD fstream fs_;
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_FILE_FILE_H_

@@ -1,0 +1,138 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\comm">
+      <UniqueIdentifier>{0612befb-7084-4b46-b32b-d5ead0672234}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file">
+      <UniqueIdentifier>{75d833a5-5897-4974-ba87-d5a359251043}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\hook">
+      <UniqueIdentifier>{5ce23ca5-1996-4d47-9fcd-2fe1aac055b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\network">
+      <UniqueIdentifier>{6e44ac30-42eb-4cc6-ae49-27f1e6bfea8a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\pe">
+      <UniqueIdentifier>{fb5a8e87-ff2b-4f8f-9330-98fef1221004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\process">
+      <UniqueIdentifier>{a6144c8d-45dd-49d5-a865-a212f1374948}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\sign_searcher">
+      <UniqueIdentifier>{583295c2-b082-45a6-bbd4-5294c691d080}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\sync">
+      <UniqueIdentifier>{76581869-6b5f-4ec7-9227-3cdbeeadbcb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\system">
+      <UniqueIdentifier>{24a69e48-9ace-482a-ae52-f5ca199441c7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\thread">
+      <UniqueIdentifier>{d28b07e7-16da-4a4e-be35-58196720f19a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\wow64ext">
+      <UniqueIdentifier>{8b866eb0-14ac-4f64-9791-55aab1b39e89}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\hook">
+      <UniqueIdentifier>{2122eec5-2358-4c29-b85f-1efa01a1d2fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\utils">
+      <UniqueIdentifier>{492232a3-1bbe-48e3-b1dc-dc219337b416}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\utils">
+      <UniqueIdentifier>{ebd90124-e8cd-4e2e-a2b5-c746d2fccda4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\process">
+      <UniqueIdentifier>{fb2718cb-202e-4626-920b-257a3b74729c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\geek\hook\inline_hook.h">
+      <Filter>Header Files\hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\debug.hpp">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\memory_info.hpp">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\module_info.hpp">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\ntinc.h">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\process.h">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\process_info.hpp">
+      <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\wow64ext\internal.h">
+      <Filter>Header Files\wow64ext</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\wow64ext\wow64ext.h">
+      <Filter>Header Files\wow64ext</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\wow64ext\wow64ext.hpp">
+      <Filter>Header Files\wow64ext</Filter>
+    </ClInclude>
+    <ClInclude Include="insn_len.h">
+      <Filter>Resource Files\hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\hook\page_hook.h">
+      <Filter>Header Files\hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\hook\vft_hook.h">
+      <Filter>Header Files\hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\pe\image.hpp">
+      <Filter>Header Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\file\file.hpp">
+      <Filter>Header Files\file</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\handle.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\thread\thread.hpp">
+      <Filter>Header Files\thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\comm\pipe.hpp">
+      <Filter>Header Files\comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\comm\share_memory.hpp">
+      <Filter>Header Files\comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\utils\converter.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="inline_hook.cpp">
+      <Filter>Resource Files\hook</Filter>
+    </ClCompile>
+    <ClCompile Include="page_hook.cpp">
+      <Filter>Resource Files\hook</Filter>
+    </ClCompile>
+    <ClCompile Include="converter.cpp">
+      <Filter>Resource Files\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="process.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

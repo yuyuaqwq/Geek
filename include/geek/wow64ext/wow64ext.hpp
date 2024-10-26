@@ -12,7 +12,7 @@
 * https://github.com/rwfpl/rewolf-Wow64ext
 */
 
-namespace Geek {
+namespace geek {
 
 static HANDLE ms_heap = NULL;
 static BOOL ms_is_wow64 = FALSE;

@@ -7,7 +7,7 @@
 
 #include <geek/wow64ext/wow64ext.h>
 
-namespace Geek {
+namespace geek {
 
 struct ModuleInfo {
 

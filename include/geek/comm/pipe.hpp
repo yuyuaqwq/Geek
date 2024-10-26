@@ -8,7 +8,7 @@
 #include <geek/handle.hpp>
 
 
-namespace Geek {
+namespace geek {
 
 class Pipe {
 public:

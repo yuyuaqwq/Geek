@@ -7,7 +7,7 @@
 
 #include <geek/wow64ext/wow64ext.h>
 
-namespace Geek {
+namespace geek {
 
 struct ProcessInfo {
     explicit ProcessInfo(const PROCESSENTRY32W& entry) {
@@ -25,6 +25,6 @@ struct ProcessInfo {
     std::wstring process_name;
 };
 
-} // Geek
+} // geek
 
 #endif // GEEK_PROCESS_PROCESS_INFO_H_

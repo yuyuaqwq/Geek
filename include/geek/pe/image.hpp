@@ -16,7 +16,7 @@
 #undef max
 
 
-namespace Geek {
+namespace geek {
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
     { if (m_nt_header->OptionalHeader.Magic == 0x10b) var = m_nt_header->OptionalHeader.##field; \
@@ -49,11 +49,12 @@ public:
     }
 
     void operator=(Image&& other) noexcept {
-        m_dos_header = std::move(other.m_dos_header);
+        m_dos_header = other.m_dos_header;
         m_dos_stub = std::move(other.m_dos_stub);
-        m_file_header = std::move(other.m_file_header); other.m_file_header = nullptr;
-        m_memory_image_base = std::move(other.m_memory_image_base);
-        m_nt_header = std::move(other.m_nt_header); other.m_nt_header = nullptr;
+        m_file_header = other.m_file_header;
+    	other.m_file_header = nullptr;
+        m_memory_image_base = other.m_memory_image_base;
+        m_nt_header = other.m_nt_header; other.m_nt_header = nullptr;
         m_section_header_table = std::move(other.m_section_header_table);
         m_section_list = std::move(other.m_section_list);
     }
@@ -96,14 +97,14 @@ public:
         m_section_header_table.resize(m_file_header->NumberOfSections);
         m_section_list.resize(m_file_header->NumberOfSections);
 
-        // ä¿å­˜èŠ‚åŒºå’Œå¤´èŠ‚åŒº
+        // ±£´æ½ÚÇøºÍÍ·½ÚÇø
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
             auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
             uint32_t SectionAlignment;
             GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
 
-            // å¯¹é½ä¸ä¸€å®šè¡¨ç¤ºåé¢å°±æœ‰
+            // ¶ÔÆë²»Ò»¶¨±íÊ¾ºóÃæ¾ÍÓĞ
             /*if (virtual_size % SectionAlignment) {
                 virtual_size += SectionAlignment - virtual_size % SectionAlignment;
             }*/
@@ -123,7 +124,7 @@ public:
         m_section_header_table.resize(m_file_header->NumberOfSections);
         m_section_list.resize(m_file_header->NumberOfSections);
 
-        // ä¿å­˜èŠ‚åŒºå’Œå¤´èŠ‚åŒº
+        // ±£´æ½ÚÇøºÍÍ·½ÚÇø
         for (int i = 0; i < m_file_header->NumberOfSections; i++) {
             m_section_header_table[i] = sectionHeaderTable[i];
             auto virtual_size = std::max(m_section_header_table[i].Misc.VirtualSize, m_section_header_table[i].SizeOfRawData);
@@ -134,7 +135,7 @@ public:
             }
 
             if (virtual_size == 0) {
-                // dllä¸­æ²¡æœ‰æ•°æ®çš„åŒºæ®µï¼Ÿ
+                // dllÖĞÃ»ÓĞÊı¾İµÄÇø¶Î£¿
                 GET_OPTIONAL_HEADER_FIELD(SectionAlignment, virtual_size);
                 m_section_list[i].resize(virtual_size, 0);
             }
@@ -366,7 +367,7 @@ public:
         for (int i = 0; i < numberOfNames; i++) {
             auto exportName = (char*)RvaToPoint(addressOfNames[i]);
             if (func_name == exportName) {
-                // é€šè¿‡æ­¤ä¸‹æ ‡è®¿é—®åºå·è¡¨ï¼Œå¾—åˆ°è®¿é—®AddressOfFunctionsçš„ä¸‹æ ‡
+                // Í¨¹ı´ËÏÂ±ê·ÃÎÊĞòºÅ±í£¬µÃµ½·ÃÎÊAddressOfFunctionsµÄÏÂ±ê
                 funcIdx = addressOfNameOrdinals[i];
             }
         }
@@ -382,7 +383,7 @@ public:
             return 0;
         }
         auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
-        // å¤–éƒ¨æä¾›çš„ordinaléœ€è¦å‡å»base
+        // Íâ²¿Ìá¹©µÄordinalĞèÒª¼õÈ¥base
         auto funcIdx = ordinal - exportDirectory->Base;
         return addressOfFunctions[funcIdx];
     }
@@ -524,7 +525,7 @@ public:
     * Resource
     */
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type) {
-        // æŸ¥æ‰¾èµ„æº
+        // ²éÕÒ×ÊÔ´
         std::vector<uint8_t> buf;
         HGLOBAL hRes = NULL;
         LPVOID pRes = NULL;
@@ -533,12 +534,12 @@ public:
             if (!hResID) {
                 return {};
             }
-            // åŠ è½½èµ„æº
+            // ¼ÓÔØ×ÊÔ´
             hRes = LoadResource(handle_module, hResID);
             if (!hRes) {
                 break;
             }
-            // é”å®šèµ„æº
+            // Ëø¶¨×ÊÔ´
             pRes = LockResource(hRes);
             if (pRes == NULL) {
                 break;
@@ -576,7 +577,7 @@ private:
             return false;
         }
 
-        // æ‹·è´PEå¤´
+        // ¿½±´PEÍ·
         auto optionalHeader32 = &ntHeader->OptionalHeader;
         if (optionalHeader32->Magic == 0x10b) {
             m_nt_header = new IMAGE_NT_HEADERS32;
@@ -619,7 +620,7 @@ private:
         }
 
         i--;
-        // å¯èƒ½ä½äºæœ€åä¸€ä¸ªèŠ‚åŒºï¼Œä½†ä¸èƒ½è¶Šç•Œ
+        // ¿ÉÄÜÎ»ÓÚ×îºóÒ»¸ö½ÚÇø£¬µ«²»ÄÜÔ½½ç
         if (rva - m_section_header_table[i].VirtualAddress > m_section_header_table[i].SizeOfRawData) {
             return -1;
         }
@@ -636,7 +637,7 @@ private:
         }
 
         i--;
-        // å¯èƒ½ä½äºæœ€åä¸€ä¸ªèŠ‚åŒºï¼Œä½†ä¸èƒ½è¶Šç•Œ
+        // ¿ÉÄÜÎ»ÓÚ×îºóÒ»¸ö½ÚÇø£¬µ«²»ÄÜÔ½½ç
         if (raw - m_section_header_table[i].PointerToRawData + 1 > m_section_header_table[i].SizeOfRawData) {
             return -1;
         }
@@ -682,6 +683,6 @@ private:
 
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_PE_IMAGE_HPP_

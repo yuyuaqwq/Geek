@@ -6,9 +6,9 @@
 #include <functional>
 #include <unordered_map>
 
-#include <Geek/process/process.hpp>
+#include <geek/process/process.hpp>
 
-namespace Geek {
+namespace geek {
 
 class Debug {
 public:
@@ -435,6 +435,6 @@ private:
 
 };
 
-} // Geek
+} // geek
 
 #endif // GEEK_PROCESS_PROCESS_INFO_H_

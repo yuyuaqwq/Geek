@@ -6,7 +6,7 @@
 #include <type_traits>
 
 
-namespace Geek {
+namespace geek {
 
 class UniqueHandle {
 public:
@@ -67,6 +67,6 @@ private:
     HANDLE m_handle;
 };
 
-} // namespace Geek
+} // namespace geek
 
 #endif // GEEK_HANDLE_HANDLE_H_
