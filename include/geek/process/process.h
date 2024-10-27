@@ -6,10 +6,6 @@
 #include <map>
 #include <optional>
 #include <functional>
-#include <mutex>
-#include <algorithm>
-#include <array>
-#include <cstddef>
 
 #ifndef WINNT
 #include <Windows.h>
@@ -22,17 +18,12 @@
 #undef min
 #undef max
 
-#include <geek/process/ntinc.h>
-#include <geek/utils/converter.h>
 #include <geek/process/module_info.h>
 #include <geek/process/memory_info.h>
 #include <geek/process/process_info.h>
 #include <geek/process/thread.h>
-
-#include <geek/utils/handle.h>
 #include <geek/pe/image.h>
-#include <geek/wow64ext/wow64ext.hpp>
-#include <geek/utils/file.h>
+#include <geek/utils/handle.h>
 
 namespace geek {
 

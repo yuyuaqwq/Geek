@@ -13,9 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Header Files\comm">
-      <UniqueIdentifier>{0612befb-7084-4b46-b32b-d5ead0672234}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\hook">
       <UniqueIdentifier>{5ce23ca5-1996-4d47-9fcd-2fe1aac055b2}</UniqueIdentifier>
     </Filter>
@@ -55,6 +52,9 @@
     <Filter Include="Resource Files\pe">
       <UniqueIdentifier>{0a32b6d7-0f49-4299-ab83-548d1b536aaf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\wow64ext">
+      <UniqueIdentifier>{16d39da4-ca62-4ff8-bbc1-a746eba337f1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\geek\hook\inline_hook.h">
@@ -78,13 +78,10 @@
     <ClInclude Include="..\include\geek\process\process_info.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\wow64ext\internal.h">
+    <ClInclude Include="..\include\geek\wow64ext\wow64extdefs.h">
       <Filter>Header Files\wow64ext</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\wow64ext\wow64ext.h">
-      <Filter>Header Files\wow64ext</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\wow64ext\wow64ext.hpp">
       <Filter>Header Files\wow64ext</Filter>
     </ClInclude>
     <ClInclude Include="insn_len.h">
@@ -98,12 +95,6 @@
     </ClInclude>
     <ClInclude Include="..\include\geek\pe\image.h">
       <Filter>Header Files\pe</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\comm\pipe.hpp">
-      <Filter>Header Files\comm</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\comm\share_memory.hpp">
-      <Filter>Header Files\comm</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\utils\converter.h">
       <Filter>Header Files\utils</Filter>
@@ -119,6 +110,9 @@
     </ClInclude>
     <ClInclude Include="..\include\geek\process\thread.h">
       <Filter>Header Files\process</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\sign_searcher\sign_searcher.hpp">
+      <Filter>Header Files\sign_searcher</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -160,6 +154,9 @@
     </ClCompile>
     <ClCompile Include="thread.cpp">
       <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="wow64ext.cpp">
+      <Filter>Resource Files\wow64ext</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

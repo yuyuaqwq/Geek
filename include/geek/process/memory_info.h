@@ -16,9 +16,7 @@ struct MemoryInfo {
     uint64_t size;
     uint32_t protect;
     uint32_t state;
-
 };
-
 };
 
 #endif // GEEK_PROCESS_MEMORY_INFO_H_

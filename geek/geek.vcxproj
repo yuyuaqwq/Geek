@@ -19,8 +19,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\geek\comm\pipe.hpp" />
-    <ClInclude Include="..\include\geek\comm\share_memory.hpp" />
     <ClInclude Include="..\include\geek\hook\inline_hook.h" />
     <ClInclude Include="..\include\geek\hook\page_hook.h" />
     <ClInclude Include="..\include\geek\hook\vft_hook.h" />
@@ -32,12 +30,12 @@
     <ClInclude Include="..\include\geek\process\process.h" />
     <ClInclude Include="..\include\geek\process\process_info.h" />
     <ClInclude Include="..\include\geek\process\thread.h" />
+    <ClInclude Include="..\include\geek\sign_searcher\sign_searcher.hpp" />
     <ClInclude Include="..\include\geek\utils\converter.h" />
     <ClInclude Include="..\include\geek\utils\file.h" />
     <ClInclude Include="..\include\geek\utils\handle.h" />
-    <ClInclude Include="..\include\geek\wow64ext\internal.h" />
+    <ClInclude Include="..\include\geek\wow64ext\wow64extdefs.h" />
     <ClInclude Include="..\include\geek\wow64ext\wow64ext.h" />
-    <ClInclude Include="..\include\geek\wow64ext\wow64ext.hpp" />
     <ClInclude Include="image_impl.h" />
     <ClInclude Include="insn_len.h" />
   </ItemGroup>
@@ -55,6 +53,7 @@
     <ClCompile Include="process.cpp" />
     <ClCompile Include="process_info.cpp" />
     <ClCompile Include="thread.cpp" />
+    <ClCompile Include="wow64ext.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

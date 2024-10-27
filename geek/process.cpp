@@ -1,5 +1,12 @@
 #include <geek/process/process.h>
 
+#include <algorithm>
+#include <array>
+#include <mutex>
+#include <cstddef>
+#include <geek/process/ntinc.h>
+#include <geek/utils/converter.h>
+
 namespace geek {
 namespace {
 template<typename IMAGE_THUNK_DATA_T>

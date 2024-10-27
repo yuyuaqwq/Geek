@@ -1,6 +1,10 @@
 ﻿#pragma once
 #include <geek/pe/image.h>
 
+#undef min
+#undef max
+
+
 namespace geek {
 class Image::Impl
 {

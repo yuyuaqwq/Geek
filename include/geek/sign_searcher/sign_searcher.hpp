@@ -5,10 +5,10 @@
 #include <vector>
 #include <optional>
 
-#include <geek/process/process.hpp>
+#include <geek/process/process.h>
 
 
-namespace Geek{
+namespace geek{
 
 class SignSearcher {
 private:

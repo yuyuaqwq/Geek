@@ -1,12 +1,8 @@
 #ifndef GEEK_UTILS_CONVERTER_H_
 #define GEEK_UTILS_CONVERTER_H_
 
-#include <exception>
-#include <memory>
 #include <string>
 #include <vector>
-
-#include <Windows.h>
 
 namespace geek {
 

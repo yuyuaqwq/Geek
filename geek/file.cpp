@@ -3,6 +3,8 @@
 #include <TlHelp32.h>
 #include <UserEnv.h>
 
+#pragma comment(lib, "UserEnv.lib")
+
 namespace geek {
 File::File(File&& file) noexcept
 	: fs_{std::move(file.fs_)}

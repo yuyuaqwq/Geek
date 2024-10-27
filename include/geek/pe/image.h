@@ -12,10 +12,6 @@
 #include <ntimage.h>
 #endif
 
-#undef min
-#undef max
-
-
 namespace geek {
 class Image {
 public:

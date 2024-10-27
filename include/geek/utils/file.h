@@ -7,7 +7,6 @@
 #include <optional>
 
 #include <Windows.h>
-#pragma comment(lib, "UserEnv.lib")
 
 namespace geek {
 
