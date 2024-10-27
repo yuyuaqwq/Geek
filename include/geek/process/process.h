@@ -2,13 +2,13 @@
 #define GEEK_PROCESS_PROCESS_HPP_
 
 #include <string>
-#include <algorithm>
-#include <array>
 #include <vector>
 #include <map>
 #include <optional>
 #include <functional>
 #include <mutex>
+#include <algorithm>
+#include <array>
 #include <cstddef>
 
 #ifndef WINNT
@@ -24,14 +24,15 @@
 
 #include <geek/process/ntinc.h>
 #include <geek/utils/converter.h>
-#include <geek/process/module_info.hpp>
-#include <geek/process/memory_info.hpp>
-#include <geek/process/process_info.hpp>
-#include <geek/handle.hpp>
-#include <geek/pe/image.hpp>
-#include <geek/thread/thread.hpp>
+#include <geek/process/module_info.h>
+#include <geek/process/memory_info.h>
+#include <geek/process/process_info.h>
+#include <geek/process/thread.h>
+
+#include <geek/utils/handle.h>
+#include <geek/pe/image.h>
 #include <geek/wow64ext/wow64ext.hpp>
-#include <geek/file/file.hpp>
+#include <geek/utils/file.h>
 
 namespace geek {
 
@@ -61,9 +62,7 @@ public:
     DWORD ProcId() const noexcept;
     bool IsX86() const noexcept;
     bool IsCur() const;
-    /*
-    * Memory
-    */
+
     std::optional<uint64_t> AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
     std::optional<uint64_t> AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
     bool FreeMemory(uint64_t addr, size_t size = 0, DWORD type = MEM_RELEASE) const;
@@ -74,19 +73,13 @@ public:
     bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) const;
     std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
     std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const;
-    bool ScanMemoryInfoList(std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)> callback, bool include_module = false) const;
-    /*
-    * Info
-    */
+    bool ScanMemoryInfoList(const std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)>& callback, bool include_module = false) const;
+
     std::optional<std::wstring> GetCommandLineStr() const;
-    /*
-    * Run
-    */
+
     std::optional<uint16_t> LockAddress(uint64_t addr);
     bool UnlockAddress(uint64_t addr, uint16_t instr);
-    /*
-    * Thread
-    */
+
     std::optional<Thread> CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/);
     std::optional<uint16_t> BlockThread(Thread* thread);
     bool ResumeBlockedThread(Thread* thread, uint16_t instr);
@@ -97,9 +90,7 @@ public:
     bool SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) const;
     bool WaitExit(DWORD dwMilliseconds = INFINITE) const;
     std::optional<DWORD> GetExitCode() const;
-    /*
-    * Image
-    */
+
     std::optional<uint64_t> LoadLibraryFromImage(
         Image* image,
         bool exec_tls_callback = true,
@@ -111,16 +102,12 @@ public:
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base);
     bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) const;
     bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true);
-    /*
-    * library
-    */
+
     std::optional<uint64_t> LoadLibraryW(std::wstring_view lib_name, bool sync = true);
     bool FreeLibrary(uint64_t module_base);
     std::optional<Image> GetImageByModuleInfo(const geek::ModuleInfo& info) const;
     std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name);
-    /*
-    * call
-    */
+
     // 此处的Call开销较大，非跨进程/少量调用的场景，请使用传递CallContext的Call
     // 注：如果调用的是X86，par_list传递uint64_t会被截断为uint32_t
     enum class CallConvention {
@@ -177,18 +164,12 @@ public:
     bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true);
 
     bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false);
-    /*
-    * TLS
-    */
+
     // PIMAGE_TLS_CALLBACK
     bool ExecuteTls(Image* image, uint64_t image_base);
-    /*
-    * Running
-    */
+
     bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true);
-    /*
-    * Module
-    */
+
     std::optional<std::vector<ModuleInfo>> GetModuleInfoList() const;
     std::optional<ModuleInfo> GetModuleInfoByModuleName(std::wstring_view name) const;
     std::optional<ModuleInfo> GetModuleInfoByModuleBase(uint64_t base) const;
@@ -201,9 +182,6 @@ public:
     static std::optional<std::wstring> GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr);
     static std::optional<DWORD> GetProcessIdByProcessName(std::wstring_view processName, int count = 1);
     static bool Terminate(std::wstring_view processName);
-
-    //inline static const HANDLE kCurrentProcess = (HANDLE)-1;
-    //inline static Wow64 ms_wow64;
 private:
     UniqueHandle process_handle_;
 };

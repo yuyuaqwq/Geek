@@ -21,30 +21,40 @@
   <ItemGroup>
     <ClInclude Include="..\include\geek\comm\pipe.hpp" />
     <ClInclude Include="..\include\geek\comm\share_memory.hpp" />
-    <ClInclude Include="..\include\geek\file\file.hpp" />
-    <ClInclude Include="..\include\geek\handle.hpp" />
     <ClInclude Include="..\include\geek\hook\inline_hook.h" />
     <ClInclude Include="..\include\geek\hook\page_hook.h" />
     <ClInclude Include="..\include\geek\hook\vft_hook.h" />
-    <ClInclude Include="..\include\geek\pe\image.hpp" />
-    <ClInclude Include="..\include\geek\process\debug.hpp" />
-    <ClInclude Include="..\include\geek\process\memory_info.hpp" />
-    <ClInclude Include="..\include\geek\process\module_info.hpp" />
+    <ClInclude Include="..\include\geek\pe\image.h" />
+    <ClInclude Include="..\include\geek\process\debug.h" />
+    <ClInclude Include="..\include\geek\process\memory_info.h" />
+    <ClInclude Include="..\include\geek\process\module_info.h" />
     <ClInclude Include="..\include\geek\process\ntinc.h" />
     <ClInclude Include="..\include\geek\process\process.h" />
-    <ClInclude Include="..\include\geek\process\process_info.hpp" />
-    <ClInclude Include="..\include\geek\thread\thread.hpp" />
+    <ClInclude Include="..\include\geek\process\process_info.h" />
+    <ClInclude Include="..\include\geek\process\thread.h" />
     <ClInclude Include="..\include\geek\utils\converter.h" />
+    <ClInclude Include="..\include\geek\utils\file.h" />
+    <ClInclude Include="..\include\geek\utils\handle.h" />
     <ClInclude Include="..\include\geek\wow64ext\internal.h" />
     <ClInclude Include="..\include\geek\wow64ext\wow64ext.h" />
     <ClInclude Include="..\include\geek\wow64ext\wow64ext.hpp" />
+    <ClInclude Include="image_impl.h" />
     <ClInclude Include="insn_len.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="converter.cpp" />
+    <ClCompile Include="debug.cpp" />
+    <ClCompile Include="file.cpp" />
+    <ClCompile Include="handle.cpp" />
+    <ClCompile Include="image.cpp" />
+    <ClCompile Include="image_impl.cpp" />
     <ClCompile Include="inline_hook.cpp" />
+    <ClCompile Include="memory_info.cpp" />
+    <ClCompile Include="module_info.cpp" />
     <ClCompile Include="page_hook.cpp" />
     <ClCompile Include="process.cpp" />
+    <ClCompile Include="process_info.cpp" />
+    <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

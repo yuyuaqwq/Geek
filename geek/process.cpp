@@ -178,7 +178,7 @@ std::optional<std::tuple<Process, Thread>> Process::CreateByToken(std::wstring_v
 		return {};
 	}
 	UniqueHandle hProcess{ OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid.value()) };
-	OpenProcessToken(hProcess.Get(), TOKEN_ALL_ACCESS, &hToken_);
+	OpenProcessToken(*hProcess, TOKEN_ALL_ACCESS, &hToken_);
 	if (hToken_ == NULL) {
 		return {};
 	}
@@ -197,7 +197,7 @@ std::optional<std::tuple<Process, Thread>> Process::CreateByToken(std::wstring_v
 	si->dwFlags |= STARTF_USESHOWWINDOW;
 	si->wShowWindow |= SW_HIDE;
 	std::wstring command_copy = command.data();
-	BOOL ret = CreateProcessAsUserW(hToken.Get(), NULL, (LPWSTR)command_copy.c_str(), NULL, NULL, inheritHandles, creationFlags | NORMAL_PRIORITY_CLASS, NULL, NULL, si, pi);
+	BOOL ret = CreateProcessAsUserW(*hToken, NULL, (LPWSTR)command_copy.c_str(), NULL, NULL, inheritHandles, creationFlags | NORMAL_PRIORITY_CLASS, NULL, NULL, si, pi);
 	if (!ret) {
 		return {};
 	}
@@ -250,7 +250,7 @@ HANDLE Process::Handle() const noexcept
 	if (this == nullptr) {
 		return kCurrentProcess;
 	}
-	return process_handle_.Get();
+	return *process_handle_;
 }
 
 DWORD Process::ProcId() const noexcept
@@ -285,7 +285,7 @@ bool Process::IsX86() const noexcept
 
 bool Process::IsCur() const
 {
-	return this == nullptr || process_handle_.Get() == kCurrentProcess;
+	return this == nullptr || *process_handle_ == kCurrentProcess;
 }
 
 std::optional<uint64_t> Process::AllocMemory(uint64_t addr, size_t len, DWORD type, DWORD protect) const
@@ -479,7 +479,7 @@ std::optional<std::vector<MemoryInfo>> Process::GetMemoryInfoList() const
 	return memory_block_list;
 }
 
-bool Process::ScanMemoryInfoList(std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)> callback,
+bool Process::ScanMemoryInfoList(const std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)>& callback,
 	bool include_module) const
 {
 	bool success = false;
@@ -765,10 +765,10 @@ bool Process::GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 	bool success;
 	context.ContextFlags = flags;
 	if (!CurIsX86()) {
-		success = ::Wow64GetThreadContext(thread->Get(), &context);
+		success = ::Wow64GetThreadContext(thread->handle(), &context);
 	}
 	else {
-		success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+		success = ::GetThreadContext(thread->handle(), reinterpret_cast<CONTEXT*>(&context));
 	}
 	return success;
 }
@@ -781,10 +781,10 @@ bool Process::GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags)
 	bool success;
 	context.ContextFlags = flags;
 	if (ms_wow64.Wow64Operation(Handle())) {
-		success = ms_wow64.GetThreadContext64(thread->Get(), &context);
+		success = ms_wow64.GetThreadContext64(thread->handle(), &context);
 	}
 	else {
-		success = ::GetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+		success = ::GetThreadContext(thread->handle(), reinterpret_cast<CONTEXT*>(&context));
 	}
 	return success;
 }
@@ -797,10 +797,10 @@ bool Process::SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 	bool success; 
 	context.ContextFlags = flags;
 	if (!CurIsX86()) {
-		success = ::Wow64SetThreadContext(thread->Get(), &context);
+		success = ::Wow64SetThreadContext(thread->handle(), &context);
 	}
 	else {
-		success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+		success = ::SetThreadContext(thread->handle(), reinterpret_cast<CONTEXT*>(&context));
 	}
 	return success;
 }
@@ -813,10 +813,10 @@ bool Process::SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags)
 	bool success;
 	context.ContextFlags = flags;
 	if (ms_wow64.Wow64Operation(Handle())) {
-		success = ms_wow64.SetThreadContext64(thread->Get(), &context);
+		success = ms_wow64.SetThreadContext64(thread->handle(), &context);
 	}
 	else {
-		success = ::SetThreadContext(thread->Get(), reinterpret_cast<CONTEXT*>(&context));
+		success = ::SetThreadContext(thread->handle(), reinterpret_cast<CONTEXT*>(&context));
 	}
 	return success;
 }
@@ -2000,7 +2000,7 @@ bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_pa
 {
 	if (IsCur()) {
 		uint32_t rva = image->GetEntryPoint();
-		if (image->m_file_header->Characteristics & IMAGE_FILE_DLL) {
+		if (image->IsDll()) {
 			if (image->IsPE32()) {
 				DllEntryProc32 DllEntry = (DllEntryProc32)(image_base + rva);
 				DllEntry((uint32_t)image_base, DLL_PROCESS_ATTACH, (uint32_t)init_parameter);
@@ -2215,7 +2215,7 @@ bool Process::CurIsX86()
 
 DWORD Process::GetProcessIdFromThread(Thread* thread)
 {
-	return ::GetProcessIdOfThread(thread->Get());
+	return ::GetProcessIdOfThread(thread->handle());
 }
 
 std::optional<std::vector<ProcessInfo>> Process::GetProcessInfoList()
@@ -2225,12 +2225,12 @@ std::optional<std::vector<ProcessInfo>> Process::GetProcessInfoList()
 	std::vector<ProcessInfo> processEntryList;
 
 	UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
-	if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
+	if (!Process32FirstW(*hProcessSnap, &pe32)) {
 		return {};
 	}
 	do {
 		processEntryList.push_back(ProcessInfo(pe32));
-	} while (Process32NextW(hProcessSnap.Get(), &pe32));
+	} while (Process32NextW(*hProcessSnap, &pe32));
 	return processEntryList;
 }
 
@@ -2241,12 +2241,12 @@ std::optional<std::map<DWORD, ProcessInfo>> Process::GetProcessIdMap()
 	std::map<DWORD, ProcessInfo> process_map;
 
 	UniqueHandle hProcessSnap{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL) };
-	if (!Process32FirstW(hProcessSnap.Get(), &pe32)) {
+	if (!Process32FirstW(*hProcessSnap, &pe32)) {
 		return {};
 	}
 	do {
 		process_map.insert(std::make_pair(pe32.th32ProcessID, ProcessInfo(pe32)));
-	} while (Process32NextW(hProcessSnap.Get(), &pe32));
+	} while (Process32NextW(*hProcessSnap, &pe32));
 	return process_map;
 }
 

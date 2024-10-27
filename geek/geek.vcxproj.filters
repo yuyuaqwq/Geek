@@ -16,9 +16,6 @@
     <Filter Include="Header Files\comm">
       <UniqueIdentifier>{0612befb-7084-4b46-b32b-d5ead0672234}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\file">
-      <UniqueIdentifier>{75d833a5-5897-4974-ba87-d5a359251043}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\hook">
       <UniqueIdentifier>{5ce23ca5-1996-4d47-9fcd-2fe1aac055b2}</UniqueIdentifier>
     </Filter>
@@ -40,9 +37,6 @@
     <Filter Include="Header Files\system">
       <UniqueIdentifier>{24a69e48-9ace-482a-ae52-f5ca199441c7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\thread">
-      <UniqueIdentifier>{d28b07e7-16da-4a4e-be35-58196720f19a}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\wow64ext">
       <UniqueIdentifier>{8b866eb0-14ac-4f64-9791-55aab1b39e89}</UniqueIdentifier>
     </Filter>
@@ -58,18 +52,21 @@
     <Filter Include="Resource Files\process">
       <UniqueIdentifier>{fb2718cb-202e-4626-920b-257a3b74729c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\pe">
+      <UniqueIdentifier>{0a32b6d7-0f49-4299-ab83-548d1b536aaf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\geek\hook\inline_hook.h">
       <Filter>Header Files\hook</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\process\debug.hpp">
+    <ClInclude Include="..\include\geek\process\debug.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\process\memory_info.hpp">
+    <ClInclude Include="..\include\geek\process\memory_info.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\process\module_info.hpp">
+    <ClInclude Include="..\include\geek\process\module_info.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\process\ntinc.h">
@@ -78,7 +75,7 @@
     <ClInclude Include="..\include\geek\process\process.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\process\process_info.hpp">
+    <ClInclude Include="..\include\geek\process\process_info.h">
       <Filter>Header Files\process</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\wow64ext\internal.h">
@@ -99,17 +96,8 @@
     <ClInclude Include="..\include\geek\hook\vft_hook.h">
       <Filter>Header Files\hook</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\geek\pe\image.hpp">
+    <ClInclude Include="..\include\geek\pe\image.h">
       <Filter>Header Files\pe</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\file\file.hpp">
-      <Filter>Header Files\file</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\handle.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\thread\thread.hpp">
-      <Filter>Header Files\thread</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\comm\pipe.hpp">
       <Filter>Header Files\comm</Filter>
@@ -119,6 +107,18 @@
     </ClInclude>
     <ClInclude Include="..\include\geek\utils\converter.h">
       <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\utils\file.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\utils\handle.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="image_impl.h">
+      <Filter>Resource Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\process\thread.h">
+      <Filter>Header Files\process</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -132,6 +132,33 @@
       <Filter>Resource Files\utils</Filter>
     </ClCompile>
     <ClCompile Include="process.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="file.cpp">
+      <Filter>Resource Files\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="module_info.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="memory_info.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="debug.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="process_info.cpp">
+      <Filter>Resource Files\process</Filter>
+    </ClCompile>
+    <ClCompile Include="handle.cpp">
+      <Filter>Resource Files\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="image.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="image_impl.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="thread.cpp">
       <Filter>Resource Files\process</Filter>
     </ClCompile>
   </ItemGroup>
