@@ -111,7 +111,8 @@ uint32_t Image::Impl::PointToRaw(void* point)
 	for (int i = 0; i < file_header_->NumberOfSections; i++) {
 		auto addr = &section_list_[i][0];
 		if ((uint8_t*)point >= addr && (uint8_t*)point < &section_list_[i][section_list_[i].size() - 1]) {
-			return section_header_table_[i].VirtualAddress + ((uintptr_t)point - (uintptr_t)section_list_[i].data());
+			auto off = reinterpret_cast<uintptr_t>(point) - reinterpret_cast<uintptr_t>(section_list_[i].data());
+			return section_header_table_[i].VirtualAddress + static_cast<DWORD>(off);
 		}
 	}
 	return 0;

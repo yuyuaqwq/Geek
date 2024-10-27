@@ -26,23 +26,24 @@ std::optional<File> File::Open(std::wstring_view path, std::ios_base::openmode m
 	return temp;
 }
 
-std::vector<uint8_t> File::Read(uint32_t offset, uint32_t len)
+std::vector<uint8_t> File::Read(std::streamoff offset, std::streampos len)
 {
 	std::vector<uint8_t> ret;
 	if (len == 0) {
 		fs_.seekg(offset, std::ios_base::end);
 		len = fs_.tellg();
 	}
+
 	fs_.seekg(offset, std::ios_base::beg);
 	ret.resize(len);
-	fs_.read((char*)ret.data(), len);
+	fs_.read(reinterpret_cast<char*>(ret.data()), len);
 	return ret;
 }
 
-bool File::Write(const std::vector<uint8_t>& buf, uint32_t offset)
+bool File::Write(const std::vector<uint8_t>& buf, std::streamoff offset)
 {
 	fs_.seekg(offset, std::ios_base::beg);
-	fs_.write((char*)buf.data(), buf.size());
+	fs_.write(reinterpret_cast<const char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
 	return true;
 }
 
@@ -175,7 +176,7 @@ std::wstring File::ExpandSysEnvsByName(const std::wstring& envsName)
 std::wstring File::GetFileName(const std::wstring& filePath)
 {
 	auto pos = filePath.rfind(L'\\');
-	if (pos == -1) {
+	if (pos == std::string::npos) {
 		return filePath;
 	}
 	return filePath.substr(pos + 1);
@@ -185,12 +186,12 @@ std::wstring File::GetFileDir(const std::wstring& filePath, int level)
 {
 	size_t pos;
 	if (level > 0) {
-		pos = -1;
+		pos = std::string::npos;
 		for (int i = 0; i < level; i++) {
 			pos = filePath.find(L'\\', pos + 1);
-			if (pos == -1) {
+			if (pos == std::string::npos) {
 				pos = filePath.find(L'/', pos + 1);
-				if (pos == -1) {
+				if (pos == std::string::npos) {
 					return L"";
 				}
 			}
@@ -201,9 +202,9 @@ std::wstring File::GetFileDir(const std::wstring& filePath, int level)
 		pos = 0;
 		for (int i = 0; i < level; i++) {
 			pos = filePath.rfind(L'\\', pos - 1);
-			if (pos == -1) {
+			if (pos == std::string::npos) {
 				pos = filePath.find(L'/', pos - 1);
-				if (pos == -1) {
+				if (pos == std::string::npos) {
 					return L"";
 				}
 			}
@@ -218,7 +219,7 @@ uint64_t File::GetFileSize(const std::wstring& filePath)
 	if (hFile == INVALID_HANDLE_VALUE) {
 		return 0;
 	}
-	LARGE_INTEGER li{ 0 };
+	LARGE_INTEGER li{};
 	::GetFileSizeEx(hFile, &li);
 	CloseHandle(hFile);
 	return li.QuadPart;

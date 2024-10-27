@@ -55,14 +55,16 @@ template <typename IMAGE_THUNK_DATA_T>
 std::optional<uint32_t> Image::Impl::GetImportAddressRawByNameFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor,
 	const std::string& func_name)
 {
-	IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->OriginalFirstThunk);
-	IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->FirstThunk);
+	auto import_name_table = reinterpret_cast<IMAGE_THUNK_DATA_T*>(RvaToPoint(import_descriptor->OriginalFirstThunk));
+	auto import_address_table = reinterpret_cast<IMAGE_THUNK_DATA_T*>(RvaToPoint(import_descriptor->FirstThunk));
 	for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
 		if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
 			continue;
 		}
 		else {
-			IMAGE_IMPORT_BY_NAME* cur_func_name = (IMAGE_IMPORT_BY_NAME*)RvaToPoint(import_name_table->u1.AddressOfData);
+			//TODO 收缩转换,可能有问题
+			auto cur_func_name = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(RvaToPoint(static_cast<uint32_t>(
+				import_name_table->u1.AddressOfData)));
 			if (func_name == cur_func_name->Name) {
 				auto raw = PointToRaw(&import_address_table->u1.Function);
 				if (raw == 0) return {};
@@ -77,10 +79,11 @@ template <typename IMAGE_THUNK_DATA_T>
 std::optional<uint32_t> Image::Impl::GetImportAddressRawByAddressFromDll(_IMAGE_IMPORT_DESCRIPTOR* import_descriptor,
 	void* address)
 {
-	IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->OriginalFirstThunk);
-	IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)RvaToPoint(import_descriptor->FirstThunk);
-	for (; import_name_table->u1.Function; import_name_table++, import_address_table++) {
-		if ((void*)import_address_table->u1.Function == address) {
+	auto import_name_table = reinterpret_cast<IMAGE_THUNK_DATA_T*>(RvaToPoint(import_descriptor->OriginalFirstThunk));
+	auto import_address_table = reinterpret_cast<IMAGE_THUNK_DATA_T*>(RvaToPoint(import_descriptor->FirstThunk));
+	for (; import_name_table->u1.Function; ++import_name_table, ++import_address_table) {
+
+		if (reinterpret_cast<void*>(static_cast<size_t>(import_address_table->u1.Function)) == address) {
 			auto raw = PointToRaw(&import_address_table->u1.Function);
 			if (raw == 0) return {};
 			return raw;

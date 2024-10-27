@@ -1,11 +1,21 @@
 #include "image_impl.h"
 
 #define GET_OPTIONAL_HEADER_FIELD(field, var) \
-    { if (impl_->nt_header_->OptionalHeader.Magic == 0x10b) var = impl_->nt_header_->OptionalHeader.##field; \
-    else /* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ var = ((IMAGE_NT_HEADERS64*)impl_->nt_header_)->OptionalHeader.##field; } 
+{	\
+	if (impl_->nt_header_->OptionalHeader.Magic == 0x10b) \
+		var = impl_->nt_header_->OptionalHeader.##field;			\
+	else /* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ \
+		var = reinterpret_cast<IMAGE_NT_HEADERS64*>(impl_->nt_header_)->OptionalHeader.##field; \
+}
+
 #define SET_OPTIONAL_HEADER_FIELD(field, var) \
-    { if (impl_->nt_header_->OptionalHeader.Magic == 0x10b) impl_->nt_header_->OptionalHeader.##field = var; \
-    else/* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ ((IMAGE_NT_HEADERS64*)impl_->nt_header_)->OptionalHeader.##field = var; } 
+{ \
+	using Type = decltype(impl_->nt_header_->OptionalHeader.##field); \
+	if (impl_->nt_header_->OptionalHeader.Magic == 0x10b)  \
+		impl_->nt_header_->OptionalHeader.##field = static_cast<Type>(var); \
+    else/* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ \
+		reinterpret_cast<IMAGE_NT_HEADERS64*>(impl_->nt_header_)->OptionalHeader.##field = static_cast<Type>(var); \
+} 
 
 namespace geek {
 Image::~Image()
@@ -15,14 +25,13 @@ Image::~Image()
 			delete impl_->nt_header_;
 		}
 		else {
-			delete (IMAGE_NT_HEADERS64*)impl_->nt_header_;
+			delete reinterpret_cast<IMAGE_NT_HEADERS64*>(impl_->nt_header_);
 		}
 	}
 }
 
 Image::Image()
-{
-}
+= default;
 
 Image::Image(Image&& other) noexcept
 {
@@ -69,7 +78,7 @@ std::optional<Image> Image::LoadFromFile(std::wstring_view path)
 	return temp;
 }
 
-bool Image::ReloadFromImageBuf(void* buf_, uint64_t memory_image_base)
+bool Image::ReloadFromImageBuf(void* buf_, uint64_t memory_image_base) const
 {
 	IMAGE_SECTION_HEADER* sectionHeaderTable;
 	if (!impl_->CopyPEHeader(buf_, &sectionHeaderTable)) {
@@ -97,7 +106,7 @@ bool Image::ReloadFromImageBuf(void* buf_, uint64_t memory_image_base)
 	return true;
 }
 
-bool Image::ReloadFromFileBuf(void* buf_, uint64_t memory_image_base)
+bool Image::ReloadFromFileBuf(void* buf_, uint64_t memory_image_base) const
 {
 	IMAGE_SECTION_HEADER* sectionHeaderTable;
 	if (!impl_->CopyPEHeader(buf_, &sectionHeaderTable)) {
@@ -132,7 +141,7 @@ bool Image::ReloadFromFileBuf(void* buf_, uint64_t memory_image_base)
 	return true;
 }
 
-bool Image::ReloadFromFile(std::wstring_view path)
+bool Image::ReloadFromFile(std::wstring_view path) const
 {
 	auto pe = File::Open(path, std::ios::in | std::ios::binary);
 	if (!pe) {
@@ -142,7 +151,7 @@ bool Image::ReloadFromFile(std::wstring_view path)
 	return ReloadFromFileBuf(buf.data(), 0);
 }
 
-bool Image::SaveToFile(std::wstring_view path)
+bool Image::SaveToFile(std::wstring_view path) const
 {
 	auto pe = File::Open(path, std::ios::out | std::ios::binary | std::ios::trunc);
 	if (!pe) {
@@ -152,10 +161,10 @@ bool Image::SaveToFile(std::wstring_view path)
 	return pe.value().Write(buf);
 }
 
-std::vector<uint8_t> Image::SaveToFileBuf()
+std::vector<uint8_t> Image::SaveToFileBuf() const
 {
 	std::vector<uint8_t> buf(GetFileSize(), 0);
-	int offset = 0;
+	size_t offset = 0;
 
 	memcpy(&buf[offset], &impl_->dos_header_, sizeof(impl_->dos_header_));
 	offset += sizeof(impl_->dos_header_);
@@ -185,9 +194,9 @@ std::vector<uint8_t> Image::SaveToFileBuf()
 	return buf;
 }
 
-void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_header)
+void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_header) const
 {
-	int offset = 0;
+	size_t offset = 0;
 	if (zero_pe_header) {
 		if (impl_->section_header_table_.size() > 0) {
 			memset(&save_buf[0], 0, impl_->section_header_table_[0].VirtualAddress - 1);
@@ -226,7 +235,7 @@ void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_
 	}
 }
 
-std::vector<uint8_t> Image::SaveToImageBuf(uint64_t image_base, bool zero_pe_header)
+std::vector<uint8_t> Image::SaveToImageBuf(uint64_t image_base, bool zero_pe_header) const
 {
 	std::vector<uint8_t> buf(GetImageSize(), 0);
 	SaveToImageBuf(buf.data(), image_base, zero_pe_header);
@@ -245,7 +254,7 @@ bool Image::IsDll() const
 
 uint32_t Image::GetFileSize() const
 {
-	int sum = GetPEHeaderSize();
+	auto sum = GetPEHeaderSize();
 	for (int i = 0; i < impl_->file_header_->NumberOfSections; i++) {
 		sum += impl_->section_header_table_[i].SizeOfRawData;
 	}
@@ -278,32 +287,32 @@ uint64_t Image::GetMemoryImageBase() const
 	return impl_->memory_image_base_;
 }
 
-void Image::SetMemoryImageBase(uint64_t imageBase)
+void Image::SetMemoryImageBase(uint64_t imageBase) const
 {
 	impl_->memory_image_base_ = imageBase;
 }
 
 void Image::SetImageBase(uint64_t imageBase) const
 {
-	SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
+	SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase)
 }
 
 uint32_t Image::GetEntryPoint() const
 {
 	uint32_t entry_point;
-	GET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point);
+	GET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point)
 	return entry_point;
 }
 
 void Image::SetEntryPoint(uint32_t entry_point) const
 {
-	SET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point);
+	SET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point)
 }
 
 IMAGE_DATA_DIRECTORY* Image::GetDataDirectory() const
 {
 	IMAGE_DATA_DIRECTORY* dataDirectory;
-	GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory);
+	GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory)
 	return dataDirectory;
 }
 
@@ -312,9 +321,9 @@ void* Image::RvaToPoint(uint32_t rva) const
 	return impl_->RvaToPoint(rva);
 }
 
-bool Image::RepairRepositionTable(uint64_t newImageBase)
+bool Image::RepairRepositionTable(uint64_t newImageBase) const
 {
-	auto relocationTable = (IMAGE_BASE_RELOCATION*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+	auto relocationTable = static_cast<IMAGE_BASE_RELOCATION*>(RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress));
 	if (relocationTable == nullptr) {
 		return false;
 	}
@@ -325,8 +334,8 @@ bool Image::RepairRepositionTable(uint64_t newImageBase)
 		if (blockRva == 0 && blockSize == 0) {
 			break;
 		}
-		uint16_t* fieldTable = (uint16_t*)((char*)relocationTable + sizeof(*relocationTable));
-		relocationTable    = (IMAGE_BASE_RELOCATION*)((char*)relocationTable + blockSize);
+		uint16_t* fieldTable = reinterpret_cast<uint16_t*>(reinterpret_cast<char*>(relocationTable) + sizeof(*relocationTable));
+		relocationTable    = reinterpret_cast<IMAGE_BASE_RELOCATION*>(reinterpret_cast<char*>(relocationTable) + blockSize);
 		auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
 		for (int i = 0; i < fieldCount; i++) {
 			auto offsetType = fieldTable[i] >> 12;
@@ -336,7 +345,7 @@ bool Image::RepairRepositionTable(uint64_t newImageBase)
 			auto Rva = blockRva + (fieldTable[i] & 0xfff);
 			if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
 				auto addr = (uint32_t*)RvaToPoint(Rva);
-				*addr = *addr - imageBase + newImageBase;
+				*addr = *addr - static_cast<uint32_t>(imageBase + newImageBase);
 			}
 			else if (offsetType == IMAGE_REL_BASED_DIR64) {
 				auto addr = (uint64_t*)RvaToPoint(Rva);
@@ -348,7 +357,7 @@ bool Image::RepairRepositionTable(uint64_t newImageBase)
 	return true;
 }
 
-uint32_t Image::GetExportRvaByName(const std::string& func_name)
+uint32_t Image::GetExportRvaByName(const std::string& func_name) const
 {
 	auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 	if (exportDirectory == nullptr) {
@@ -359,7 +368,7 @@ uint32_t Image::GetExportRvaByName(const std::string& func_name)
 	auto addressOfNameOrdinals = (uint16_t*)RvaToPoint(exportDirectory->AddressOfNameOrdinals);
 	auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
 	int funcIdx = -1;
-	for (int i = 0; i < numberOfNames; i++) {
+	for (DWORD i = 0; i < numberOfNames; i++) {
 		auto exportName = (char*)RvaToPoint(addressOfNames[i]);
 		if (func_name == exportName) {
 			// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
@@ -400,6 +409,7 @@ std::optional<uint32_t> Image::GetImportAddressRawByName(const std::string& lib_
 			return impl_->GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, func_name);
 		}
 	}
+	return std::nullopt;
 }
 
 std::optional<uint32_t> Image::GetImportAddressRawByAddr(void* address)
@@ -420,28 +430,28 @@ std::optional<uint32_t> Image::GetImportAddressRawByAddr(void* address)
 			}
 		}
 	}
-	return {};
+	return std::nullopt;
 }
 
-bool Image::CheckSum()
+bool Image::CheckSum() const
 {
 	uint32_t old_check_sum;
-	GET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
+	GET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum)
+	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0)
 	auto buf = SaveToFileBuf();
-	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), buf.size());
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum);
+	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), static_cast<uint32_t>(buf.size()));
+	SET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum)
 
 	return old_check_sum == check_sum;
 }
 
-void Image::RepairCheckSum()
+void Image::RepairCheckSum() const
 {
 	// https://blog.csdn.net/iiprogram/article/details/1585940/
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0);
+	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0)
 	auto buf = SaveToFileBuf();
-	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), buf.size());
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum);
+	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), static_cast<uint32_t>(buf.size()));
+	SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum)
 }
 
 std::optional<std::vector<uint8_t>> Image::GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type)

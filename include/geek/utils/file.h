@@ -18,8 +18,8 @@ public:
 
     static std::optional<File> Open(std::wstring_view path, std::ios_base::openmode mode = std::ios_base::in | std::ios_base::out);
 
-    std::vector<uint8_t> Read(uint32_t offset = 0, uint32_t len = 0);
-    bool Write(const std::vector<uint8_t>& buf, uint32_t offset = 0);
+    std::vector<uint8_t> Read(std::streamoff offset = 0, std::streampos len = 0);
+    bool Write(const std::vector<uint8_t>& buf, std::streamoff offset = 0);
 
     static std::wstring GetAppDirectory();
     static std::vector<std::wstring> EnumFiles(
