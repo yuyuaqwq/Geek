@@ -22,7 +22,12 @@
     <ClInclude Include="..\include\geek\hook\inline_hook.h" />
     <ClInclude Include="..\include\geek\hook\page_hook.h" />
     <ClInclude Include="..\include\geek\hook\vft_hook.h" />
+    <ClInclude Include="..\include\geek\pe\data_directory\image_base_relocation.h" />
     <ClInclude Include="..\include\geek\pe\image.h" />
+    <ClInclude Include="..\include\geek\pe\image_data_directory.h" />
+    <ClInclude Include="..\include\geek\pe\image_nt_header.h" />
+    <ClInclude Include="..\include\geek\pe\image_optional_header.h" />
+    <ClInclude Include="..\include\geek\pe\image_section_header_table.h" />
     <ClInclude Include="..\include\geek\process\debug.h" />
     <ClInclude Include="..\include\geek\process\memory_info.h" />
     <ClInclude Include="..\include\geek\process\module_info.h" />
@@ -34,6 +39,7 @@
     <ClInclude Include="..\include\geek\utils\converter.h" />
     <ClInclude Include="..\include\geek\utils\file.h" />
     <ClInclude Include="..\include\geek\utils\handle.h" />
+    <ClInclude Include="..\include\geek\utils\property.h" />
     <ClInclude Include="..\include\geek\wow64ext\wow64extdefs.h" />
     <ClInclude Include="..\include\geek\wow64ext\wow64ext.h" />
     <ClInclude Include="image_impl.h" />
@@ -45,7 +51,12 @@
     <ClCompile Include="file.cpp" />
     <ClCompile Include="handle.cpp" />
     <ClCompile Include="image.cpp" />
+    <ClCompile Include="image_base_relocation.cpp" />
+    <ClCompile Include="image_data_directory.cpp" />
     <ClCompile Include="image_impl.cpp" />
+    <ClCompile Include="image_nt_header.cpp" />
+    <ClCompile Include="image_optional_header.cpp" />
+    <ClCompile Include="image_section_header_table.cpp" />
     <ClCompile Include="inline_hook.cpp" />
     <ClCompile Include="memory_info.cpp" />
     <ClCompile Include="module_info.cpp" />

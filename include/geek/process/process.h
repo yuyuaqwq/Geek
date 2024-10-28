@@ -171,7 +171,7 @@ public:
     static std::optional<std::vector<ProcessInfo>> GetProcessInfoList();
     static std::optional<std::map<DWORD, ProcessInfo>> GetProcessIdMap();
     static std::optional<std::wstring> GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr);
-    static std::optional<DWORD> GetProcessIdByProcessName(std::wstring_view processName, int count = 1);
+    static std::optional<DWORD> GetProcessIdByProcessName(std::wstring_view processName, size_t count = 1);
     static bool Terminate(std::wstring_view processName);
 private:
     UniqueHandle process_handle_;

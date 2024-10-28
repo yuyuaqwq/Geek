@@ -1375,9 +1375,9 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* conte
 	do {
 		if (sync && IsCur()) {
 			ExecPageHeaderX86 header;
-			header.call_addr = call_addr;
+			header.call_addr = static_cast<uint32_t>(call_addr);
 			header.context_addr = reinterpret_cast<uint32_t>(context);
-			header.stack_count = context->stack.size();
+			header.stack_count = static_cast<uint32_t>(context->stack.size());
 			header.stack_addr = reinterpret_cast<uint32_t>(context->stack.begin());
 			using Func = void(*)(ExecPageHeaderX86*);
 			Func func = reinterpret_cast<Func>(exec_page + exec_offset);
@@ -1392,10 +1392,10 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* conte
 			}
 
 			ExecPageHeaderX86 header;
-			header.call_addr = call_addr;
-			header.context_addr = exec_page + context_offset;
-			header.stack_count = context->stack.size();
-			header.stack_addr = exec_page + stack_offset;
+			header.call_addr = static_cast<uint32_t>(call_addr);
+			header.context_addr = static_cast<uint32_t>(exec_page + context_offset);
+			header.stack_count = static_cast<uint32_t>(context->stack.size());
+			header.stack_addr = static_cast<uint32_t>(exec_page + stack_offset);
 			if (!WriteMemory(exec_page + header_offset, &header, sizeof(header))) {
 				return false;
 			}
@@ -2275,7 +2275,7 @@ std::optional<std::wstring> Process::GetProcessNameByProcessId(DWORD pid, std::v
 	return {};
 }
 
-std::optional<DWORD> Process::GetProcessIdByProcessName(std::wstring_view processName, int count)
+std::optional<DWORD> Process::GetProcessIdByProcessName(std::wstring_view processName, size_t count)
 {
 	auto process_entry_list = GetProcessInfoList();
 	if (!process_entry_list) return {};

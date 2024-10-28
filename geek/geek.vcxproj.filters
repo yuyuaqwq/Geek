@@ -55,6 +55,12 @@
     <Filter Include="Resource Files\wow64ext">
       <UniqueIdentifier>{16d39da4-ca62-4ff8-bbc1-a746eba337f1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\pe\data_directory">
+      <UniqueIdentifier>{3d873f9f-d53b-4221-bfc7-b3fc1e31d5f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\pe\data_directory">
+      <UniqueIdentifier>{937f581d-7c63-4ca4-b35d-2d9fcf5aab92}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\geek\hook\inline_hook.h">
@@ -114,6 +120,24 @@
     <ClInclude Include="..\include\geek\sign_searcher\sign_searcher.hpp">
       <Filter>Header Files\sign_searcher</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\geek\pe\image_section_header_table.h">
+      <Filter>Header Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\utils\property.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\pe\image_optional_header.h">
+      <Filter>Header Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\pe\image_nt_header.h">
+      <Filter>Header Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\pe\image_data_directory.h">
+      <Filter>Header Files\pe</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\geek\pe\data_directory\image_base_relocation.h">
+      <Filter>Header Files\pe\data_directory</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="inline_hook.cpp">
@@ -157,6 +181,21 @@
     </ClCompile>
     <ClCompile Include="wow64ext.cpp">
       <Filter>Resource Files\wow64ext</Filter>
+    </ClCompile>
+    <ClCompile Include="image_section_header_table.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="image_optional_header.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="image_nt_header.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="image_data_directory.cpp">
+      <Filter>Resource Files\pe</Filter>
+    </ClCompile>
+    <ClCompile Include="image_base_relocation.cpp">
+      <Filter>Resource Files\pe\data_directory</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

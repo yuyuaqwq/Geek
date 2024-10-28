@@ -1,22 +1,5 @@
 #include "image_impl.h"
 
-#define GET_OPTIONAL_HEADER_FIELD(field, var) \
-{	\
-	if (impl_->nt_header_->OptionalHeader.Magic == 0x10b) \
-		var = impl_->nt_header_->OptionalHeader.##field;			\
-	else /* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ \
-		var = reinterpret_cast<IMAGE_NT_HEADERS64*>(impl_->nt_header_)->OptionalHeader.##field; \
-}
-
-#define SET_OPTIONAL_HEADER_FIELD(field, var) \
-{ \
-	using Type = decltype(impl_->nt_header_->OptionalHeader.##field); \
-	if (impl_->nt_header_->OptionalHeader.Magic == 0x10b)  \
-		impl_->nt_header_->OptionalHeader.##field = static_cast<Type>(var); \
-    else/* (impl_->m_nt_header->OptionalHeader.Magic == 0x20b)*/ \
-		reinterpret_cast<IMAGE_NT_HEADERS64*>(impl_->nt_header_)->OptionalHeader.##field = static_cast<Type>(var); \
-} 
-
 namespace geek {
 Image::~Image()
 {
@@ -93,9 +76,7 @@ bool Image::ReloadFromImageBuf(void* buf_, uint64_t memory_image_base) const
 	for (int i = 0; i < impl_->file_header_->NumberOfSections; i++) {
 		impl_->section_header_table_[i] = sectionHeaderTable[i];
 		auto virtual_size = std::max(impl_->section_header_table_[i].Misc.VirtualSize, impl_->section_header_table_[i].SizeOfRawData);
-		uint32_t SectionAlignment;
-		GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
-
+		
 		// 对齐不一定表示后面就有
 		/*if (virtual_size % SectionAlignment) {
                 virtual_size += SectionAlignment - virtual_size % SectionAlignment;
@@ -121,15 +102,14 @@ bool Image::ReloadFromFileBuf(void* buf_, uint64_t memory_image_base) const
 	for (int i = 0; i < impl_->file_header_->NumberOfSections; i++) {
 		impl_->section_header_table_[i] = sectionHeaderTable[i];
 		auto virtual_size = std::max(impl_->section_header_table_[i].Misc.VirtualSize, impl_->section_header_table_[i].SizeOfRawData);
-		uint32_t SectionAlignment;
-		GET_OPTIONAL_HEADER_FIELD(SectionAlignment, SectionAlignment);
+		uint32_t SectionAlignment = NtHeader().OptionalHeader().SectionAlignment();
 		if (virtual_size % SectionAlignment) {
 			virtual_size += SectionAlignment - virtual_size % SectionAlignment;
 		}
 
 		if (virtual_size == 0) {
 			// dll中没有数据的区段？
-			GET_OPTIONAL_HEADER_FIELD(SectionAlignment, virtual_size);
+			virtual_size = SectionAlignment;
 			impl_->section_list_[i].resize(virtual_size, 0);
 		}
 		else {
@@ -213,8 +193,9 @@ void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_
 		if (image_base == 0) {
 			image_base = (uint64_t)save_buf;
 		}
-		uint64_t old_image_base = GetImageBase();
-		SetImageBase(image_base);
+		auto opt_header = NtHeader().OptionalHeader();
+		uint64_t old_image_base = opt_header.ImageBase();
+		opt_header.SetImageBase(image_base);
 		if (impl_->nt_header_->OptionalHeader.Magic == 0x10b) {
 			memcpy(&save_buf[offset], impl_->nt_header_, sizeof(*impl_->nt_header_));
 			offset += sizeof(*impl_->nt_header_);
@@ -223,7 +204,7 @@ void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_
 			memcpy(&save_buf[offset], impl_->nt_header_, sizeof(IMAGE_NT_HEADERS64));
 			offset += sizeof(IMAGE_NT_HEADERS64);
 		}
-		SetImageBase(old_image_base);
+		opt_header.SetImageBase(old_image_base);
 
 		for (int i = 0; i < impl_->file_header_->NumberOfSections; i++) {
 			memcpy(&save_buf[offset], &impl_->section_header_table_[i], sizeof(impl_->section_header_table_[i]));
@@ -237,14 +218,14 @@ void Image::SaveToImageBuf(uint8_t* save_buf, uint64_t image_base, bool zero_pe_
 
 std::vector<uint8_t> Image::SaveToImageBuf(uint64_t image_base, bool zero_pe_header) const
 {
-	std::vector<uint8_t> buf(GetImageSize(), 0);
+	std::vector<uint8_t> buf(NtHeader().OptionalHeader().SizeOfImage(), 0);
 	SaveToImageBuf(buf.data(), image_base, zero_pe_header);
 	return buf;
 }
 
 bool Image::IsPE32() const
 {
-	return impl_->nt_header_->OptionalHeader.Magic == 0x10b;
+	return NtHeader().OptionalHeader().Magic() == MagicType::kHdr32;
 }
 
 bool Image::IsDll() const
@@ -252,34 +233,23 @@ bool Image::IsDll() const
 	return impl_->file_header_->Characteristics == IMAGE_FILE_DLL;
 }
 
+ImageNtHeader Image::NtHeader() const
+{
+	return { const_cast<Image&>(*this) };
+}
+
+ImageSectionHeaderTable Image::SectionHeaderTable() const
+{
+	return { const_cast<Image&>(*this) };
+}
+
 uint32_t Image::GetFileSize() const
 {
-	auto sum = GetPEHeaderSize();
+	auto sum = NtHeader().OptionalHeader().SizeOfHeaders();
 	for (int i = 0; i < impl_->file_header_->NumberOfSections; i++) {
 		sum += impl_->section_header_table_[i].SizeOfRawData;
 	}
 	return sum;
-}
-
-uint32_t Image::GetImageSize() const
-{
-	uint32_t headerSize;
-	GET_OPTIONAL_HEADER_FIELD(SizeOfImage, headerSize);
-	return headerSize;
-}
-
-uint32_t Image::GetPEHeaderSize() const
-{
-	uint32_t headerSize;
-	GET_OPTIONAL_HEADER_FIELD(SizeOfHeaders, headerSize);
-	return headerSize;
-}
-
-uint64_t Image::GetImageBase() const
-{
-	uint64_t imageBase;
-	GET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase);
-	return imageBase;
 }
 
 uint64_t Image::GetMemoryImageBase() const
@@ -290,30 +260,6 @@ uint64_t Image::GetMemoryImageBase() const
 void Image::SetMemoryImageBase(uint64_t imageBase) const
 {
 	impl_->memory_image_base_ = imageBase;
-}
-
-void Image::SetImageBase(uint64_t imageBase) const
-{
-	SET_OPTIONAL_HEADER_FIELD(ImageBase, imageBase)
-}
-
-uint32_t Image::GetEntryPoint() const
-{
-	uint32_t entry_point;
-	GET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point)
-	return entry_point;
-}
-
-void Image::SetEntryPoint(uint32_t entry_point) const
-{
-	SET_OPTIONAL_HEADER_FIELD(AddressOfEntryPoint, entry_point)
-}
-
-IMAGE_DATA_DIRECTORY* Image::GetDataDirectory() const
-{
-	IMAGE_DATA_DIRECTORY* dataDirectory;
-	GET_OPTIONAL_HEADER_FIELD(DataDirectory, dataDirectory)
-	return dataDirectory;
 }
 
 void* Image::RvaToPoint(uint32_t rva) const
@@ -435,23 +381,24 @@ std::optional<uint32_t> Image::GetImportAddressRawByAddr(void* address)
 
 bool Image::CheckSum() const
 {
-	uint32_t old_check_sum;
-	GET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum)
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0)
+	auto opt_header = NtHeader().OptionalHeader();
+	uint32_t old_check_sum = opt_header.CheckSum();
+	opt_header.SetCheckSum(0);
 	auto buf = SaveToFileBuf();
 	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), static_cast<uint32_t>(buf.size()));
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, old_check_sum)
+	opt_header.SetCheckSum(old_check_sum);
 
 	return old_check_sum == check_sum;
 }
 
 void Image::RepairCheckSum() const
 {
+	auto opt_header = NtHeader().OptionalHeader();
 	// https://blog.csdn.net/iiprogram/article/details/1585940/
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, 0)
+	opt_header.SetCheckSum(0);
 	auto buf = SaveToFileBuf();
 	uint32_t check_sum = impl_->generate_pe_checksum(buf.data(), static_cast<uint32_t>(buf.size()));
-	SET_OPTIONAL_HEADER_FIELD(CheckSum, check_sum)
+	opt_header.SetCheckSum(check_sum);
 }
 
 std::optional<std::vector<uint8_t>> Image::GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type)

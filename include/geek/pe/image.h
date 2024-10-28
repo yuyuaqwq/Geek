@@ -5,6 +5,9 @@
 #include <vector>
 #include <optional>
 
+#include <geek/pe/image_section_header_table.h>
+#include <geek/pe/image_nt_header.h>
+
 #ifndef WINNT
 #include <Windows.h>
 #include <geek/utils/file.h>
@@ -37,16 +40,12 @@ public:
     bool IsPE32() const;
     bool IsDll() const;
 
+    ImageNtHeader NtHeader() const;
+	ImageSectionHeaderTable SectionHeaderTable() const;
+
     uint32_t GetFileSize() const;
-    uint32_t GetImageSize() const;
-    uint32_t GetPEHeaderSize() const;
-    uint64_t GetImageBase() const;
     uint64_t GetMemoryImageBase() const;
     void SetMemoryImageBase(uint64_t imageBase) const;
-    void SetImageBase(uint64_t imageBase) const;
-    uint32_t GetEntryPoint() const;
-    void SetEntryPoint(uint32_t entry_point) const;
-    IMAGE_DATA_DIRECTORY* GetDataDirectory() const;
     void* RvaToPoint(uint32_t rva) const;
 
     bool RepairRepositionTable(uint64_t newImageBase) const;
@@ -66,6 +65,9 @@ public:
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type);
 
 private:
+    friend class ImageNtHeader;
+    friend class ImageSectionHeaderTable;
+
     class Impl;
     std::unique_ptr<Impl> impl_;
 
