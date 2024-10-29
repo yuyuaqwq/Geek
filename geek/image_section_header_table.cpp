@@ -28,20 +28,20 @@ std::vector<uint8_t>& ImageSectionHeader::RawData()
 	return *raw_data_;
 }
 
-ImageSectionHeaderTable::ImageSectionHeaderTable(Image* owner_image)
-	: owner_image_(owner_image)
+ImageSectionHeaderTable::ImageSectionHeaderTable(Image* image)
+	: image_(image)
 {
 }
 
 std::optional<ImageSectionHeader> ImageSectionHeaderTable::GetHeaderByIndex(size_t index) const
 {
-	if (index < owner_image_->impl_->section_header_table_.size())
+	if (index < image_->impl_->section_header_table_.size())
 	{
 		return ImageSectionHeader{
 			const_cast<ImageSectionHeaderTable*>(this),
 			index,
-			&owner_image_->impl_->section_header_table_[index],
-			&owner_image_->impl_->section_list_[index] };
+			&image_->impl_->section_header_table_[index],
+			&image_->impl_->section_list_[index] };
 	}
 	return std::nullopt;
 }
@@ -51,7 +51,7 @@ std::optional<ImageSectionHeader> ImageSectionHeaderTable::GetHeaderByName(std::
 	name = name.substr(0, IMAGE_SIZEOF_SHORT_NAME);
 
 	size_t i = 0;
-	for (auto& s : owner_image_->impl_->section_header_table_)
+	for (auto& s : image_->impl_->section_header_table_)
 	{
 		// »∑±£0Ω·Œ≤
 		char n[IMAGE_SIZEOF_SHORT_NAME + 1]{};

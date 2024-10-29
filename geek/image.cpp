@@ -269,37 +269,37 @@ void* Image::RvaToPoint(uint32_t rva) const
 
 bool Image::RepairRepositionTable(uint64_t newImageBase) const
 {
-	auto relocationTable = static_cast<IMAGE_BASE_RELOCATION*>(RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress));
-	if (relocationTable == nullptr) {
+	auto opt_header = NtHeader().OptionalHeader();
+	auto imageBase = opt_header.ImageBase();
+	auto rels = opt_header.DataDirectory().BaseRelocations();
+	if (!rels.IsValid())
 		return false;
-	}
-	auto imageBase = GetImageBase();
-	do {
-		auto blockRva = relocationTable->VirtualAddress;
-		auto blockSize = relocationTable->SizeOfBlock;
-		if (blockRva == 0 && blockSize == 0) {
-			break;
-		}
-		uint16_t* fieldTable = reinterpret_cast<uint16_t*>(reinterpret_cast<char*>(relocationTable) + sizeof(*relocationTable));
-		relocationTable    = reinterpret_cast<IMAGE_BASE_RELOCATION*>(reinterpret_cast<char*>(relocationTable) + blockSize);
-		auto fieldCount = (blockSize - sizeof(*relocationTable)) / sizeof(*fieldTable);
-		for (int i = 0; i < fieldCount; i++) {
-			auto offsetType = fieldTable[i] >> 12;
-			if (offsetType == IMAGE_REL_BASED_ABSOLUTE) {
-				continue;
-			}
-			auto Rva = blockRva + (fieldTable[i] & 0xfff);
-			if (offsetType == IMAGE_REL_BASED_HIGHLOW) {
-				auto addr = (uint32_t*)RvaToPoint(Rva);
+
+	for (auto& rel : rels)
+	{
+		for (auto& field : rel.Fields())
+		{
+			switch (field.Type())
+			{
+			case RelBasedType::kHighLow:
+			{
+				auto addr = field.ResolveAddress32();
 				*addr = *addr - static_cast<uint32_t>(imageBase + newImageBase);
+				break;
 			}
-			else if (offsetType == IMAGE_REL_BASED_DIR64) {
-				auto addr = (uint64_t*)RvaToPoint(Rva);
+			case RelBasedType::kDir64:
+			{
+				auto addr = field.ResolveAddress64();
 				*addr = *addr - imageBase + newImageBase;
+				break;
+			}
+			case RelBasedType::kAbsolute:
+			default:
+				break;
 			}
 		}
-	} while (true);
-	SetImageBase(newImageBase);
+	}
+	opt_header.SetImageBase(newImageBase);
 	return true;
 }
 

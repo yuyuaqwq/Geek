@@ -17,7 +17,7 @@ enum class MagicType
 class ImageOptionalHeader
 {
 public:
-	ImageOptionalHeader(Image* owner_image);
+	ImageOptionalHeader(Image* image);
 
 	const IMAGE_OPTIONAL_HEADER32* raw32() const { return raw_; }
 	const IMAGE_OPTIONAL_HEADER64* raw64() const { return reinterpret_cast<IMAGE_OPTIONAL_HEADER64*>(raw_); }
@@ -41,7 +41,7 @@ public:
 	void SetEntryPointAddress(uint32_t address);
 
 private:
-	Image* owner_image_;
+	Image* image_;
 	IMAGE_OPTIONAL_HEADER32* raw_;
 };
 }

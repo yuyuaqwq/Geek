@@ -20,15 +20,15 @@ do { \
 } while(false)
 
 namespace geek {
-ImageOptionalHeader::ImageOptionalHeader(Image* owner_image)
-	: owner_image_(owner_image)
+ImageOptionalHeader::ImageOptionalHeader(Image* image)
+	: image_(image)
 {
-	raw_ = &owner_image_->NtHeader().raw32()->OptionalHeader;
+	raw_ = &image_->NtHeader().raw32()->OptionalHeader;
 }
 
 ImageDataDirectory ImageOptionalHeader::DataDirectory() const
 {
-	return { owner_image_ };
+	return { image_ };
 }
 
 MagicType ImageOptionalHeader::Magic() const

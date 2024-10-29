@@ -8,17 +8,17 @@ class Image;
 class ImageExportDirectory
 {
 public:
-	ImageExportDirectory(Image* owner_image);
+	ImageExportDirectory(Image* image);
 
 private:
-	Image* owner_image_;
+	Image* image_;
 	IMAGE_EXPORT_DIRECTORY* raw_;
 };
 
 class ImageDataDirectory
 {
 public:
-	ImageDataDirectory(Image* owner_image);
+	ImageDataDirectory(Image* image);
 
 	const IMAGE_DATA_DIRECTORY* raw() const { return raw_; }
 	IMAGE_DATA_DIRECTORY* raw() { return raw_; }
@@ -27,7 +27,7 @@ public:
 	ImageExportDirectory ExportDirectory() const;
 
 private:
-	Image* owner_image_;
+	Image* image_;
 	IMAGE_DATA_DIRECTORY* raw_;
 };
 }

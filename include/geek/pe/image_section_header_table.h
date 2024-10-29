@@ -41,7 +41,7 @@ private:
 class ImageSectionHeaderTable
 {
 public:
-	ImageSectionHeaderTable(Image* owner_image);
+	ImageSectionHeaderTable(Image* image);
 
 	/**
 	 * 根据索引获取区段
@@ -58,6 +58,6 @@ public:
 
 private:
 	friend class ImageSectionHeader;
-	Image* owner_image_;
+	Image* image_;
 };
 }

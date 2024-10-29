@@ -9,7 +9,7 @@ class Image;
 class ImageNtHeader
 {
 public:
-	ImageNtHeader(Image* owner_image);
+	ImageNtHeader(Image* image);
 
 	const IMAGE_NT_HEADERS32* raw32() const { return raw_; }
 	const IMAGE_NT_HEADERS64* raw64() const { return reinterpret_cast<IMAGE_NT_HEADERS64*>(raw_); }
@@ -19,7 +19,7 @@ public:
 	ImageOptionalHeader OptionalHeader() const;
 
 private:
-	Image* owner_image_;
+	Image* image_;
 	IMAGE_NT_HEADERS32* raw_;
 };
 }
