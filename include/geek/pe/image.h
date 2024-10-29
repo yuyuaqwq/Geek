@@ -50,11 +50,11 @@ public:
 
     bool RepairRepositionTable(uint64_t newImageBase) const;
 
-    uint32_t GetExportRvaByName(const std::string& func_name) const;
-    uint32_t GetExportRvaByOrdinal(uint16_t ordinal);
-
-    std::optional<uint32_t> GetImportAddressRawByName(const std::string& lib_name, const std::string& func_name);
-    std::optional<uint32_t> GetImportAddressRawByAddr(void* address);
+    // uint32_t GetExportRvaByName(const std::string& func_name) const;
+    // uint32_t GetExportRvaByOrdinal(uint16_t ordinal);
+    //
+    // std::optional<uint32_t> GetImportAddressRawByName(const std::string& lib_name, const std::string& func_name);
+    // std::optional<uint32_t> GetImportAddressRawByAddr(void* address);
 
     bool CheckSum() const;
     void RepairCheckSum() const;

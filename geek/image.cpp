@@ -235,12 +235,12 @@ bool Image::IsDll() const
 
 ImageNtHeader Image::NtHeader() const
 {
-	return { const_cast<Image&>(*this) };
+	return { const_cast<Image*>(this) };
 }
 
 ImageSectionHeaderTable Image::SectionHeaderTable() const
 {
-	return { const_cast<Image&>(*this) };
+	return { const_cast<Image*>(this) };
 }
 
 uint32_t Image::GetFileSize() const
@@ -303,81 +303,81 @@ bool Image::RepairRepositionTable(uint64_t newImageBase) const
 	return true;
 }
 
-uint32_t Image::GetExportRvaByName(const std::string& func_name) const
-{
-	auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-	if (exportDirectory == nullptr) {
-		return 0;
-	}
-	auto numberOfNames = exportDirectory->NumberOfNames;
-	auto addressOfNames = (uint32_t*)RvaToPoint(exportDirectory->AddressOfNames);
-	auto addressOfNameOrdinals = (uint16_t*)RvaToPoint(exportDirectory->AddressOfNameOrdinals);
-	auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
-	int funcIdx = -1;
-	for (DWORD i = 0; i < numberOfNames; i++) {
-		auto exportName = (char*)RvaToPoint(addressOfNames[i]);
-		if (func_name == exportName) {
-			// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
-			funcIdx = addressOfNameOrdinals[i];
-		}
-	}
-	if (funcIdx == -1) {
-		return 0;
-	}
-	return addressOfFunctions[funcIdx];
-}
-
-uint32_t Image::GetExportRvaByOrdinal(uint16_t ordinal)
-{
-	auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-	if (exportDirectory == nullptr) {
-		return 0;
-	}
-	auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
-	// 外部提供的ordinal需要减去base
-	auto funcIdx = ordinal - exportDirectory->Base;
-	return addressOfFunctions[funcIdx];
-}
-
-std::optional<uint32_t> Image::GetImportAddressRawByName(const std::string& lib_name, const std::string& func_name)
-{
-	//if (!impl_->m_memory_image_base) return {};
-	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-	for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
-		const char* import_module_name = (char*)RvaToPoint(import_descriptor->Name);
-		if (lib_name != import_module_name) {
-			continue;
-		}
-		if (IsPE32()) {
-			return impl_->GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA32>(import_descriptor, func_name);
-		}
-		else {
-			return impl_->GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, func_name);
-		}
-	}
-	return std::nullopt;
-}
-
-std::optional<uint32_t> Image::GetImportAddressRawByAddr(void* address)
-{
-	//if (!impl_->m_memory_image_base) return nullptr;
-	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-	for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
-		if (IsPE32()) {
-			auto raw = impl_->GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA32>(import_descriptor, address);
-			if (raw) {
-				return raw;
-			}
-		}
-		else {
-			auto raw = impl_->GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA64>(import_descriptor, address);
-			if (raw) {
-				return raw;
-			}
-		}
-	}
-	return std::nullopt;
-}
+// uint32_t Image::GetExportRvaByName(const std::string& func_name) const
+// {
+// 	auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+// 	if (exportDirectory == nullptr) {
+// 		return 0;
+// 	}
+// 	auto numberOfNames = exportDirectory->NumberOfNames;
+// 	auto addressOfNames = (uint32_t*)RvaToPoint(exportDirectory->AddressOfNames);
+// 	auto addressOfNameOrdinals = (uint16_t*)RvaToPoint(exportDirectory->AddressOfNameOrdinals);
+// 	auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
+// 	int funcIdx = -1;
+// 	for (DWORD i = 0; i < numberOfNames; i++) {
+// 		auto exportName = (char*)RvaToPoint(addressOfNames[i]);
+// 		if (func_name == exportName) {
+// 			// 通过此下标访问序号表，得到访问AddressOfFunctions的下标
+// 			funcIdx = addressOfNameOrdinals[i];
+// 		}
+// 	}
+// 	if (funcIdx == -1) {
+// 		return 0;
+// 	}
+// 	return addressOfFunctions[funcIdx];
+// }
+//
+// uint32_t Image::GetExportRvaByOrdinal(uint16_t ordinal)
+// {
+// 	auto exportDirectory = (IMAGE_EXPORT_DIRECTORY*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+// 	if (exportDirectory == nullptr) {
+// 		return 0;
+// 	}
+// 	auto addressOfFunctions = (uint32_t*)RvaToPoint(exportDirectory->AddressOfFunctions);
+// 	// 外部提供的ordinal需要减去base
+// 	auto funcIdx = ordinal - exportDirectory->Base;
+// 	return addressOfFunctions[funcIdx];
+// }
+//
+// std::optional<uint32_t> Image::GetImportAddressRawByName(const std::string& lib_name, const std::string& func_name)
+// {
+// 	//if (!impl_->m_memory_image_base) return {};
+// 	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+// 	for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+// 		const char* import_module_name = (char*)RvaToPoint(import_descriptor->Name);
+// 		if (lib_name != import_module_name) {
+// 			continue;
+// 		}
+// 		if (IsPE32()) {
+// 			return impl_->GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA32>(import_descriptor, func_name);
+// 		}
+// 		else {
+// 			return impl_->GetImportAddressRawByNameFromDll<IMAGE_THUNK_DATA64>(import_descriptor, func_name);
+// 		}
+// 	}
+// 	return std::nullopt;
+// }
+//
+// std::optional<uint32_t> Image::GetImportAddressRawByAddr(void* address)
+// {
+// 	//if (!impl_->m_memory_image_base) return nullptr;
+// 	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)RvaToPoint(GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+// 	for (; import_descriptor->OriginalFirstThunk && import_descriptor->FirstThunk; import_descriptor++) {
+// 		if (IsPE32()) {
+// 			auto raw = impl_->GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA32>(import_descriptor, address);
+// 			if (raw) {
+// 				return raw;
+// 			}
+// 		}
+// 		else {
+// 			auto raw = impl_->GetImportAddressRawByAddressFromDll<IMAGE_THUNK_DATA64>(import_descriptor, address);
+// 			if (raw) {
+// 				return raw;
+// 			}
+// 		}
+// 	}
+// 	return std::nullopt;
+// }
 
 bool Image::CheckSum() const
 {

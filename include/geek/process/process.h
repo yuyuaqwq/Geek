@@ -46,6 +46,8 @@ public:
     */
     static std::optional<std::tuple<Process, Thread>> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL);
 
+    std::optional<uint64_t> SearchFeatureCodes(uint64_t start_address, size_t size, const std::string& hex_string_data);
+
     bool Terminate(uint32_t exitCode);
     bool SetDebugPrivilege(bool IsEnable) const;
 
@@ -82,14 +84,15 @@ public:
     bool WaitExit(DWORD dwMilliseconds = INFINITE) const;
     std::optional<DWORD> GetExitCode() const;
 
-    std::optional<uint64_t> LoadLibraryFromImage(
-        Image* image,
-        bool exec_tls_callback = true,
-        bool call_dll_entry = true,
-        uint64_t init_parameter = 0,
-        bool skip_not_loaded = false,
-        bool zero_pe_header = true,
-        bool entry_call_sync = true);
+    //TODO LoadLibraryFromImage
+    // std::optional<uint64_t> LoadLibraryFromImage(
+    //     Image* image,
+    //     bool exec_tls_callback = true,
+    //     bool call_dll_entry = true,
+    //     uint64_t init_parameter = 0,
+    //     bool skip_not_loaded = false,
+    //     bool zero_pe_header = true,
+    //     bool entry_call_sync = true);
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base);
     bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) const;
     bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true);
@@ -97,7 +100,8 @@ public:
     std::optional<uint64_t> LoadLibraryW(std::wstring_view lib_name, bool sync = true);
     bool FreeLibrary(uint64_t module_base);
     std::optional<Image> GetImageByModuleInfo(const geek::ModuleInfo& info) const;
-    std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name);
+    //TODO GetExportProcAddress
+    // std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name);
 
     // 此处的Call开销较大，非跨进程/少量调用的场景，请使用传递CallContext的Call
     // 注：如果调用的是X86，par_list传递uint64_t会被截断为uint32_t
@@ -154,10 +158,12 @@ public:
     bool Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync = true, bool init_exec_page = true);
     bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true);
 
-    bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false);
+    //TODO RepairImportAddressTable
+    // bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false);
 
+    //TODO ExecuteTls
     // PIMAGE_TLS_CALLBACK
-    bool ExecuteTls(Image* image, uint64_t image_base);
+    // bool ExecuteTls(Image* image, uint64_t image_base);
 
     bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true);
 

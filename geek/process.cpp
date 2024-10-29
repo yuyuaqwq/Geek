@@ -9,42 +9,42 @@
 
 namespace geek {
 namespace {
-template<typename IMAGE_THUNK_DATA_T>
-bool RepairImportAddressTableFromModule(Process& proc, Image* image, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, uint64_t import_image_base, bool skip_not_loaded) {
-	IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->OriginalFirstThunk);
-	IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->FirstThunk);
-	Image import_image;
-	if (import_image_base) {
-		auto import_image_res = proc.LoadImageFromImageBase(import_image_base);
-		if (!import_image_res) {
-			return false;
-		}
-		import_image = std::move(*import_image_res);
-	}
-	else if (!skip_not_loaded) {
-		return false;
-	}
-	for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
-		if (!import_image_base) {
-			import_address_table->u1.Function = import_address_table->u1.Function = 0x1234567887654321;
-			continue;
-		}
-		uint32_t export_rva;
-		if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
-			auto export_addr = proc.GetExportProcAddress(&import_image, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
-			if (!export_addr) return false;
-			import_address_table->u1.Function = export_addr.value();
-		}
-		else {
-			IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)image->RvaToPoint(import_name_table->u1.AddressOfData);
-			auto export_addr = proc.GetExportProcAddress(&import_image, (char*)func_name->Name);
-			if (!export_addr) return false;
-			import_address_table->u1.Function = export_addr.value();
-		}
-		//import_address_table->u1.Function = import_module_base + export_rva;
-	}
-	return true;
-}
+// template<typename IMAGE_THUNK_DATA_T>
+// bool RepairImportAddressTableFromModule(Process& proc, Image* image, _IMAGE_IMPORT_DESCRIPTOR* import_descriptor, uint64_t import_image_base, bool skip_not_loaded) {
+// 	IMAGE_THUNK_DATA_T* import_name_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->OriginalFirstThunk);
+// 	IMAGE_THUNK_DATA_T* import_address_table = (IMAGE_THUNK_DATA_T*)image->RvaToPoint(import_descriptor->FirstThunk);
+// 	Image import_image;
+// 	if (import_image_base) {
+// 		auto import_image_res = proc.LoadImageFromImageBase(import_image_base);
+// 		if (!import_image_res) {
+// 			return false;
+// 		}
+// 		import_image = std::move(*import_image_res);
+// 	}
+// 	else if (!skip_not_loaded) {
+// 		return false;
+// 	}
+// 	for (; import_name_table->u1.ForwarderString; import_name_table++, import_address_table++) {
+// 		if (!import_image_base) {
+// 			import_address_table->u1.Function = import_address_table->u1.Function = 0x1234567887654321;
+// 			continue;
+// 		}
+// 		uint32_t export_rva;
+// 		if (import_name_table->u1.Ordinal >> (sizeof(import_name_table->u1.Ordinal) * 8 - 1) == 1) {
+// 			auto export_addr = proc.GetExportProcAddress(&import_image, (char*)((import_name_table->u1.Ordinal << 1) >> 1));
+// 			if (!export_addr) return false;
+// 			import_address_table->u1.Function = export_addr.value();
+// 		}
+// 		else {
+// 			IMAGE_IMPORT_BY_NAME* func_name = (IMAGE_IMPORT_BY_NAME*)image->RvaToPoint(import_name_table->u1.AddressOfData);
+// 			auto export_addr = proc.GetExportProcAddress(&import_image, (char*)func_name->Name);
+// 			if (!export_addr) return false;
+// 			import_address_table->u1.Function = export_addr.value();
+// 		}
+// 		//import_address_table->u1.Function = import_module_base + export_rva;
+// 	}
+// 	return true;
+// }
 
 class CallPageX86 {
 public:
@@ -131,6 +131,174 @@ private:
 	Process* process_;
 	uint64_t exec_page_ = 0;
 };
+
+
+enum class SignElementType {
+	kNone,
+	kWhole,
+	kVague
+};
+
+struct SignElement {
+	SignElementType type;
+	size_t length;
+	std::vector<unsigned char> data;
+};
+
+unsigned int DecStringToUInt(const std::string& str, size_t* i = nullptr, const unsigned char* end_char_arr = nullptr, size_t end_char_arr_size = 0) {
+	unsigned int sum = 0;
+	if (!i) {
+		size_t j;
+		i = &j;
+	}
+	for (*i = 0; *i < str.length(); ++*i) {
+		unsigned char c = str[*i];
+		if (c >= 0x30 && c <= 0x39) {
+			c -= 0x30;
+			sum = sum * 10 + c;
+		}
+		else if (end_char_arr) {
+			for (size_t j = 0; j < end_char_arr_size; ++j) {
+				if (c == end_char_arr[j]) return sum;
+			}
+		}
+		else break;
+
+	}
+	return sum;
+}
+
+int __cdecl memcmp_ex(const void* buf1, const void* buf2, size_t size) {
+	const char* buf1_ = (const char*)buf1;
+	const char* buf2_ = (const char*)buf2;
+
+	__try {
+		for (int i = 0; i < size; i++) {
+			if (buf1_[i] != buf2_[i]) {
+				return i;
+			}
+		}
+		return -1;
+
+	}
+	__except (1) {
+		return -2;
+	}
+}
+
+
+/*
+* "48 &?? ?? 65*20 88"
+* &表示返回的地址以此为准
+* *20表示重复20次，是十进制
+* ??表示模糊匹配
+*/
+size_t StringToElement(const std::string& hex_string_data, std::vector<SignElement>& signature, size_t& offset) {
+	bool first = true;
+	unsigned char sum = 0;
+	SignElement temp_signature_element;
+	temp_signature_element.length = 0;
+	SignElementType oldType = SignElementType::kNone, newType = SignElementType::kNone;
+	size_t total_length = 0;
+
+	for (size_t i = 0; i < hex_string_data.length(); ++i) {
+		unsigned char c = hex_string_data[i];
+		bool validChar = true;
+		if (c >= '0' && c <= '9') {
+			c -= '0';
+			newType = SignElementType::kWhole;
+		}
+		else if (c >= 'a' && c <= 'f') {
+			c = c - 'a' + 10;
+			newType = SignElementType::kWhole;
+		}
+		else if (c >= 'A' && c <= 'F') {
+			c = c - 'A' + 10;
+			newType = SignElementType::kWhole;
+		}
+		else if (c == '?') {
+			newType = SignElementType::kVague;
+		}
+		else {
+			if (c == '&') {
+				offset = total_length + temp_signature_element.length;
+			}
+			else if (c == '*' && i + 1 < hex_string_data.length()) {
+				size_t countInt;
+				unsigned int lenInt = DecStringToUInt(&hex_string_data[i] + 1, &countInt) - 1;
+				if (countInt) {
+					if (oldType == SignElementType::kWhole && temp_signature_element.data.size() > 0) {
+						unsigned char repC = temp_signature_element.data[temp_signature_element.data.size() - 1];
+						for (size_t j = 0; j < lenInt; ++j) {
+							temp_signature_element.data.push_back(repC);
+						}
+					}
+					temp_signature_element.length += lenInt;
+					i += countInt;
+				}
+
+			}
+			validChar = false;
+			goto _PushChar;
+		}
+
+		if (oldType == SignElementType::kNone) {
+			oldType = newType;
+		}
+
+		else if (oldType != newType) {
+			temp_signature_element.type = oldType;
+			total_length += temp_signature_element.length;
+			signature.push_back(temp_signature_element);
+
+			oldType = newType;
+			temp_signature_element.length = 0;
+			temp_signature_element.data.clear();
+		}
+
+	_PushChar:
+		if (oldType == SignElementType::kWhole) {
+			if (first && validChar) {
+				sum = c << 4;
+				first = false;
+			}
+			else if (!first) {
+				first = true;
+				validChar ? sum += c : sum >>= 4;
+				temp_signature_element.data.push_back(sum);
+				++temp_signature_element.length;
+			}
+		}
+
+		else if (oldType == SignElementType::kVague) {
+			if (first && validChar) {
+				first = false;
+			}
+			else if (!first) {
+				first = true;
+				++temp_signature_element.length;
+			}
+		}
+
+	}
+
+	if (!first) {
+		if (oldType == SignElementType::kWhole) {
+			temp_signature_element.data.push_back(sum >> 4);
+		}
+		++temp_signature_element.length;
+	}
+
+	if (temp_signature_element.length > 0 || temp_signature_element.data.size() > 0) {
+		temp_signature_element.type = oldType;
+		total_length += temp_signature_element.length;
+		signature.push_back(temp_signature_element);
+	}
+
+	return total_length;
+}
+
+
 struct ExecPageHeaderAmd64 {
 	uint64_t call_addr;
 	uint64_t context_addr;
@@ -209,6 +377,58 @@ std::optional<std::tuple<Process, Thread>> Process::CreateByToken(std::wstring_v
 		return {};
 	}
 	return std::tuple { Process{ UniqueHandle(pi->hProcess) }, Thread{ UniqueHandle(pi->hThread) } };
+}
+
+std::optional<uint64_t> Process::SearchFeatureCodes(uint64_t start_address, size_t size,
+	const std::string& hex_string_data)
+{
+	std::vector<SignElement> signature;
+	size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
+
+	size_t signature_size = signature.size();
+	if (!signature_size) return {};
+
+	uint64_t base = 0;
+	std::optional<std::vector<uint8_t>> buf;
+	if (!IsCur()) {
+		buf = ReadMemory(start_address, size);
+		if (!buf) {
+			return {};
+		}
+		uint64_t new_start_address = (uint64_t)buf.value().data();
+		base = ((uint64_t)start_address - (uint64_t)new_start_address);
+		start_address = new_start_address;
+	}
+
+	for (size_t i = 0; i < size; ++i) {
+		uint64_t cur_pos = start_address + i;
+		if (base + i == 0x13cdce0) {
+			printf("???");
+		}
+		uint64_t ret_pos = cur_pos;
+		if (i + total_len > size) break;
+		bool match = true;
+		for (size_t j = 0; j < signature_size; ++j) {
+			size_t length = signature[j].length;
+			if (signature[j].type == SignElementType::kWhole) {
+				if (IsBadReadPtr((void*)cur_pos, length)) {
+					match = false;
+					break;
+				}
+				int ret = memcmp((void*)cur_pos, signature[j].data.data(), length);
+				if (ret != 0) {
+					match = false;
+					break;
+				}
+			}
+			cur_pos = cur_pos + length;
+		}
+		if (match) {
+			return (base + ret_pos + offset);
+		}
+	}
+	return {};
+
 }
 
 bool Process::Terminate(uint32_t exitCode)
@@ -845,45 +1065,45 @@ std::optional<DWORD> Process::GetExitCode() const
 	return code;
 }
 
-std::optional<uint64_t> Process::LoadLibraryFromImage(Image* image, bool exec_tls_callback, bool call_dll_entry,
-	uint64_t init_parameter, bool skip_not_loaded, bool zero_pe_header, bool entry_call_sync)
-{
-	if (IsX86() != image->IsPE32()) {
-		return 0;
-	}
-	auto image_base_res = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	if (!image_base_res) return {};
-	auto& image_base = *image_base_res;
-	bool success = false;
-	do {
-		if (!image->RepairRepositionTable(image_base)) {
-			break;
-		}
-		if (!RepairImportAddressTable(image, skip_not_loaded)) {
-			break;
-		}
-		auto image_buf = image->SaveToImageBuf(image_base, zero_pe_header);
-		if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
-			break;
-		}
-		/*
-            * tls的调用必须同步，否则出现并发执行的问题
-            */
-		if (exec_tls_callback) {
-			ExecuteTls(image, image_base);
-		}
-		if (call_dll_entry) {
-			CallEntryPoint(image, image_base, init_parameter, entry_call_sync);
-		}
-		success = true;
-	} while (false);
-	if (success == false && image_base) {
-		FreeMemory(image_base);
-		image_base = 0;
-	}
-	image->SetMemoryImageBase(image_base);
-	return image_base;
-}
+// std::optional<uint64_t> Process::LoadLibraryFromImage(Image* image, bool exec_tls_callback, bool call_dll_entry,
+// 	uint64_t init_parameter, bool skip_not_loaded, bool zero_pe_header, bool entry_call_sync)
+// {
+// 	if (IsX86() != image->IsPE32()) {
+// 		return 0;
+// 	}
+// 	auto image_base_res = AllocMemory(image->GetImageSize(), (DWORD)MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+// 	if (!image_base_res) return {};
+// 	auto& image_base = *image_base_res;
+// 	bool success = false;
+// 	do {
+// 		if (!image->RepairRepositionTable(image_base)) {
+// 			break;
+// 		}
+// 		if (!RepairImportAddressTable(image, skip_not_loaded)) {
+// 			break;
+// 		}
+// 		auto image_buf = image->SaveToImageBuf(image_base, zero_pe_header);
+// 		if (!WriteMemory(image_base, image_buf.data(), image_buf.size())) {
+// 			break;
+// 		}
+// 		/*
+//             * tls的调用必须同步，否则出现并发执行的问题
+//             */
+// 		if (exec_tls_callback) {
+// 			ExecuteTls(image, image_base);
+// 		}
+// 		if (call_dll_entry) {
+// 			CallEntryPoint(image, image_base, init_parameter, entry_call_sync);
+// 		}
+// 		success = true;
+// 	} while (false);
+// 	if (success == false && image_base) {
+// 		FreeMemory(image_base);
+// 		image_base = 0;
+// 	}
+// 	image->SetMemoryImageBase(image_base);
+// 	return image_base;
+// }
 
 std::optional<Image> Process::LoadImageFromImageBase(uint64_t image_base)
 {
@@ -1025,38 +1245,38 @@ std::optional<Image> Process::GetImageByModuleInfo(const geek::ModuleInfo& info)
 	return Image::LoadFromImageBuf(buf->data(), info.base);
 }
 
-std::optional<uint64_t> Process::GetExportProcAddress(Image* image, const char* func_name)
-{
-	uint32_t export_rva;
-	if (reinterpret_cast<uintptr_t>(func_name) <= 0xffff) {
-		export_rva = image->GetExportRvaByOrdinal(reinterpret_cast<uint16_t>(func_name));
-	}
-	else {
-		export_rva = image->GetExportRvaByName(func_name);
-	}
-	// 可能返回一个字符串，需要二次加载
-	// 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
-	uint64_t va = (uint64_t)image->GetMemoryImageBase() + export_rva;
-	auto export_directory = (uint64_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-	auto export_directory_size = image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
-	// 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
-	if (va > export_directory && va < export_directory + export_directory_size) {
-		std::string full_name = (char*)image->RvaToPoint(export_rva);
-		auto offset = full_name.find(".");
-		auto dll_name = full_name.substr(0, offset);
-		auto func_name = full_name.substr(offset + 1);
-		if (!dll_name.empty() && !func_name.empty()) {
-			auto image_base = LoadLibrary(geek::Convert::AnsiToUtf16le(dll_name).c_str());
-			if (image_base == 0) return {};
-			auto import_image = LoadImageFromImageBase(image_base.value());
-			if (!import_image) return {};
-			auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
-			if (!va_res) return {};
-			return va_res.value();
-		}
-	}
-	return va;
-}
+// std::optional<uint64_t> Process::GetExportProcAddress(Image* image, const char* func_name)
+// {
+// 	uint32_t export_rva;
+// 	if (reinterpret_cast<uintptr_t>(func_name) <= 0xffff) {
+// 		export_rva = image->GetExportRvaByOrdinal(reinterpret_cast<uint16_t>(func_name));
+// 	}
+// 	else {
+// 		export_rva = image->GetExportRvaByName(func_name);
+// 	}
+// 	// 可能返回一个字符串，需要二次加载
+// 	// 对应.def文件的EXPORTS后加上 MsgBox = user32.MessageBoxA 的情况
+// 	uint64_t va = (uint64_t)image->GetMemoryImageBase() + export_rva;
+// 	auto export_directory = (uint64_t)image->GetMemoryImageBase() + image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+// 	auto export_directory_size = image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+// 	// 还在导出表范围内，是这样子的字符串：NTDLL.RtlAllocateHeap
+// 	if (va > export_directory && va < export_directory + export_directory_size) {
+// 		std::string full_name = (char*)image->RvaToPoint(export_rva);
+// 		auto offset = full_name.find(".");
+// 		auto dll_name = full_name.substr(0, offset);
+// 		auto func_name = full_name.substr(offset + 1);
+// 		if (!dll_name.empty() && !func_name.empty()) {
+// 			auto image_base = LoadLibrary(geek::Convert::AnsiToUtf16le(dll_name).c_str());
+// 			if (image_base == 0) return {};
+// 			auto import_image = LoadImageFromImageBase(image_base.value());
+// 			if (!import_image) return {};
+// 			auto va_res = GetExportProcAddress(&import_image.value(), func_name.c_str());
+// 			if (!va_res) return {};
+// 			return va_res.value();
+// 		}
+// 	}
+// 	return va;
+// }
 
 bool Process::Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uint64_t>& par_list, uint64_t* ret_value,
 	CallConvention call_convention, bool sync, bool init_exec_page)
@@ -1934,79 +2154,79 @@ bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync)
 	return success;
 }
 
-bool Process::RepairImportAddressTable(Image* image, bool skip_not_loaded)
-{
-	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-	if (import_descriptor == nullptr) {
-		return false;
-	}
-	for (; import_descriptor->FirstThunk; import_descriptor++) {
-		if(import_descriptor->OriginalFirstThunk == NULL) import_descriptor->OriginalFirstThunk = import_descriptor->FirstThunk;
-		char* import_module_name = (char*)image->RvaToPoint(import_descriptor->Name);
-		auto import_module_base_res = LoadLibrary(geek::Convert::AnsiToUtf16le(import_module_name).c_str());
-		if (!import_module_base_res) return false;
-		if (image->IsPE32()) {
-			if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA32>(*this, image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
-				return false;
-			}
-		}
-		else {
-			if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA64>(*this, image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
-
-bool Process::ExecuteTls(Image* image, uint64_t image_base)
-{
-	auto tls_dir = (IMAGE_TLS_DIRECTORY*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-	if (tls_dir == nullptr) {
-		return false;
-	}
-	PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
-	if (callback) {
-		while (true) {
-			if (IsCur()) {
-				if (!*callback) {
-					break;
-				}
-				if (image->IsPE32()) {
-					PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
-					callback32((uint32_t)image_base, DLL_PROCESS_ATTACH, NULL);
-				}
-				else {
-					PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
-					callback64(image_base, DLL_PROCESS_ATTACH, NULL);
-				}
-			}
-			else {
-				if (image->IsPE32()) {
-					PIMAGE_TLS_CALLBACK32 callback32;
-					if (!ReadMemory((uint64_t)callback, &callback32, sizeof(PIMAGE_TLS_CALLBACK32))) {
-						return false;
-					}
-					Call(image_base, (uint64_t)callback32, { image_base, DLL_PROCESS_ATTACH , NULL });
-				}
-				else {
-					PIMAGE_TLS_CALLBACK64 callback64;
-					if (!ReadMemory((uint64_t)callback, &callback64, sizeof(PIMAGE_TLS_CALLBACK64))) {
-						return false;
-					}
-					Call(image_base, (uint64_t)callback64, { image_base, DLL_PROCESS_ATTACH , NULL });
-				}
-			}
-			callback++;
-		}
-	}
-	return true;
-}
+// bool Process::RepairImportAddressTable(Image* image, bool skip_not_loaded)
+// {
+// 	auto import_descriptor = (_IMAGE_IMPORT_DESCRIPTOR*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+// 	if (import_descriptor == nullptr) {
+// 		return false;
+// 	}
+// 	for (; import_descriptor->FirstThunk; import_descriptor++) {
+// 		if(import_descriptor->OriginalFirstThunk == NULL) import_descriptor->OriginalFirstThunk = import_descriptor->FirstThunk;
+// 		char* import_module_name = (char*)image->RvaToPoint(import_descriptor->Name);
+// 		auto import_module_base_res = LoadLibrary(geek::Convert::AnsiToUtf16le(import_module_name).c_str());
+// 		if (!import_module_base_res) return false;
+// 		if (image->IsPE32()) {
+// 			if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA32>(*this, image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
+// 				return false;
+// 			}
+// 		}
+// 		else {
+// 			if (!RepairImportAddressTableFromModule<IMAGE_THUNK_DATA64>(*this, image, import_descriptor, import_module_base_res.value(), skip_not_loaded)) {
+// 				return false;
+// 			}
+// 		}
+// 	}
+// 	return true;
+// }
+//
+// bool Process::ExecuteTls(Image* image, uint64_t image_base)
+// {
+// 	auto tls_dir = (IMAGE_TLS_DIRECTORY*)image->RvaToPoint(image->GetDataDirectory()[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+// 	if (tls_dir == nullptr) {
+// 		return false;
+// 	}
+// 	PIMAGE_TLS_CALLBACK* callback = (PIMAGE_TLS_CALLBACK*)tls_dir->AddressOfCallBacks;
+// 	if (callback) {
+// 		while (true) {
+// 			if (IsCur()) {
+// 				if (!*callback) {
+// 					break;
+// 				}
+// 				if (image->IsPE32()) {
+// 					PIMAGE_TLS_CALLBACK32 callback32 = *(PIMAGE_TLS_CALLBACK32*)callback;
+// 					callback32((uint32_t)image_base, DLL_PROCESS_ATTACH, NULL);
+// 				}
+// 				else {
+// 					PIMAGE_TLS_CALLBACK64 callback64 = *(PIMAGE_TLS_CALLBACK64*)callback;
+// 					callback64(image_base, DLL_PROCESS_ATTACH, NULL);
+// 				}
+// 			}
+// 			else {
+// 				if (image->IsPE32()) {
+// 					PIMAGE_TLS_CALLBACK32 callback32;
+// 					if (!ReadMemory((uint64_t)callback, &callback32, sizeof(PIMAGE_TLS_CALLBACK32))) {
+// 						return false;
+// 					}
+// 					Call(image_base, (uint64_t)callback32, { image_base, DLL_PROCESS_ATTACH , NULL });
+// 				}
+// 				else {
+// 					PIMAGE_TLS_CALLBACK64 callback64;
+// 					if (!ReadMemory((uint64_t)callback, &callback64, sizeof(PIMAGE_TLS_CALLBACK64))) {
+// 						return false;
+// 					}
+// 					Call(image_base, (uint64_t)callback64, { image_base, DLL_PROCESS_ATTACH , NULL });
+// 				}
+// 			}
+// 			callback++;
+// 		}
+// 	}
+// 	return true;
+// }
 
 bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter, bool sync)
 {
 	if (IsCur()) {
-		uint32_t rva = image->GetEntryPoint();
+		uint32_t rva = image->NtHeader().OptionalHeader().AddressOfEntryPoint();
 		if (image->IsDll()) {
 			if (image->IsPE32()) {
 				DllEntryProc32 DllEntry = (DllEntryProc32)(image_base + rva);
@@ -2023,7 +2243,7 @@ bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_pa
 		}
 	}
 	else {
-		uint64_t entry_point = (uint64_t)image_base + image->GetEntryPoint();
+		uint64_t entry_point = (uint64_t)image_base + image->NtHeader().OptionalHeader().AddressOfEntryPoint();
 		if (!Call(image_base, entry_point, { image_base, DLL_PROCESS_ATTACH , init_parameter }, nullptr, CallConvention::kStdCall, sync)) {
 			return false;
 		}

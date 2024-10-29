@@ -35,7 +35,6 @@
     <ClInclude Include="..\include\geek\process\process.h" />
     <ClInclude Include="..\include\geek\process\process_info.h" />
     <ClInclude Include="..\include\geek\process\thread.h" />
-    <ClInclude Include="..\include\geek\sign_searcher\sign_searcher.hpp" />
     <ClInclude Include="..\include\geek\utils\converter.h" />
     <ClInclude Include="..\include\geek\utils\file.h" />
     <ClInclude Include="..\include\geek\utils\handle.h" />

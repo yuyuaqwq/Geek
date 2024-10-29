@@ -25,9 +25,6 @@
     <Filter Include="Header Files\process">
       <UniqueIdentifier>{a6144c8d-45dd-49d5-a865-a212f1374948}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\sign_searcher">
-      <UniqueIdentifier>{583295c2-b082-45a6-bbd4-5294c691d080}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\sync">
       <UniqueIdentifier>{76581869-6b5f-4ec7-9227-3cdbeeadbcb7}</UniqueIdentifier>
     </Filter>
@@ -116,9 +113,6 @@
     </ClInclude>
     <ClInclude Include="..\include\geek\process\thread.h">
       <Filter>Header Files\process</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\geek\sign_searcher\sign_searcher.hpp">
-      <Filter>Header Files\sign_searcher</Filter>
     </ClInclude>
     <ClInclude Include="..\include\geek\pe\image_section_header_table.h">
       <Filter>Header Files\pe</Filter>
