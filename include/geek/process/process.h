@@ -46,7 +46,8 @@ public:
     */
     static std::optional<std::tuple<Process, Thread>> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL);
 
-    std::optional<uint64_t> SearchFeatureCodes(uint64_t start_address, size_t size, const std::string& hex_string_data);
+    std::optional<std::vector<uint64_t>> SearchSigEx(const char* pattern, size_t pattern_size, uint64_t start_address, size_t size, size_t max_match_size = static_cast<size_t>(-1)) const;
+    std::optional<std::vector<uint64_t>> SearchSig(std::string_view hex_string, uint64_t start_address, size_t size) const;
 
     bool Terminate(uint32_t exitCode);
     bool SetDebugPrivilege(bool IsEnable) const;
