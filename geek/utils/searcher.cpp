@@ -13,7 +13,7 @@ std::vector<size_t> Searcher::SearchMemory2(const char* pattern, size_t pattern_
 	while (std::regex_search(seek, data + data_size, m, r))
 	{
 		seek += m.position();
-		total.push_back(seek - pattern);
+		total.push_back(seek - data);
 		seek += std::min(static_cast<size_t>(m.length()), max_match_size);
 	}
 	return total;
