@@ -62,7 +62,7 @@ public:
     bool FreeMemory(uint64_t addr, size_t size = 0, DWORD type = MEM_RELEASE) const;
     bool ReadMemory(uint64_t addr, void* buf, size_t len) const;
     std::optional<std::vector<uint8_t>> ReadMemory(uint64_t addr, size_t len) const;
-    bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false);
+    bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false) const;
     std::optional<uint64_t> WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE);
     bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) const;
     std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
@@ -71,12 +71,12 @@ public:
 
     std::optional<std::wstring> GetCommandLineStr() const;
 
-    std::optional<uint16_t> LockAddress(uint64_t addr);
-    bool UnlockAddress(uint64_t addr, uint16_t instr);
+    std::optional<uint16_t> LockAddress(uint64_t addr) const;
+    bool UnlockAddress(uint64_t addr, uint16_t instr) const;
 
-    std::optional<Thread> CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/);
-    std::optional<uint16_t> BlockThread(Thread* thread);
-    bool ResumeBlockedThread(Thread* thread, uint16_t instr);
+    std::optional<Thread> CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags = 0 /*CREATE_SUSPENDED*/) const;
+    std::optional<uint16_t> BlockThread(Thread* thread) const;
+    bool ResumeBlockedThread(Thread* thread, uint16_t instr) const;
     bool IsTheOwningThread(Thread* thread) const;
     bool GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) const;
     bool GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags = CONTEXT64_CONTROL | CONTEXT64_INTEGER) const;
@@ -94,12 +94,12 @@ public:
     //     bool skip_not_loaded = false,
     //     bool zero_pe_header = true,
     //     bool entry_call_sync = true);
-    std::optional<Image> LoadImageFromImageBase(uint64_t image_base);
+    std::optional<Image> LoadImageFromImageBase(uint64_t image_base) const;
     bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) const;
     bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true);
 
     std::optional<uint64_t> LoadLibraryW(std::wstring_view lib_name, bool sync = true);
-    bool FreeLibrary(uint64_t module_base);
+    bool FreeLibrary(uint64_t module_base) const;
     std::optional<Image> GetImageByModuleInfo(const geek::ModuleInfo& info) const;
     //TODO GetExportProcAddress
     // std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name);
@@ -133,9 +133,9 @@ public:
         int32_t balanced_esp = 0;
         std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来，如果是创建线程调用，则最多只能传递32个参数
     };
-    bool CallGenerateCodeX86(uint64_t exec_page, bool sync);
-    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true);
-    bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true);
+    bool CallGenerateCodeX86(uint64_t exec_page, bool sync) const;
+    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) const;
+    bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true) const;
 
     struct CallContextAmd64 {
         uint64_t rax = 0;
@@ -155,9 +155,9 @@ public:
         uint64_t r15 = 0;
         std::initializer_list<uint64_t> stack;
     };
-    bool CallGenerateCodeAmd64(uint64_t exec_page, bool sync);
-    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync = true, bool init_exec_page = true);
-    bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true);
+    bool CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const;
+    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync = true, bool init_exec_page = true) const;
+    bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true) const;
 
     //TODO RepairImportAddressTable
     // bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false);

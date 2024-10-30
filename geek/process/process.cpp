@@ -606,7 +606,7 @@ std::optional<std::vector<uint8_t>> Process::ReadMemory(uint64_t addr, size_t le
 	return buf;
 }
 
-bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force)
+bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force) const
 {
 	DWORD oldProtect;
 	if (force) {
@@ -864,7 +864,7 @@ std::optional<std::wstring> Process::GetCommandLineStr() const
 	}
 }
 
-std::optional<uint16_t> Process::LockAddress(uint64_t addr)
+std::optional<uint16_t> Process::LockAddress(uint64_t addr) const
 {
 	uint16_t instr;
 	if (!ReadMemory(addr, &instr, 2)) {
@@ -877,12 +877,12 @@ std::optional<uint16_t> Process::LockAddress(uint64_t addr)
 	return instr;
 }
 
-bool Process::UnlockAddress(uint64_t addr, uint16_t instr)
+bool Process::UnlockAddress(uint64_t addr, uint16_t instr) const
 {
 	return WriteMemory(addr, &instr, 2, true);
 }
 
-std::optional<Thread> Process::CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags)
+std::optional<Thread> Process::CreateThread(uint64_t start_routine, uint64_t parameter, DWORD dwCreationFlags) const
 {
 	DWORD thread_id = 0;
 	HANDLE thread_handle = NULL;
@@ -964,7 +964,7 @@ std::optional<Thread> Process::CreateThread(uint64_t start_routine, uint64_t par
 	return Thread{ thread_handle };
 }
 
-std::optional<uint16_t> Process::BlockThread(Thread* thread)
+std::optional<uint16_t> Process::BlockThread(Thread* thread) const
 {
 	if (!thread->Suspend()) {
 		return {};
@@ -986,7 +986,7 @@ std::optional<uint16_t> Process::BlockThread(Thread* thread)
 	return old_instr;
 }
 
-bool Process::ResumeBlockedThread(Thread* thread, uint16_t instr)
+bool Process::ResumeBlockedThread(Thread* thread, uint16_t instr) const
 {
 	if (!thread->Suspend()) {
 		return false;
@@ -1134,7 +1134,7 @@ std::optional<DWORD> Process::GetExitCode() const
 // 	return image_base;
 // }
 
-std::optional<Image> Process::LoadImageFromImageBase(uint64_t image_base)
+std::optional<Image> Process::LoadImageFromImageBase(uint64_t image_base) const
 {
 	if (IsCur()) {
 		return Image::LoadFromImageBuf((void*)image_base, image_base);
@@ -1252,7 +1252,7 @@ std::optional<uint64_t> Process::LoadLibraryW(std::wstring_view lib_name, bool s
 	return addr;
 }
 
-bool Process::FreeLibrary(uint64_t module_base)
+bool Process::FreeLibrary(uint64_t module_base) const
 {
 	if (IsCur()) {
 		return ::FreeLibrary((HMODULE)module_base);
@@ -1372,7 +1372,7 @@ bool Process::Call(uint64_t call_addr, const std::vector<uint64_t>& par_list, ui
 	return success;
 }
 
-bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync)
+bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync) const
 {
 	constexpr int32_t exec_offset = 0x100;
 
@@ -1606,7 +1606,7 @@ bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync)
 	return true;
 }
 
-bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync, bool init_exec_page)
+bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync, bool init_exec_page) const
 {
 	constexpr int32_t header_offset = 0x0;
 	constexpr int32_t context_offset = 0x40;
@@ -1666,7 +1666,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* conte
 	return success;
 }
 
-bool Process::Call(uint64_t call_addr, CallContextX86* context, bool sync)
+bool Process::Call(uint64_t call_addr, CallContextX86* context, bool sync) const
 {
 	uint64_t exec_page = 0;
 	bool init_exec_page = true;
@@ -1696,7 +1696,7 @@ bool Process::Call(uint64_t call_addr, CallContextX86* context, bool sync)
 	return success;
 }
 
-bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync)
+bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 {
 	constexpr int32_t exec_offset = 0x800;
 
@@ -2093,7 +2093,7 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync)
 	return true;
 }
 
-bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync, bool init_exec_page)
+bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync, bool init_exec_page) const
 {
 	constexpr int32_t header_offset = 0x0;
 	constexpr int32_t context_offset = 0x100;
@@ -2153,7 +2153,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 	return success;
 }
 
-bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync)
+bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync) const
 {
 	uint64_t exec_page = 0;
 	bool init_exec_page = true;
