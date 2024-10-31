@@ -381,14 +381,13 @@ std::optional<std::tuple<Process, Thread>> Process::CreateByToken(std::wstring_v
 	return std::tuple { Process{ UniqueHandle(pi->hProcess) }, Thread{ UniqueHandle(pi->hThread) } };
 }
 
-std::vector<uint64_t> Process::SearchSigEx(const char* pattern, size_t pattern_size, uint64_t start_address,
-	size_t size, size_t max_match_size) const
+std::vector<uint64_t> Process::SearchSig(std::string_view hex_string, uint64_t start_address, size_t size) const
 {
 	if (auto opt = ReadMemory(start_address, size); opt)
 	{
 		std::vector<uint64_t> total{};
 		auto m = std::move(*opt);
-		auto res = Searcher::SearchMemory(pattern, pattern_size, m.data(), m.size(), max_match_size);
+		auto res = Searcher::SearchHex(hex_string, reinterpret_cast<const char*>(m.data()), m.size());
 		if (res.empty())
 			return {};
 
@@ -397,33 +396,7 @@ std::vector<uint64_t> Process::SearchSigEx(const char* pattern, size_t pattern_s
 		return total;
 	}
 	return {};
-}
 
-std::vector<uint64_t> Process::SearchSig(std::string_view hex_string, uint64_t start_address, size_t size) const
-{
-	std::string hex{ hex_string };
-	// 移除空格
-	hex.erase(std::remove(hex.begin(), hex.end(), ' '), hex.end());
-
-	// 如果不是偶数，头部加一个字节
-	if (hex.size() % 2 != 0)
-	{
-		hex.insert(0, "0");
-	}
-
-	std::vector<char> pattern;
-	auto bytes_count = hex.size() / 2;
-	for (size_t i = 0; i < bytes_count; ++i)
-	{
-		pattern.push_back('\\');
-		pattern.push_back('x');
-		pattern.push_back(hex[i * 2]);
-		pattern.push_back(hex[i * 2 + 1]);
-	}
-	// 结尾需要个.*匹配
-	pattern.push_back('.');
-	pattern.push_back('*');
-	return SearchSigEx(pattern.data(), pattern.size(), start_address, size, bytes_count);
 	// std::vector<SignElement> signature;
 	// size_t offset = 0, total_len = StringToElement(hex_string_data, signature, offset);
 	//
