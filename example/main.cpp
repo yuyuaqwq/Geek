@@ -29,11 +29,11 @@ const unsigned char hexData[240] = {
 };
 
 int main() {
-	auto m = geek::ThisProcess.GetModuleInfoByModuleName(L"example.exe").value();
+	auto m = geek::ThisProcess.Modules().FindByModuleName(L"example2.exe");
 
 	hexData[0];
 
-	auto res = geek::ThisProcess.SearchSig("11 45 14", m.base, m.size);
+	auto res = geek::ThisProcess.SearchSig("11 45 14", m.DllBase(), m.SizeOfImage());
 	
 	for (auto o : res)
 	{

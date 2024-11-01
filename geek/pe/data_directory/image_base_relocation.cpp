@@ -112,6 +112,12 @@ size_t ImageBaseRelocationFieldList::size() const
 	return (raw_->SizeOfBlock - sizeof(*raw_)) / sizeof(uint16_t);
 }
 
+ImageBaseRelocationFieldListNode ImageBaseRelocationFieldList::operator[](size_t index) const
+{
+	assert(index < size());
+	return { const_cast<ImageBaseRelocationFieldList*>(this), RawFields() + index };
+}
+
 ImageBaseRelocationFieldListNode ImageBaseRelocationFieldList::begin() const
 {
 	return { const_cast<ImageBaseRelocationFieldList*>(this), RawFields() };
@@ -207,16 +213,5 @@ bool ImageBaseRelocationFieldListNode::operator==(const ImageBaseRelocationField
 bool ImageBaseRelocationFieldListNode::operator!=(const ImageBaseRelocationFieldListNode& right) const
 {
 	return !operator==(right);
-}
-
-ImageBaseRelocationFieldListNode& ImageBaseRelocationFieldListNode::operator*()
-{
-	return *this;
-}
-
-ImageBaseRelocationFieldListNode& ImageBaseRelocationFieldListNode::operator[](size_t index)
-{
-	raw_ += index;
-	return *this;
 }
 }

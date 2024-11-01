@@ -4,6 +4,7 @@
 
 #include "list_entry.h"
 #include <geek/process/process.h>
+#include <geek/utils/converter.h>
 
 namespace geek {
 ModuleList::ModuleList(Process* proc)
@@ -12,37 +13,45 @@ ModuleList::ModuleList(Process* proc)
 	if (proc_->IsX86())
 	{
 		auto ldr = PebLdrData32();
-		if (!ldr) return {};
+		if (!ldr) return;
 		begin_link_ = ldr->InLoadOrderModuleList.Flink;
 	}
 	else
 	{
 		auto ldr = PebLdrData64();
-		if (!ldr) return {};
+		if (!ldr) return;
 		begin_link_ = ldr->InLoadOrderModuleList.Flink;
 	}
 }
 
 std::optional<PEB_LDR_DATA32> ModuleList::PebLdrData32() const
 {
-	auto peb = proc_->RawPeb32();
-	if (!peb)
-		return std::nullopt;
-	PEB_LDR_DATA32 ldr;
-	if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
-		return std::nullopt;
-	return ldr;
+	if (!ldr32_)
+	{
+		auto peb = proc_->Peb32();
+		if (!peb)
+			return std::nullopt;
+		PEB_LDR_DATA32 ldr;
+		if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
+			return std::nullopt;
+		ldr32_ = ldr;
+	}
+	return ldr32_;
 }
 
 std::optional<PEB_LDR_DATA64> ModuleList::PebLdrData64() const
 {
-	auto peb = proc_->RawPeb64();
-	if (!peb)
-		return std::nullopt;
-	PEB_LDR_DATA64 ldr;
-	if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
-		return std::nullopt;
-	return ldr;
+	if (!ldr64_)
+	{
+		auto peb = proc_->Peb64();
+		if (!peb)
+			return std::nullopt;
+		PEB_LDR_DATA64 ldr;
+		if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
+			return std::nullopt;
+		ldr64_ = ldr;
+	}
+	return ldr64_;
 }
 
 bool ModuleList::IsX32() const
@@ -60,6 +69,29 @@ ModuleListNode ModuleList::end() const
 	return { const_cast<ModuleList*>(this), 0 };
 }
 
+ModuleListNode ModuleList::FindByModuleBase(uint64_t base) const
+{
+	for (auto& m : *this)
+	{
+		if (m.DllBase() == base)
+			return m;
+	}
+	return end();
+}
+
+ModuleListNode ModuleList::FindByModuleName(std::wstring_view name) const
+{
+	auto n = Convert::ToUppercase(name);
+
+	for (auto& m : *this)
+	{
+		auto n2 = Convert::ToUppercase(m.BaseDllName());
+		if (n2 == n)
+			return m;
+	}
+	return end();
+}
+
 ModuleListNode::ModuleListNode(ModuleList* owner, uint64_t entry)
 	: entry_(entry), owner_(owner)
 {
@@ -70,68 +102,122 @@ bool ModuleListNode::IsX32() const
 	return owner_->IsX32();
 }
 
+bool ModuleListNode::IsEnd() const
+{
+	return owner_ == nullptr || entry_ == 0;
+}
+
+bool ModuleListNode::IsValid() const
+{
+	if (IsEnd())
+		return false;
+	if (IsX32())
+	{
+		return LdrDataTableEntry32().has_value();
+	}
+	else
+	{
+		return LdrDataTableEntry64().has_value();
+	}
+}
+
 std::optional<LDR_DATA_TABLE_ENTRY32> ModuleListNode::LdrDataTableEntry32() const
 {
-	LDR_DATA_TABLE_ENTRY32 entry;
-	if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
-		return std::nullopt;
-	return entry;
+	if (!ldte32_) {
+		LDR_DATA_TABLE_ENTRY32 entry;
+		if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
+			return std::nullopt;
+		ldte32_ = entry;
+	}
+	return ldte32_;
 }
 
 std::optional<LDR_DATA_TABLE_ENTRY64> ModuleListNode::LdrDataTableEntry64() const
 {
-	LDR_DATA_TABLE_ENTRY64 entry;
-	if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
-		return std::nullopt;
-	return entry;
+	if (!ldte64_)
+	{
+		LDR_DATA_TABLE_ENTRY64 entry;
+		if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
+			return std::nullopt;
+		ldte64_ = entry;
+	}
+	return ldte64_;
 }
 
-std::optional<std::wstring> ModuleListNode::FullDllName() const
+uint32_t ModuleListNode::SizeOfImage() const
 {
-	std::wstring name;
+	assert(IsValid());
+	if (IsX32())
+	{
+		auto ldt = LdrDataTableEntry32();
+		return ldt->SizeOfImage;
+	}
+	else
+	{
+		auto ldt = LdrDataTableEntry64();
+		return ldt->SizeOfImage;
+	}
+}
+
+uint64_t ModuleListNode::DllBase() const
+{
+	assert(IsValid());
+	if (IsX32())
+	{
+		auto ldt = LdrDataTableEntry32();
+		return ldt->DllBase;
+	}
+	else
+	{
+		auto ldt = LdrDataTableEntry64();
+		return ldt->DllBase;
+	}
+}
+
+std::wstring ModuleListNode::FullDllName() const
+{
+	assert(IsValid());
+	std::vector<wchar_t> name;
 	uint64_t buffer_addr;
 	if (IsX32())
 	{
 		auto ldt = LdrDataTableEntry32();
-		if (!ldt) return std::nullopt;
-		name.resize(ldt->FullDllName.Length);
+		name.resize(ldt->FullDllName.Length + 1);
 		buffer_addr = ldt->FullDllName.Buffer;
 	}
 	else
 	{
 		auto ldt = LdrDataTableEntry64();
-		if (!ldt) return std::nullopt;
-		name.resize(ldt->FullDllName.Length);
+		name.resize(ldt->FullDllName.Length + 1);
 		buffer_addr = ldt->FullDllName.Buffer;
 	}
 	if (!owner_->proc_->ReadMemory(buffer_addr, name.data(), name.size()))
-		return std::nullopt;
+		throw std::exception("Is failure possible here? See geek::LastError for more information!");
 
-	return name;
+	return name.data();
 }
 
-std::optional<std::wstring> ModuleListNode::BaseDllName() const
+std::wstring ModuleListNode::BaseDllName() const
 {
-	std::wstring name;
+	assert(IsValid());
+	std::vector<wchar_t> name;
 	uint64_t buffer_addr;
 	if (IsX32())
 	{
 		auto ldt = LdrDataTableEntry32();
-		if (!ldt) return std::nullopt;
-		name.resize(ldt->BaseDllName.Length);
+		name.resize(ldt->BaseDllName.Length + 1);
 		buffer_addr = ldt->BaseDllName.Buffer;
 	}
 	else
 	{
 		auto ldt = LdrDataTableEntry64();
-		if (!ldt) return std::nullopt;
-		name.resize(ldt->BaseDllName.Length);
+		name.resize(ldt->BaseDllName.Length + 1);
 		buffer_addr = ldt->BaseDllName.Buffer;
 	}
 	if (!owner_->proc_->ReadMemory(buffer_addr, name.data(), name.size()))
-		return std::nullopt;
+		throw std::exception("Is failure possible here? See geek::LastError for more information!");
 
-	return name;
+	return name.data();
 }
 
 ModuleListNode& ModuleListNode::operator++()
@@ -174,5 +260,10 @@ ModuleListNode ModuleListNode::operator--(int)
 bool ModuleListNode::operator==(const ModuleListNode& right) const
 {
 	return owner_ == right.owner_ && entry_ == right.entry_;
+}
+
+bool ModuleListNode::operator!=(const ModuleListNode& right) const
+{
+	return !operator==(right);
 }
 }

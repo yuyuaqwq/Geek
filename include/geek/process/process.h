@@ -23,6 +23,7 @@
 #include <geek/pe/image.h>
 #include <geek/utils/handle.h>
 #include <geek/wow64ext/wow64ext.h>
+#include <geek/process/process_list.h>
 
 #include "ntinc.h"
 
@@ -80,7 +81,7 @@ public:
     explicit Process(UniqueHandle process_handle) noexcept;
 
     static std::optional<Process> Open(DWORD pid, DWORD desiredAccess = PROCESS_ALL_ACCESS);
-    static std::optional<Process> Open(std::wstring_view process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS, size_t count = 1);
+    static std::optional<Process> Open(std::wstring_view process_name, DWORD desiredAccess = PROCESS_ALL_ACCESS);
 
     /*
     * CREATE_SUSPENDED:挂起目标进程
@@ -110,9 +111,9 @@ public:
     bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false) const;
     std::optional<uint64_t> WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE);
     bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) const;
-    std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
-    std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const;
-    bool ScanMemoryInfoList(const std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)>& callback, bool include_module = false) const;
+    // std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
+    // std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const;
+    // bool ScanMemoryInfoList(const std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)>& callback, bool include_module = false) const;
 
     std::optional<std::wstring> GetCommandLineStr() const;
 
@@ -140,9 +141,8 @@ public:
     //     bool zero_pe_header = true,
     //     bool entry_call_sync = true);
 
-    std::optional<Image> LoadImageFromImageBase(uint64_t image_base) const;
+    std::optional<Image> LoadImageFromImageBase(uint64_t base) const;
     bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) const;
-    bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true);
 
     std::optional<uint64_t> LoadLibraryW(std::wstring_view lib_name, bool sync = true);
     bool FreeLibrary(uint64_t module_base) const;
@@ -183,26 +183,25 @@ public:
     // PIMAGE_TLS_CALLBACK
     // bool ExecuteTls(Image* image, uint64_t image_base);
 
-    ModuleList Modules() const;
+    const ModuleList& Modules() const;
 
     bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true);
 
-    std::optional<PROCESS_BASIC_INFORMATION32> RawPbi32() const;
-    std::optional<PROCESS_BASIC_INFORMATION64> RawPbi64() const;
-    std::optional<PEB32> RawPeb32() const;
-    std::optional<PEB64> RawPeb64() const;
+    std::optional<PROCESS_BASIC_INFORMATION32> Pbi32() const;
+    std::optional<PROCESS_BASIC_INFORMATION64> Pbi64() const;
+    std::optional<PEB32> Peb32() const;
+    std::optional<PEB64> Peb64() const;
 
+    static ProcessList& CachedProcessList();
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type);
     static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath);
     static bool CurIsX86();
     static DWORD GetProcessIdFromThread(Thread* thread);
-    static std::optional<std::vector<ProcessInfo>> GetProcessInfoList();
-    static std::optional<std::map<DWORD, ProcessInfo>> GetProcessIdMap();
-    static std::optional<std::wstring> GetProcessNameByProcessId(DWORD pid, std::vector<ProcessInfo>* cache = nullptr);
-    static std::optional<DWORD> GetProcessIdByProcessName(std::wstring_view processName, size_t count = 1);
     static bool Terminate(std::wstring_view processName);
+
 private:
     UniqueHandle process_handle_;
+    mutable std::optional<ModuleList> modules_;
 };
 
 static inline Process ThisProcess{ kCurrentProcess };

@@ -27,6 +27,7 @@ void UpdateNtError(uint32_t e, const char* w)
 
 ErrorType LastError::TypeOfError()
 {
+	return error_type;
 }
 
 uint32_t LastError::Code()

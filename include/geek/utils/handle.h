@@ -20,6 +20,7 @@ public:
     UniqueHandle& operator=(UniqueHandle&& right) noexcept;
 
     HANDLE operator*() const noexcept { return handle_; }
+    operator bool() const { return IsValid(); }
 
     bool IsValid() const noexcept;
     HANDLE Release() noexcept;
