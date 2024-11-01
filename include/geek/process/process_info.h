@@ -5,15 +5,20 @@
 #include <Windows.h>
 #include <tlhelp32.h>
 
+#include <geek/wow64ext/wow64extdefs.h>
+
 namespace geek {
+class ProcessInfo
+{
+public:
+    ProcessInfo(const PROCESSENTRY32W& entry) : entry_(entry) {}
 
-struct ProcessInfo {
-    explicit ProcessInfo(const PROCESSENTRY32W& entry);
-    ~ProcessInfo() = default;
+    uint32_t ProcessId() const { return entry_.th32ProcessID; }
+    uint32_t ParentProcessId() const { return entry_.th32ParentProcessID; }
+    std::wstring ExeFile() const { return entry_.szExeFile; }
 
-    DWORD process_id;
-    DWORD parent_process_id;
-    std::wstring process_name;
+private:
+    PROCESSENTRY32W entry_;
 };
 
 } // geek

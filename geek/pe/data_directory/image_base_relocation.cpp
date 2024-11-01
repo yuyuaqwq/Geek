@@ -25,12 +25,12 @@ ImageBaseRelocationList::ImageBaseRelocationList(Image* image)
 
 ImageBaseRelocationListNode ImageBaseRelocationList::begin() const
 {
-	return { image_, const_cast<ImageBaseRelocationList*>(this), begin_raw_ };
+	return { const_cast<ImageBaseRelocationList*>(this), begin_raw_ };
 }
 
 ImageBaseRelocationListNode ImageBaseRelocationList::end() const
 {
-	return { image_, const_cast<ImageBaseRelocationList*>(this), end_raw_ };
+	return { const_cast<ImageBaseRelocationList*>(this), end_raw_ };
 }
 
 size_t ImageBaseRelocationList::size() const
@@ -48,14 +48,14 @@ bool ImageBaseRelocationListNode::IsEnd() const
 	return SizeOfBlock() == 0 || VirtualAddress() == 0;
 }
 
-ImageBaseRelocationListNode::ImageBaseRelocationListNode(Image* image, ImageBaseRelocationList* owner, IMAGE_BASE_RELOCATION* raw)
-	: image_(image), owner_(owner), raw_(raw)
+ImageBaseRelocationListNode::ImageBaseRelocationListNode(ImageBaseRelocationList* owner, IMAGE_BASE_RELOCATION* raw)
+	: owner_(owner), raw_(raw)
 {
 }
 
 ImageBaseRelocationFieldList ImageBaseRelocationListNode::Fields() const
 {
-	return { image_, raw_ };
+	return { owner_->image_, raw_ };
 }
 
 ImageBaseRelocationListNode& ImageBaseRelocationListNode::operator++()
@@ -74,7 +74,7 @@ ImageBaseRelocationListNode ImageBaseRelocationListNode::operator++(int)
 
 bool ImageBaseRelocationListNode::operator==(const ImageBaseRelocationListNode& right) const
 {
-	return image_ == right.image_ && owner_ == right.owner_ && raw_ == right.raw_;
+	return owner_ == right.owner_ && raw_ == right.raw_;
 }
 
 bool ImageBaseRelocationListNode::operator!=(const ImageBaseRelocationListNode& right) const
@@ -114,17 +114,17 @@ size_t ImageBaseRelocationFieldList::size() const
 
 ImageBaseRelocationFieldListNode ImageBaseRelocationFieldList::begin() const
 {
-	return { image_, const_cast<ImageBaseRelocationFieldList*>(this), RawFields() };
+	return { const_cast<ImageBaseRelocationFieldList*>(this), RawFields() };
 }
 
 ImageBaseRelocationFieldListNode ImageBaseRelocationFieldList::end() const
 {
-	return { image_, const_cast<ImageBaseRelocationFieldList*>(this), RawFields() + size() };
+	return { const_cast<ImageBaseRelocationFieldList*>(this), RawFields() + size() };
 }
 
-ImageBaseRelocationFieldListNode::ImageBaseRelocationFieldListNode(Image* image, ImageBaseRelocationFieldList* owner,
+ImageBaseRelocationFieldListNode::ImageBaseRelocationFieldListNode(ImageBaseRelocationFieldList* owner,
 	uint16_t* raw)
-		: image_(image), owner_(owner), raw_(raw)
+	: owner_(owner), raw_(raw)
 {
 }
 
@@ -155,7 +155,7 @@ uint32_t ImageBaseRelocationFieldListNode::Rva() const
 
 const uint32_t* ImageBaseRelocationFieldListNode::ResolveAddress32() const
 {
-	return reinterpret_cast<const uint32_t*>(image_->RvaToPoint(Rva()));
+	return reinterpret_cast<const uint32_t*>(owner_->image_->RvaToPoint(Rva()));
 }
 
 const uint64_t* ImageBaseRelocationFieldListNode::ResolveAddress64() const
@@ -165,7 +165,7 @@ const uint64_t* ImageBaseRelocationFieldListNode::ResolveAddress64() const
 
 uint32_t* ImageBaseRelocationFieldListNode::ResolveAddress32()
 {
-	return reinterpret_cast<uint32_t*>(image_->RvaToPoint(Rva()));
+	return reinterpret_cast<uint32_t*>(owner_->image_->RvaToPoint(Rva()));
 }
 
 uint64_t* ImageBaseRelocationFieldListNode::ResolveAddress64()
@@ -201,7 +201,7 @@ ImageBaseRelocationFieldListNode ImageBaseRelocationFieldListNode::operator--(in
 
 bool ImageBaseRelocationFieldListNode::operator==(const ImageBaseRelocationFieldListNode& right) const
 {
-	return owner_ == right.owner_ && image_ == right.image_ && raw_ == right.raw_;
+	return owner_ == right.owner_ && raw_ == right.raw_;
 }
 
 bool ImageBaseRelocationFieldListNode::operator!=(const ImageBaseRelocationFieldListNode& right) const

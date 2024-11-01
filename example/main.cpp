@@ -30,6 +30,9 @@ const unsigned char hexData[240] = {
 
 int main() {
 	auto m = geek::ThisProcess.GetModuleInfoByModuleName(L"example.exe").value();
+
+	hexData[0];
+
 	auto res = geek::ThisProcess.SearchSig("11 45 14", m.base, m.size);
 	
 	for (auto o : res)

@@ -19,6 +19,7 @@ public:
 	bool IsValid() const;
 
 private:
+	friend class ImageBaseRelocationListNode;
 	size_t size_;
 	IMAGE_BASE_RELOCATION* begin_raw_;
 	IMAGE_BASE_RELOCATION* end_raw_;
@@ -32,7 +33,7 @@ class ImageBaseRelocationListNode
 public:
 	using iterator_category = std::forward_iterator_tag;
 
-	ImageBaseRelocationListNode(Image* image, ImageBaseRelocationList* owner, IMAGE_BASE_RELOCATION* raw);
+	ImageBaseRelocationListNode(ImageBaseRelocationList* owner, IMAGE_BASE_RELOCATION* raw);
 
 	const IMAGE_BASE_RELOCATION* raw() const { return raw_; }
 	IMAGE_BASE_RELOCATION* raw() { return raw_; }
@@ -51,7 +52,6 @@ public:
 	bool IsEnd() const;
 
 private:
-	Image* image_;
 	ImageBaseRelocationList* owner_;
 	IMAGE_BASE_RELOCATION* raw_;
 };
@@ -71,6 +71,7 @@ public:
 	ImageBaseRelocationFieldListNode end() const;
 
 private:
+	friend class ImageBaseRelocationFieldListNode;
 	Image* image_;
 	IMAGE_BASE_RELOCATION* raw_;
 };
@@ -87,7 +88,7 @@ class ImageBaseRelocationFieldListNode
 public:
 	using iterator_category = std::random_access_iterator_tag;
 
-	ImageBaseRelocationFieldListNode(Image* image, ImageBaseRelocationFieldList* owner, uint16_t* raw);
+	ImageBaseRelocationFieldListNode(ImageBaseRelocationFieldList* owner, uint16_t* raw);
 
 	RelBasedType Type() const;
 	uint16_t Offset() const;
@@ -110,7 +111,6 @@ public:
 	ImageBaseRelocationFieldListNode& operator[](size_t index);
 
 private:
-	Image* image_;
 	ImageBaseRelocationFieldList* owner_;
 	uint16_t* raw_;
 };

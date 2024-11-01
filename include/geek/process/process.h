@@ -18,17 +18,63 @@
 #undef min
 #undef max
 
-#include <geek/process/module_info.h>
-#include <geek/process/memory_info.h>
-#include <geek/process/process_info.h>
 #include <geek/process/thread.h>
+#include <geek/process/module_list.h>
 #include <geek/pe/image.h>
 #include <geek/utils/handle.h>
+#include <geek/wow64ext/wow64ext.h>
+
+#include "ntinc.h"
 
 namespace geek {
 
 static inline Wow64 ms_wow64;
 static inline const HANDLE kCurrentProcess = (HANDLE)-1;
+
+class Process;
+
+class NewlyCreatedProcessInfo
+{
+public:
+    NewlyCreatedProcessInfo(const PROCESS_INFORMATION& info);
+
+    Process NewlyProcess() const;
+    Thread NewlyThread() const;
+
+private:
+    PROCESS_INFORMATION info_;
+};
+
+struct CallContextX86 {
+    uint32_t eax = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    uint32_t ebx = 0;
+    uint32_t esi = 0;
+    uint32_t edi = 0;
+    int32_t balanced_esp = 0;
+    std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来，如果是创建线程调用，则最多只能传递32个参数
+};
+
+struct CallContextAmd64 {
+    uint64_t rax = 0;
+    uint64_t rcx = 0;
+    uint64_t rdx = 0;
+    uint64_t rbx = 0;
+    uint64_t rbp = 0;
+    uint64_t rsi = 0;
+    uint64_t rdi = 0;
+    uint64_t r8 = 0;
+    uint64_t r9 = 0;
+    uint64_t r10 = 0;
+    uint64_t r11 = 0;
+    uint64_t r12 = 0;
+    uint64_t r13 = 0;
+    uint64_t r14 = 0;
+    uint64_t r15 = 0;
+    std::initializer_list<uint64_t> stack;
+};
+
 class Process {
 public:
     explicit Process(UniqueHandle process_handle) noexcept;
@@ -39,12 +85,12 @@ public:
     /*
     * CREATE_SUSPENDED:挂起目标进程
     */
-    static std::optional<std::tuple<Process, Thread>> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0);
+    static std::optional<NewlyCreatedProcessInfo> Create(std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0);
 
     /*
     * L"explorer.exe"
     */
-    static std::optional<std::tuple<Process, Thread>> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL);
+    static std::optional<NewlyCreatedProcessInfo> CreateByToken(std::wstring_view tokenProcessName, std::wstring_view command, BOOL inheritHandles = FALSE, DWORD creationFlags = 0, STARTUPINFOW* si = NULL, PROCESS_INFORMATION* pi = NULL);
 
     std::vector<uint64_t> SearchSig(std::string_view hex_string, uint64_t start_address, size_t size) const;
 
@@ -93,13 +139,13 @@ public:
     //     bool skip_not_loaded = false,
     //     bool zero_pe_header = true,
     //     bool entry_call_sync = true);
+
     std::optional<Image> LoadImageFromImageBase(uint64_t image_base) const;
     bool FreeLibraryFromImage(Image* image, bool call_dll_entry = true) const;
     bool FreeLibraryFromBase(uint64_t base, bool call_dll_entry = true);
 
     std::optional<uint64_t> LoadLibraryW(std::wstring_view lib_name, bool sync = true);
     bool FreeLibrary(uint64_t module_base) const;
-    std::optional<Image> GetImageByModuleInfo(const geek::ModuleInfo& info) const;
     //TODO GetExportProcAddress
     // std::optional<uint64_t> GetExportProcAddress(Image* image, const char* func_name);
 
@@ -122,38 +168,10 @@ public:
         uint64_t* ret_value = nullptr,
         CallConvention call_convention = CallConvention::kStdCall);
 
-    struct CallContextX86 {
-        uint32_t eax = 0;
-        uint32_t ecx = 0;
-        uint32_t edx = 0;
-        uint32_t ebx = 0;
-        uint32_t esi = 0;
-        uint32_t edi = 0;
-        int32_t balanced_esp = 0;
-        std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来，如果是创建线程调用，则最多只能传递32个参数
-    };
     bool CallGenerateCodeX86(uint64_t exec_page, bool sync) const;
     bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) const;
     bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true) const;
 
-    struct CallContextAmd64 {
-        uint64_t rax = 0;
-        uint64_t rcx = 0;
-        uint64_t rdx = 0;
-        uint64_t rbx = 0;
-        uint64_t rbp = 0;
-        uint64_t rsi = 0;
-        uint64_t rdi = 0;
-        uint64_t r8 = 0;
-        uint64_t r9 = 0;
-        uint64_t r10 = 0;
-        uint64_t r11 = 0;
-        uint64_t r12 = 0;
-        uint64_t r13 = 0;
-        uint64_t r14 = 0;
-        uint64_t r15 = 0;
-        std::initializer_list<uint64_t> stack;
-    };
     bool CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const;
     bool Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync = true, bool init_exec_page = true) const;
     bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true) const;
@@ -165,11 +183,15 @@ public:
     // PIMAGE_TLS_CALLBACK
     // bool ExecuteTls(Image* image, uint64_t image_base);
 
+    ModuleList Modules() const;
+
     bool CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter = 0, bool sync = true);
 
-    std::optional<std::vector<ModuleInfo>> GetModuleInfoList() const;
-    std::optional<ModuleInfo> GetModuleInfoByModuleName(std::wstring_view name) const;
-    std::optional<ModuleInfo> GetModuleInfoByModuleBase(uint64_t base) const;
+    std::optional<PROCESS_BASIC_INFORMATION32> RawPbi32() const;
+    std::optional<PROCESS_BASIC_INFORMATION64> RawPbi64() const;
+    std::optional<PEB32> RawPeb32() const;
+    std::optional<PEB64> RawPeb64() const;
+
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type);
     static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath);
     static bool CurIsX86();
