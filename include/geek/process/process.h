@@ -15,9 +15,6 @@
 #include <ntifs.h>
 #endif
 
-#undef min
-#undef max
-
 #include <geek/process/thread.h>
 #include <geek/process/module_list.h>
 #include <geek/pe/image.h>

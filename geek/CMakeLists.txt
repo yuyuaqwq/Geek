@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5...3.21 FATAL_ERROR)
-project(miniwin)
+project(geek)
 
 set(CMAKE_CXX_STANDARD 17)
 
