@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.5...3.21 FATAL_ERROR)
+project(geek)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+
+set(LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+set(EXEC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+set(HEAD_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+set(GEEK_LIB geek_d)
+else()
+set(GEEK_LIB geek)
+endif()
+
+set(SRC_HEAD_PATH ${PROJECT_SOURCE_DIR})
+set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/third-party)
+
+add_subdirectory(geek)
+add_subdirectory(example)
