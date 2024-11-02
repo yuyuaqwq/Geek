@@ -1343,7 +1343,7 @@ void InlineHook::Uninstall()
 Architecture InlineHook::GetCurrentRunningArch() const
 {
 	Architecture arch;
-	if (process_->IsX86()) {
+	if (process_->IsX32()) {
 		arch = Architecture::kX86;
 	}
 	else {

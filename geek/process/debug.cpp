@@ -188,7 +188,7 @@ bool Debug::SetSingleStep(DWORD thread_id_, const SingleStepEvent& event)
 	if (!thread) {
 		return false;
 	}
-	if (process_.IsX86()) {
+	if (process_.IsX32()) {
 		_CONTEXT32 context;
 		if (!process_.GetThreadContext(&*thread, context)) {
 			return false;
@@ -234,7 +234,7 @@ bool Debug::BreakPointHandler(EXCEPTION_RECORD& record)
 		return false;
 	}
         
-	if (process_.IsX86()) {
+	if (process_.IsX32()) {
 		_CONTEXT32 context;
 		if (!process_.GetThreadContext(&*thread, context)) {
 			return false;
@@ -282,7 +282,7 @@ bool Debug::SingleStepHandler(EXCEPTION_RECORD& record)
 	if (!thread) {
 		return false;
 	}
-	if (process_.IsX86()) {
+	if (process_.IsX32()) {
 		_CONTEXT32 context;
 		if (!process_.GetThreadContext(&*thread, context, CONTEXT_DEBUG_REGISTERS)) {
 			return false;

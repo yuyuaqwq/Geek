@@ -10,18 +10,6 @@ namespace geek {
 ModuleList::ModuleList(Process* proc)
 	: proc_(proc)
 {
-	if (proc_->IsX86())
-	{
-		auto ldr = PebLdrData32();
-		if (!ldr) return;
-		begin_link_ = ldr->InLoadOrderModuleList.Flink;
-	}
-	else
-	{
-		auto ldr = PebLdrData64();
-		if (!ldr) return;
-		begin_link_ = ldr->InLoadOrderModuleList.Flink;
-	}
 }
 
 std::optional<PEB_LDR_DATA32> ModuleList::PebLdrData32() const
@@ -54,19 +42,51 @@ std::optional<PEB_LDR_DATA64> ModuleList::PebLdrData64() const
 	return ldr64_;
 }
 
+uint64_t ModuleList::AddressOfFirstLink() const
+{
+	if (IsX32())
+	{
+		auto ldr = PebLdrData32();
+		return ldr->InLoadOrderModuleList.Flink;
+	}
+	else
+	{
+		auto ldr = PebLdrData64();
+		return ldr->InLoadOrderModuleList.Flink;
+	}
+}
+
+uint64_t ModuleList::AddressOfLastLink() const
+{
+	ListEntry entry{ proc_, AddressOfFirstLink() };
+	return entry.Blink().addr();
+}
+
 bool ModuleList::IsX32() const
 {
-	return proc_->IsX86();
+	return proc_->IsX32();
+}
+
+bool ModuleList::IsValid() const
+{
+	if (proc_ == nullptr)
+		return false;
+	if (IsX32())
+		return PebLdrData32().has_value();
+	else
+		return PebLdrData64().has_value();
 }
 
 ModuleListNode ModuleList::begin() const
 {
-	return { const_cast<ModuleList*>(this), begin_link_ };
+	assert(IsValid());
+	return { const_cast<ModuleList*>(this), AddressOfFirstLink() };
 }
 
 ModuleListNode ModuleList::end() const
 {
-	return { const_cast<ModuleList*>(this), 0 };
+	assert(IsValid());
+	return { const_cast<ModuleList*>(this), AddressOfLastLink() };
 }
 
 ModuleListNode ModuleList::FindByModuleBase(uint64_t base) const
@@ -104,7 +124,7 @@ bool ModuleListNode::IsX32() const
 
 bool ModuleListNode::IsEnd() const
 {
-	return owner_ == nullptr || entry_ == 0;
+	return entry_ == owner_->AddressOfLastLink();
 }
 
 bool ModuleListNode::IsValid() const
@@ -222,16 +242,14 @@ std::wstring ModuleListNode::BaseDllName() const
 
 ModuleListNode& ModuleListNode::operator++()
 {
-	ListEntry entry(owner_->proc_, entry_);
-	assert(entry.IsValid());
-	entry_ = entry.Flink().addr();
+	assert(IsValid());
 
-	// 如果下一个节点等于开始节点，说明到了末尾
-	if (entry_ == owner_->begin_link_)
-	{
-		// 置0表示末尾
-		entry_ = 0;
-	}
+	auto f = ListEntry(owner_->proc_, entry_).Flink();
+	entry_ = f.addr();
+
+	ldte32_.reset();
+	ldte64_.reset();
+
 	return *this;
 }
 
@@ -239,21 +257,6 @@ ModuleListNode ModuleListNode::operator++(int)
 {
 	auto tmp = *this;
 	++*this;
-	return tmp;
-}
-
-ModuleListNode& ModuleListNode::operator--()
-{
-	ListEntry entry(owner_->proc_, entry_);
-	assert(entry.IsValid());
-	entry_ = entry.Blink().addr();
-	return *this;
-}
-
-ModuleListNode ModuleListNode::operator--(int)
-{
-	auto tmp = *this;
-	--*this;
 	return tmp;
 }
 

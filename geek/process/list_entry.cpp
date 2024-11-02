@@ -6,7 +6,7 @@ namespace geek {
 ListEntry::ListEntry(Process* proc, uint64_t addr)
 	: proc_(proc), addr_(addr)
 {
-	if (proc_->IsX86())
+	if (proc_->IsX32())
 	{
 		LIST_ENTRY32 entry{};
 		if (!proc_->ReadMemory(addr, &entry, sizeof(LIST_ENTRY32))) {

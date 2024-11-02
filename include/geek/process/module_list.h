@@ -13,7 +13,7 @@ class ModuleList;
 class ModuleListNode
 {
 public:
-    using iterator_category = std::bidirectional_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
 
     ModuleListNode() = default;
     ModuleListNode(ModuleList* owner, uint64_t entry);
@@ -32,9 +32,6 @@ public:
 
     ModuleListNode& operator++();
     ModuleListNode operator++(int);
-
-    ModuleListNode& operator--();
-    ModuleListNode operator--(int);
 
     ModuleListNode& operator*() { return *this; }
     ModuleListNode& operator->() { return *this; }
@@ -57,7 +54,11 @@ public:
     std::optional<PEB_LDR_DATA32> PebLdrData32() const;
     std::optional<PEB_LDR_DATA64> PebLdrData64() const;
 
+    uint64_t AddressOfFirstLink() const;
+    uint64_t AddressOfLastLink() const;
+
     bool IsX32() const;
+    bool IsValid() const;
 
     ModuleListNode begin() const;
     ModuleListNode end() const;
@@ -68,7 +69,6 @@ public:
 private:
     friend class ModuleListNode;
     Process* proc_;
-    uint64_t begin_link_;
     mutable std::optional<PEB_LDR_DATA32> ldr32_;
     mutable std::optional<PEB_LDR_DATA64> ldr64_;
 };

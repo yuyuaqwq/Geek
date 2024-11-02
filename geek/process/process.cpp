@@ -309,7 +309,7 @@ DWORD Process::ProcId() const noexcept
 	return GetProcessId(Handle());
 }
 
-bool Process::IsX86() const noexcept
+bool Process::IsX32() const noexcept
 {
 	auto handle = Handle();
 
@@ -591,7 +591,7 @@ std::optional<std::wstring> Process::GetCommandLineStr() const
 		PDWORD ReturnLength
 	);
         
-	if (IsX86()) {
+	if (IsX32()) {
 		UNICODE_STRING32 commandLine;
 		_NtQueryInformationProcess NtQuery = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess");
 		if (!NtQuery) {
@@ -767,7 +767,7 @@ std::optional<uint16_t> Process::BlockThread(Thread* thread) const
 	}
 	unsigned char jmpSelf[] = { 0xeb, 0xfe };
 	uint64_t ip;
-	if (IsX86()) {
+	if (IsX32()) {
 		_CONTEXT32 context;
 		GetThreadContext(thread, context);
 		ip = context.Eip;
@@ -789,7 +789,7 @@ bool Process::ResumeBlockedThread(Thread* thread, uint16_t instr) const
 	}
 	uint16_t oldInstr;
 	uint64_t ip;
-	if (IsX86()) {
+	if (IsX32()) {
 		_CONTEXT32 context;
 		GetThreadContext(thread, context);
 		ip = context.Eip;
@@ -811,7 +811,7 @@ bool Process::IsTheOwningThread(Thread* thread) const
 
 bool Process::GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags) const
 {
-	if (IsX86()) {
+	if (IsX32()) {
 		return false;
 	}
 	bool success;
@@ -827,7 +827,7 @@ bool Process::GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 
 bool Process::GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags) const
 {
-	if (IsX86()) {
+	if (IsX32()) {
 		return false;
 	}
 	bool success;
@@ -843,7 +843,7 @@ bool Process::GetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags)
 
 bool Process::SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags) const
 {
-	if (!IsX86()) {
+	if (!IsX32()) {
 		return false;
 	}
 	bool success; 
@@ -859,7 +859,7 @@ bool Process::SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 
 bool Process::SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags) const
 {
-	if (!IsX86()) {
+	if (!IsX32()) {
 		return false;
 	}
 	bool success;
@@ -1087,7 +1087,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uin
 {
 
 	bool success = false;
-	if (IsX86()) {
+	if (IsX32()) {
 		if (call_convention == CallConvention::kStdCall) {
 			std::vector<uint32_t> converted_values;
 			converted_values.reserve(par_list.size());  // 预先分配足够的空间
@@ -2066,7 +2066,7 @@ bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_pa
 
 std::optional<PROCESS_BASIC_INFORMATION32> Process::Pbi32() const
 {
-	assert(IsX86());
+	assert(IsX32());
 	PROCESS_BASIC_INFORMATION32 pbi32{};
 	if (auto e = NtQueryInformationProcess(Handle(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL);
 		!NT_SUCCESS(e))
@@ -2101,7 +2101,7 @@ std::optional<PROCESS_BASIC_INFORMATION64> Process::Pbi64() const
 
 std::optional<PEB32> Process::Peb32() const
 {
-	assert(IsX86());
+	assert(IsX32());
 
 	auto pbi = Pbi32();
 	if (!pbi)
@@ -2115,7 +2115,7 @@ std::optional<PEB32> Process::Peb32() const
 
 std::optional<PEB64> Process::Peb64() const
 {
-	assert(!IsX86());
+	assert(!IsX32());
 
 	auto pbi = Pbi64();
 	if (!pbi)
@@ -2194,7 +2194,7 @@ Process::Process(UniqueHandle process_handle) noexcept:
 bool Process::CurIsX86()
 {
 	Process process{ kCurrentProcess };
-	return process.IsX86();
+	return process.IsX32();
 }
 
 DWORD Process::GetProcessIdFromThread(Thread* thread)
