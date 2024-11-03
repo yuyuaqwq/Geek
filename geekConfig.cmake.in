@@ -1,0 +1,11 @@
+# geekConfig.cmake.in
+include(CMakeFindDependencyMacro)
+
+# 设置库的目标
+set(geek_TARGETS geek)
+# 指定目标属性
+set(geek_INCLUDE_DIRS "@HEAD_PATH@")
+set(geek_LIBRARIES "${CMAKE_CURRENT_LIST_DIR}/../lib/${GEEK_LIB}.lib")
+
+# 让目标可用
+include(CMakePackageConfigHelpers)

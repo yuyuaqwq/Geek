@@ -16,6 +16,7 @@ public:
 
 	bool Write(const void* buf, size_t len, bool force = false) const;
 
+	uint64_t addr() const { return addr_; }
 	char* ptr() { return reinterpret_cast<char*>(addr_); }
 	const char* ptr() const { return reinterpret_cast<char*>(addr_); }
 
