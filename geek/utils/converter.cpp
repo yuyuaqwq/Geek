@@ -160,7 +160,7 @@ std::string Convert::ToHexString(uint64_t val, int reserve)
 std::wstring Convert::ToHexWString(uint64_t val, int reserve)
 {
 	std::wstringstream ss;
-	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill('0') << (val & 0xFFFFFFFF);
+	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill(L'0') << (val & 0xFFFFFFFF);
 	return ss.str();
 }
 }
