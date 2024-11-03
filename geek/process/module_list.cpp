@@ -261,8 +261,8 @@ std::wstring ModuleListNode::DebugName() const
 {
 	if (!IsValid())
 		return L"<Invalid>";
-	return L"[Addr:0x" + Convert::ToHexWString(DllBase(), IsX32() ? 4 : 8)
-		+ L" Size:" + Convert::ToHexWString(SizeOfImage(), 4) + L"] "
+	return L"[Addr:0x" + Convert::ToHexWString(DllBase(), IsX32() ? 8 : 16)
+		+ L" Size:" + Convert::ToHexWString(SizeOfImage(), 8) + L"] "
 		+ BaseDllName();
 }
 }
