@@ -259,11 +259,10 @@ bool ModuleListNode::operator!=(const ModuleListNode& right) const
 
 std::wstring ModuleListNode::DebugName() const
 {
-	if (IsValid())
+	if (!IsValid())
 		return L"<Invalid>";
 	return L"[Addr:0x" + Convert::ToHexWString(DllBase(), IsX32() ? 4 : 8)
-		+ L" Size:" + std::to_wstring(SizeOfImage()) + L"] "
-		+ BaseDllName()
-		+ (IsX32() ? L"-x86" : L"-x64");
+		+ L" Size:" + Convert::ToHexWString(SizeOfImage(), 4) + L"] "
+		+ BaseDllName();
 }
 }
