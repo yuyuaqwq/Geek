@@ -257,8 +257,13 @@ bool ModuleListNode::operator!=(const ModuleListNode& right) const
 	return !operator==(right);
 }
 
-std::wstring ModuleListNode::DebugString() const
+std::wstring ModuleListNode::DebugName() const
 {
-	return BaseDllName() + L"-" + (IsX32() ? L"x86" : L"x64") + L":" + Convert::ToHexWString(DllBase(), IsX32() ? 4 : 8);
+	if (IsValid())
+		return L"<Invalid>";
+	return L"[Addr:0x" + Convert::ToHexWString(DllBase(), IsX32() ? 4 : 8)
+		+ L" Size:" + std::to_wstring(SizeOfImage()) + L"] "
+		+ BaseDllName()
+		+ (IsX32() ? L"-x86" : L"-x64");
 }
 }

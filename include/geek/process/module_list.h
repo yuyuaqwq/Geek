@@ -39,7 +39,7 @@ public:
     bool operator==(const ModuleListNode& right) const;
     bool operator!=(const ModuleListNode& right) const;
 
-    std::wstring DebugString() const;
+    std::wstring DebugName() const;
 
 private:
     uint64_t entry_ = 0;

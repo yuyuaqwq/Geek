@@ -118,8 +118,8 @@ public:
 
     Address At(uint64_t addr) const;
 
-
-	std::optional<std::wstring> ProcName() const;
+    std::wstring DebugName() const;
+	std::optional<std::wstring> BaseName() const;
     std::optional<std::wstring> GetCommandLineStr() const;
 
     std::optional<uint16_t> LockAddress(uint64_t addr) const;

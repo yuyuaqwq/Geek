@@ -465,7 +465,17 @@ Address Process::At(uint64_t addr) const
 	return { const_cast<Process*>(this), addr };
 }
 
-std::optional<std::wstring> Process::ProcName() const
+std::wstring Process::DebugName() const
+{
+	std::wstring p = IsX32() ? L"-x86" : L"-x64";
+	if (auto n = BaseName())
+	{
+		return *n + p;
+	}
+	return L"<unknow>" + p;
+}
+
+std::optional<std::wstring> Process::BaseName() const
 {
 	wchar_t tmp[MAX_PATH]{};
 	if (!GetModuleBaseNameW(Handle(), NULL, tmp, sizeof(tmp) / sizeof(wchar_t)))
