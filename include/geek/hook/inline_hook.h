@@ -10,13 +10,13 @@
 namespace geek {
 enum class Architecture {
     kCurrentRunning,
-    kX86,
+    kX32,
     kAmd64,
 };
 
 class InlineHook {
 public:
-    struct HookContextX86 {
+    struct HookContextX32 {
         uint32_t* const stack;
         uint32_t esp;
         uint32_t jmp_addr;
@@ -61,7 +61,7 @@ public:
         uint64_t rflags;
     };
 
-    using HookCallbackX86 = bool(__fastcall*)(HookContextX86* context);
+    using HookCallbackX32 = bool(__fastcall*)(HookContextX32* context);
     using HookCallbackAmd64 = bool(*)(HookContextAmd64* context);
 
     explicit InlineHook(Process* process = nullptr);
@@ -76,7 +76,7 @@ public:
      * 在函数起始hook
      * pop_stack_top = true
      * callback中 context->esp += 4 / context->rsp += 8;	// 跳过外部call到该函数的返回地址
-     * 注：x86下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要
+     * 注：x32下还需要根据调用约定来确定是否需要额外加上参数数量字节，比如stdcall就需要 + count * 4，但cdecl不需要
      * callback中指定 context->jmp_addr = context->stack[0];      // 直接返回到调用被hook函数的调用处
      * callback中返回false      // 不执行原指令
      *
@@ -104,7 +104,7 @@ public:
      *
      * @param hook_addr 要hook的地址
      * @param callback 回调的函数指针
-     * @param instr_size x86要求instr_size>=5，x64要求instr_size>=14，且instr_size不能大于255
+     * @param instr_size x32要求instr_size>=5，x64要求instr_size>=14，且instr_size不能大于255
      * @param save_volatile_register 
      * @param arch 
      * @param forward_page_size 转发页面，至少需要0x1000，前0x1000不可覆写，可以指定较多的空间，便于交互数据
@@ -119,9 +119,9 @@ public:
         uint64_t forward_page_size = 0x1000
     );
 
-    bool InstallX86(
+    bool InstallX32(
         uint64_t hook_addr,
-        HookCallbackX86 callback,
+        HookCallbackX32 callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);

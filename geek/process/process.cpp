@@ -467,7 +467,7 @@ Address Process::At(uint64_t addr) const
 
 std::wstring Process::DebugName() const
 {
-	std::wstring p = IsX32() ? L"-x86" : L"-x64";
+	std::wstring p = IsX32() ? L"-x32" : L"-x64";
 	if (auto n = BaseName())
 	{
 		return *n + p;

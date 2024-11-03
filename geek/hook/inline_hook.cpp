@@ -28,7 +28,7 @@ uint64_t GetInstrOffset(uint64_t instr_addr, size_t instr_size, uint64_t dst_add
 uint64_t MakeJmp(Architecture arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr)
 {
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		if (buf->size() < 5) {
 			buf->resize(5);
 		}
@@ -66,7 +66,7 @@ uint64_t MakeStackFrameStart(Architecture arch, uint8_t* buf, int8_t size)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		break;
 	}
 	case Architecture::kAmd64: {
@@ -106,7 +106,7 @@ uint64_t MakeStackFrameEnd(Architecture arch, uint8_t* buf, int8_t size)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		break;
 	}
 	case Architecture::kAmd64: {
@@ -136,7 +136,7 @@ uint64_t MakeTlsSetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		// call TlsSetValue
 		// push tls_id_
 		buf[i++] = 0x68;
@@ -180,7 +180,7 @@ uint64_t MakeTlsGetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		// push tls_id_
 		buf[i++] = 0x68;
 		*(uint32_t*)&buf[i] = tls_id;
@@ -265,7 +265,7 @@ bool InlineHook::Install(uint64_t hook_addr, uint64_t callback, size_t instr_siz
 
 	if (instr_size == 0) {
 		switch (arch) {
-		case Architecture::kX86: {
+		case Architecture::kX32: {
 			while (instr_size < 5) {
 				instr_size += insn_len_x86_32(&temp[instr_size]);
 			}
@@ -290,7 +290,7 @@ bool InlineHook::Install(uint64_t hook_addr, uint64_t callback, size_t instr_siz
         
 
 	switch (arch) {
-	case Architecture::kX86: {
+	case Architecture::kX32: {
 		if (instr_size < 5) {
 			return false;
 		}
@@ -1265,7 +1265,7 @@ bool InlineHook::Install(uint64_t hook_addr, uint64_t callback, size_t instr_siz
         
 	if (process_->IsCur() && 
 		(
-			arch == Architecture::kX86 && instr_size <= 8 || 
+			arch == Architecture::kX32 && instr_size <= 8 || 
 			arch == Architecture::kAmd64 && instr_size <= 16
 		)
 	) {
@@ -1276,7 +1276,7 @@ bool InlineHook::Install(uint64_t hook_addr, uint64_t callback, size_t instr_siz
 		// 通过原子指令进行hook，降低错误的概率
 		bool success = true;
 		switch (arch) {
-		case Architecture::kX86: {
+		case Architecture::kX32: {
 			MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
 			if (jmp_instr.size() < 8) {
 				size_t old_size = jmp_instr.size();
@@ -1312,10 +1312,10 @@ bool InlineHook::Install(uint64_t hook_addr, uint64_t callback, size_t instr_siz
 	return true;
 }
 
-bool InlineHook::InstallX86(uint64_t hook_addr, HookCallbackX86 callback, size_t instr_size,
+bool InlineHook::InstallX86(uint64_t hook_addr, HookCallbackX32 callback, size_t instr_size,
 	bool save_volatile_register, uint64_t forward_page_size)
 {
-	return Install(hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kX86, forward_page_size);
+	return Install(hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kX32, forward_page_size);
 }
 
 bool InlineHook::InstallAmd64(uint64_t hook_addr, HookCallbackAmd64 callback, size_t instr_size,
@@ -1344,7 +1344,7 @@ Architecture InlineHook::GetCurrentRunningArch() const
 {
 	Architecture arch;
 	if (process_->IsX32()) {
-		arch = Architecture::kX86;
+		arch = Architecture::kX32;
 	}
 	else {
 		arch = Architecture::kAmd64;
