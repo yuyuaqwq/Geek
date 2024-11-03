@@ -299,7 +299,7 @@ bool Process::SetDebugPrivilege(bool IsEnable) const
 HANDLE Process::Handle() const noexcept
 {
 	if (this == nullptr) {
-		return kCurrentProcess;
+		return ThisProc().Handle();
 	}
 	return *process_handle_;
 }
@@ -336,7 +336,7 @@ bool Process::IsX32() const noexcept
 
 bool Process::IsCur() const
 {
-	return this == nullptr || *process_handle_ == kCurrentProcess;
+	return this == nullptr || *process_handle_ == ThisProc().Handle();
 }
 
 std::optional<uint64_t> Process::AllocMemory(uint64_t addr, size_t len, DWORD type, DWORD protect) const
@@ -407,6 +407,7 @@ bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force
 	DWORD oldProtect;
 	if (force) {
 		if (!SetMemoryProtect(addr, len, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+			GEEK_UPDATE_WIN_ERROR();
 			return false;
 		}
 	}
@@ -417,21 +418,23 @@ bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force
 		pfnNtWow64QueryInformationProcess64 NtWow64QueryInformationProcess64 = (pfnNtWow64QueryInformationProcess64)GetProcAddress(NtdllModule, "NtWow64QueryInformationProcess64");
 		pfnNtWow64WriteVirtualMemory64 NtWow64WriteVirtualMemory64 = (pfnNtWow64WriteVirtualMemory64)GetProcAddress(NtdllModule, "NtWow64WriteVirtualMemory64");
 		if (!NT_SUCCESS(NtWow64WriteVirtualMemory64(Handle(), addr, (PVOID)buf, len, NULL))) {
+			GEEK_UPDATE_WIN_ERROR();
 			success = false;
 		}
 	}
 	else {
-		if (Handle() == kCurrentProcess) {
+		if (IsCur()) {
 			memcpy((void*)addr, buf, len);
 		}
 		else if (!::WriteProcessMemory(Handle(), (void*)addr, buf, len, &readByte)) {
+			GEEK_UPDATE_WIN_ERROR();
 			success = false;
 		}
 	}
 	if (force) {
 		SetMemoryProtect(addr, len, oldProtect, &oldProtect);
 	}
-	return true;
+	return success;
 }
 
 std::optional<uint64_t> Process::WriteMemoryWithAlloc(const void* buf, size_t len, DWORD protect) const
@@ -821,7 +824,7 @@ bool Process::GetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 	}
 	bool success;
 	context.ContextFlags = flags;
-	if (!CurIsX86()) {
+	if (!ThisProc().IsX32()) {
 		success = ::Wow64GetThreadContext(thread->handle(), &context);
 	}
 	else {
@@ -853,7 +856,7 @@ bool Process::SetThreadContext(Thread* thread, _CONTEXT32& context, DWORD flags)
 	}
 	bool success; 
 	context.ContextFlags = flags;
-	if (!CurIsX86()) {
+	if (!ThisProc().IsX32()) {
 		success = ::Wow64SetThreadContext(thread->handle(), &context);
 	}
 	else {
@@ -2188,12 +2191,6 @@ Process::Process(UniqueHandle process_handle) noexcept:
 {
 }
 
-bool Process::CurIsX86()
-{
-	Process process{ kCurrentProcess };
-	return process.IsX32();
-}
-
 DWORD Process::GetProcessIdFromThread(Thread* thread)
 {
 	return ::GetProcessIdOfThread(thread->handle());
@@ -2204,5 +2201,11 @@ bool Process::Terminate(std::wstring_view processName)
 	auto process = Open(processName);
 	if (!process) return false;
 	return process.value().Terminate(0);
+}
+
+Process& ThisProc()
+{
+	static Process proc{ reinterpret_cast<HANDLE>(-1) };
+	return proc;
 }
 }

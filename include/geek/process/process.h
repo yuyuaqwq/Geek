@@ -28,7 +28,6 @@
 namespace geek {
 
 static inline Wow64 ms_wow64;
-static inline const HANDLE kCurrentProcess = (HANDLE)-1;
 
 class Process;
 
@@ -199,7 +198,6 @@ public:
     static ProcessList& CachedProcessList();
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type);
     static bool SaveFileFromResource(HMODULE hModule, DWORD ResourceID, LPCWSTR type, LPCWSTR saveFilePath);
-    static bool CurIsX86();
     static DWORD GetProcessIdFromThread(Thread* thread);
     static bool Terminate(std::wstring_view processName);
 
@@ -217,8 +215,7 @@ std::optional<T> Process::ReadMemoryToValue(uint64_t addr) const
     return tmp;
 }
 
-static inline Process ThisProcess{ kCurrentProcess };
-
+Process& ThisProc();
 
 } // namespace geek
 
