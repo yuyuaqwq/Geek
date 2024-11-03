@@ -6,6 +6,7 @@
 #include <cassert>
 #include <mutex>
 #include <cstddef>
+#include <psapi.h>
 #include <geek/process/ntinc.h>
 #include <geek/utils/converter.h>
 #include <geek/utils/searcher.h>
@@ -462,6 +463,17 @@ bool Process::SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWOR
 Address Process::At(uint64_t addr) const
 {
 	return { const_cast<Process*>(this), addr };
+}
+
+std::optional<std::wstring> Process::ProcName() const
+{
+	wchar_t tmp[MAX_PATH]{};
+	if (!GetModuleBaseNameW(Handle(), NULL, tmp, sizeof(tmp) / sizeof(wchar_t)))
+	{
+		GEEK_UPDATE_WIN_ERROR();
+		return std::nullopt;
+	}
+	return std::wstring(tmp);
 }
 
 // std::optional<MemoryInfo> Process::GetMemoryInfo(uint64_t addr) const

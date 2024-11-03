@@ -1,6 +1,10 @@
 #include <geek/utils/converter.h>
-#include <algorithm>
+
 #include <Windows.h>
+
+#include <iomanip>
+#include <algorithm>
+#include <sstream>
 
 namespace geek {
 std::string Convert::Utf16leToUtf8(const std::wstring& str)
@@ -146,23 +150,17 @@ std::wstring Convert::ToUppercase(std::wstring_view str)
 	return total;
 }
 
-std::string Convert::ToHexString(const void* buf, size_t size)
+std::string Convert::ToHexString(uint64_t val, int reserve)
 {
-	uint8_t* buf_ = (uint8_t*)buf;
-	std::string str;
-	for (size_t i = 0; i < size; i++) {
-		uint8_t high = buf_[i] >> 4;
-		if (high <= 9) high += '0';
-		else high += 'a' - 10;
+	std::stringstream ss;
+	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill('0') << (val & 0xFFFFFFFF);
+	return ss.str();
+}
 
-		uint8_t low = buf_[i] & 0xf;
-		if (low <= 9) low += '0';
-		else low += 'a' - 10;
-		str.push_back((char)high);
-		str.push_back((char)low);
-		str.push_back(' ');
-	}
-	str.pop_back();
-	return str;
+std::wstring Convert::ToHexWString(uint64_t val, int reserve)
+{
+	std::wstringstream ss;
+	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill('0') << (val & 0xFFFFFFFF);
+	return ss.str();
 }
 }

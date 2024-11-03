@@ -28,7 +28,8 @@ public:
     static std::string ToUppercase(std::string_view str);
     static std::wstring ToUppercase(std::wstring_view str);
 
-    static std::string ToHexString(const void* buf, size_t size);
+    static std::string ToHexString(uint64_t val, int reserve = 8);
+    static std::wstring ToHexWString(uint64_t val, int reserve = 8);
 };
 
 } // namespace geek

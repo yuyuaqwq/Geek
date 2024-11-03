@@ -39,6 +39,8 @@ public:
     bool operator==(const ModuleListNode& right) const;
     bool operator!=(const ModuleListNode& right) const;
 
+    std::wstring DebugString() const;
+
 private:
     uint64_t entry_ = 0;
     ModuleList* owner_ = nullptr;
