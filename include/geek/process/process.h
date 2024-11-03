@@ -104,12 +104,14 @@ public:
     std::optional<uint64_t> AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
     std::optional<uint64_t> AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
     bool FreeMemory(uint64_t addr, size_t size = 0, DWORD type = MEM_RELEASE) const;
+
     bool ReadMemory(uint64_t addr, void* buf, size_t len) const;
     std::optional<std::vector<uint8_t>> ReadMemory(uint64_t addr, size_t len) const;
     template<class T>
-	std::optional<T> ReadMemory(uint64_t addr) const;
+    std::optional<T> ReadMemoryToValue(uint64_t addr) const;
+
     bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false) const;
-    std::optional<uint64_t> WriteMemoryWithAutoAlloc(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) const;
+    std::optional<uint64_t> WriteMemoryWithAlloc(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) const;
     bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) const;
     // std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
     // std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const;
@@ -207,7 +209,7 @@ private:
 };
 
 template <class T>
-std::optional<T> Process::ReadMemory(uint64_t addr) const
+std::optional<T> Process::ReadMemoryToValue(uint64_t addr) const
 {
     T tmp;
     if (!ReadMemory(addr, &tmp, sizeof(T)))

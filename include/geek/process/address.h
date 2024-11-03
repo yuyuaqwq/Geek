@@ -12,7 +12,7 @@ public:
 	bool Read(void* buf, size_t len) const;
 	std::optional<std::vector<uint8_t>> Read(size_t len) const;
 	template<class T>
-	std::optional<T> Read(uint64_t addr) const;
+	std::optional<T> ReadValue(uint64_t addr) const;
 
 	bool Write(const void* buf, size_t len, bool force = false) const;
 
@@ -25,7 +25,7 @@ private:
 };
 
 template <class T>
-std::optional<T> Address::Read(uint64_t addr) const
+std::optional<T> Address::ReadValue(uint64_t addr) const
 {
 	T tmp;
 	if (!Read(&tmp, sizeof(T)))

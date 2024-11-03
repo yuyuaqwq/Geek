@@ -434,7 +434,7 @@ bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force
 	return true;
 }
 
-std::optional<uint64_t> Process::WriteMemoryWithAutoAlloc(const void* buf, size_t len, DWORD protect) const
+std::optional<uint64_t> Process::WriteMemoryWithAlloc(const void* buf, size_t len, DWORD protect) const
 {
 	auto mem = AllocMemory(len, (DWORD)MEM_COMMIT, protect);
 	if (!mem) {
@@ -2111,7 +2111,7 @@ std::optional<PEB32> Process::Peb32() const
 	auto pbi = Pbi32();
 	if (!pbi)
 		return std::nullopt;
-	return ReadMemory<PEB32>(pbi->PebBaseAddress);
+	return ReadMemoryToValue<PEB32>(pbi->PebBaseAddress);
 }
 
 std::optional<PEB64> Process::Peb64() const
@@ -2121,7 +2121,7 @@ std::optional<PEB64> Process::Peb64() const
 	auto pbi = Pbi64();
 	if (!pbi)
 		return std::nullopt;
-	return ReadMemory<PEB64>(pbi->PebBaseAddress);
+	return ReadMemoryToValue<PEB64>(pbi->PebBaseAddress);
 }
 
 ProcessList& Process::CachedProcessList()
