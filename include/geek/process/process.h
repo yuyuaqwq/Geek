@@ -21,6 +21,7 @@
 #include <geek/utils/handle.h>
 #include <geek/wow64ext/wow64ext.h>
 #include <geek/process/process_list.h>
+#include <geek/process/address.h>
 
 #include "ntinc.h"
 
@@ -105,12 +106,16 @@ public:
     bool FreeMemory(uint64_t addr, size_t size = 0, DWORD type = MEM_RELEASE) const;
     bool ReadMemory(uint64_t addr, void* buf, size_t len) const;
     std::optional<std::vector<uint8_t>> ReadMemory(uint64_t addr, size_t len) const;
+    template<class T>
+	std::optional<T> ReadMemory(uint64_t addr) const;
     bool WriteMemory(uint64_t addr, const void* buf, size_t len, bool force = false) const;
-    std::optional<uint64_t> WriteMemory(const void* buf, size_t len, DWORD protect = PAGE_READWRITE);
+    std::optional<uint64_t> WriteMemoryWithAutoAlloc(const void* buf, size_t len, DWORD protect = PAGE_READWRITE) const;
     bool SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWORD* oldProtect) const;
     // std::optional<MemoryInfo> GetMemoryInfo(uint64_t addr) const;
     // std::optional<std::vector<MemoryInfo>> GetMemoryInfoList() const;
     // bool ScanMemoryInfoList(const std::function<bool(uint64_t raw_addr, uint8_t* addr, size_t size)>& callback, bool include_module = false) const;
+
+    Address At(uint64_t addr) const;
 
     std::optional<std::wstring> GetCommandLineStr() const;
 
@@ -200,6 +205,15 @@ private:
     UniqueHandle process_handle_;
     mutable std::optional<ModuleList> modules_;
 };
+
+template <class T>
+std::optional<T> Process::ReadMemory(uint64_t addr) const
+{
+    T tmp;
+    if (!ReadMemory(addr, &tmp, sizeof(T)))
+        return std::nullopt;
+    return tmp;
+}
 
 static inline Process ThisProcess{ kCurrentProcess };
 

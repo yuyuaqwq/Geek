@@ -19,10 +19,7 @@ std::optional<PEB_LDR_DATA32> ModuleList::PebLdrData32() const
 		auto peb = proc_->Peb32();
 		if (!peb)
 			return std::nullopt;
-		PEB_LDR_DATA32 ldr;
-		if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
-			return std::nullopt;
-		ldr32_ = ldr;
+		ldr32_ = proc_->ReadMemory<PEB_LDR_DATA32>(peb->Ldr);
 	}
 	return ldr32_;
 }
@@ -34,10 +31,7 @@ std::optional<PEB_LDR_DATA64> ModuleList::PebLdrData64() const
 		auto peb = proc_->Peb64();
 		if (!peb)
 			return std::nullopt;
-		PEB_LDR_DATA64 ldr;
-		if (!proc_->ReadMemory(peb->Ldr, &ldr, sizeof(ldr)))
-			return std::nullopt;
-		ldr64_ = ldr;
+		ldr64_ = proc_->ReadMemory<PEB_LDR_DATA64>(peb->Ldr);
 	}
 	return ldr64_;
 }
@@ -144,22 +138,15 @@ bool ModuleListNode::IsValid() const
 std::optional<LDR_DATA_TABLE_ENTRY32> ModuleListNode::LdrDataTableEntry32() const
 {
 	if (!ldte32_) {
-		LDR_DATA_TABLE_ENTRY32 entry;
-		if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
-			return std::nullopt;
-		ldte32_ = entry;
+		ldte32_ = owner_->proc_->ReadMemory<LDR_DATA_TABLE_ENTRY32>(entry_);
 	}
 	return ldte32_;
 }
 
 std::optional<LDR_DATA_TABLE_ENTRY64> ModuleListNode::LdrDataTableEntry64() const
 {
-	if (!ldte64_)
-	{
-		LDR_DATA_TABLE_ENTRY64 entry;
-		if (!owner_->proc_->ReadMemory(entry_, &entry, sizeof(entry)))
-			return std::nullopt;
-		ldte64_ = entry;
+	if (!ldte64_) {
+		ldte64_ = owner_->proc_->ReadMemory<LDR_DATA_TABLE_ENTRY64>(entry_);
 	}
 	return ldte64_;
 }

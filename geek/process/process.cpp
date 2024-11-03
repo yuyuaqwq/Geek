@@ -434,7 +434,7 @@ bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force
 	return true;
 }
 
-std::optional<uint64_t> Process::WriteMemory(const void* buf, size_t len, DWORD protect)
+std::optional<uint64_t> Process::WriteMemoryWithAutoAlloc(const void* buf, size_t len, DWORD protect) const
 {
 	auto mem = AllocMemory(len, (DWORD)MEM_COMMIT, protect);
 	if (!mem) {
@@ -454,6 +454,11 @@ bool Process::SetMemoryProtect(uint64_t addr, size_t len, DWORD newProtect, DWOR
 		success = ::VirtualProtectEx(Handle(), (LPVOID)addr, len, newProtect, oldProtect);
 	}
 	return success;
+}
+
+Address Process::At(uint64_t addr) const
+{
+	return { const_cast<Process*>(this), addr };
 }
 
 // std::optional<MemoryInfo> Process::GetMemoryInfo(uint64_t addr) const
@@ -2106,11 +2111,7 @@ std::optional<PEB32> Process::Peb32() const
 	auto pbi = Pbi32();
 	if (!pbi)
 		return std::nullopt;
-
-	PEB32 ret{};
-	if (!ReadMemory(pbi->PebBaseAddress, &ret, sizeof(ret)))
-		return std::nullopt;
-	return ret;
+	return ReadMemory<PEB32>(pbi->PebBaseAddress);
 }
 
 std::optional<PEB64> Process::Peb64() const
@@ -2120,11 +2121,7 @@ std::optional<PEB64> Process::Peb64() const
 	auto pbi = Pbi64();
 	if (!pbi)
 		return std::nullopt;
-
-	PEB64 ret{};
-	if (!ReadMemory(pbi->PebBaseAddress, &ret, sizeof(ret)))
-		return std::nullopt;
-	return ret;
+	return ReadMemory<PEB64>(pbi->PebBaseAddress);
 }
 
 ProcessList& Process::CachedProcessList()
