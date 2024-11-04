@@ -10,6 +10,8 @@
 #include <geek/utils/file.h>
 #include <geek/process/process.h>
 
+#include "geek/hook/inline_hook.h"
+
 const unsigned char hexData[240] = {
 	0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
 	0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -28,18 +30,34 @@ const unsigned char hexData[240] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x45, 0x00, 0x00, 0x64, 0x86, 0x08, 0x00
 };
 
-int main() {
-	//TODO FindByModuleName”–Œ Ã‚
-	auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
+void Origin()
+{
+	printf("Origin\n");
+}
 
-	hexData[0];
-	
-	auto res = geek::ThisProc().SearchSig("11 45 14", m.DllBase(), m.SizeOfImage());
-	
-	for (auto o : res)
-	{
-		printf("%llx - %llx\n", o, *reinterpret_cast<const uint64_t*>(o));
-	}
+void Hooked()
+{
+	printf("Hooked\n");
+}
+
+int main() {
+	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
+	//
+	// hexData[0];
+	//
+	// auto res = geek::ThisProc().SearchSig("11 45 14", m.DllBase(), m.SizeOfImage());
+	//
+	// for (auto o : res)
+	// {
+	// 	printf("%llx - %llx\n", o, *reinterpret_cast<const uint64_t*>(o));
+	// }
+
+	geek::InlineHook::InstallX32Ex(&geek::ThisProc(), (uint32_t)Origin, [](auto ctx)
+		{
+			Hooked();
+			return true;
+		});
+	Origin();
 }
 
 // auto dir = geek::File::GetAppDirectory();

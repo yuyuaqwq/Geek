@@ -222,38 +222,33 @@ uint64_t MakeTlsGetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 	}
 	return i;
 }
-
-
-Architecture GetCurrentRunningArch(InlineHook* hook)
-{
-	Architecture arch;
-	if (hook->process()->IsX32()) {
-		arch = Architecture::kX32;
-	}
-	else {
-		arch = Architecture::kAmd64;
-	}
-	return arch;
-}
 }
 
-InlineHook::InlineHook()
-{
-	process_ = &ThisProc();
-}
-
-InlineHook::InlineHook(Process* process) :
+InlineHook::InlineHook(const Process* process) :
 	process_{ process }
 {
 }
 
-bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_size, bool save_volatile_register,
-	Architecture arch, uint64_t forward_page_size)
+bool InlineHook::InstallEx(
+	const Process* proc,
+	uint64_t hook_addr,
+	uint64_t callback,
+	size_t instr_size,
+	bool save_volatile_register,
+	Architecture arch,
+	uint64_t forward_page_size)
 {
-	Uninstall();
+	InlineHook hook{ proc };
+	if (arch == Architecture::kCurrentRunning)
+	{
+		if (proc->IsX32())
+			arch = Architecture::kX32;
+		else
+			arch = Architecture::kAmd64;
+	}
 
-	tls_id_ = TlsAlloc();
-	if (tls_id_ == TLS_OUT_OF_INDEXES) {
+	hook.tls_id_ = TlsAlloc();
+	if (hook.tls_id_ == TLS_OUT_OF_INDEXES) {
 		return false;
 	}
 
@@ -266,55 +261,45 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 	}
 
 
-	auto forward_page_res = process_->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	auto forward_page_res = hook.process_->AllocMemory(NULL, forward_page_size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	if (!forward_page_res) {
 		return false;
 	}
 
-	forward_page_ = forward_page_res.value();
+	hook.forward_page_ = forward_page_res.value();
 
 	// 处理转发页面指令
 	std::vector<uint8_t> forward_page(forward_page_size, 0);
 	auto forward_page_temp = forward_page.data();
 
-	uint64_t forward_page_uint = (uint64_t)forward_page_;
-
-	if (arch == Architecture::kCurrentRunning)
-		arch = GetCurrentRunningArch(this);
+	uint64_t forward_page_uint = (uint64_t)hook.forward_page_;
 
 	std::vector<uint8_t> temp(64);
-	if (!process_->ReadMemory(hook_addr, temp.data(), 64)) {
+	if (!hook.process_->ReadMemory(hook_addr, temp.data(), 64)) {
 		return false;
 	}
 
 	if (instr_size == 0) {
-		switch (arch) {
-		case Architecture::kX32: {
+		if (arch == Architecture::kX32) {
 			while (instr_size < 5) {
 				instr_size += insn_len_x86_32(&temp[instr_size]);
 			}
-			break;
-		}
-		case Architecture::kAmd64:
+		} else {
 			while (instr_size < 14) {
 				instr_size += insn_len_x86_64(&temp[instr_size]);
 			}
-			break;
 		}
 	}
 
 	// 保存原指令
-	old_instr_.resize(instr_size);
-	if (!process_->ReadMemory(hook_addr, old_instr_.data(), instr_size)) {
+	hook.old_instr_.resize(instr_size);
+	if (!hook.process_->ReadMemory(hook_addr, hook.old_instr_.data(), instr_size)) {
 		return false;
 	}
         
 	std::vector<uint8_t> jmp_instr(instr_size);
-        
-        
 
-	switch (arch) {
-	case Architecture::kX32: {
+	if (arch == Architecture::kX32) {
 		if (instr_size < 5) {
 			return false;
 		}
@@ -331,7 +316,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0x9c;        // pushfd
 
 			// 获取TlsValue
-			i += MakeTlsGetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 
 			// 判断是否重入
@@ -341,7 +326,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0x00;
 			// je _next
 			forward_page_temp[i++] = 0x74;
-			forward_page_temp[i++] = 4 + old_instr_.size() + 5;
+			forward_page_temp[i++] = 4 + hook.old_instr_.size() + 5;
 
 			// 低1位为1，是重入，执行原指令并转回
 			forward_page_temp[i++] = 0x9d;        // popfd
@@ -349,8 +334,8 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0x59;        // pop rcx
 			forward_page_temp[i++] = 0x58;        // pop rax
 
-			memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
-			i += old_instr_.size();
+			memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+			i += hook.old_instr_.size();
 
 			// 跳回原函数正常执行
 			std::vector<uint8_t> temp;
@@ -365,7 +350,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			// push 1
 			forward_page_temp[i++] = 0x6a;
 			forward_page_temp[i++] = 0x01;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 			forward_page_temp[i++] = 0x9d;        // popfq
 			forward_page_temp[i++] = 0x5a;        // pop rdx
@@ -519,7 +504,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 		forward_page_temp[i++] = 0xff;
 		forward_page_temp[i++] = 0x71;
 		forward_page_temp[i++] = 0x8;
-		i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+		i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 		// 恢复上下文环境
 		// 除ecx和eax
@@ -607,12 +592,12 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 
 		// je _skip_exec_old_insrt
 		forward_page_temp[i++] = 0x74;
-		forward_page_temp[i++] = 1 + old_instr_.size() + 2;
+		forward_page_temp[i++] = 1 + hook.old_instr_.size() + 2;
 
 		forward_page_temp[i++] = 0x9d;      // popfd
 		// 执行原指令
-		memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
-		i += old_instr_.size();
+		memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+		i += hook.old_instr_.size();
 		// jmp _next_exec_old_insrt
 		forward_page_temp[i++] = 0xeb;
 		forward_page_temp[i++] = 0x01;      // +1
@@ -632,7 +617,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 		// 恢复jmp_addr环境
 
 		// 从Tls中获取jmp_addr
-		i += MakeTlsGetValue(arch, &forward_page_temp[i], tls_id_);
+		i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 
 		// 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
@@ -649,7 +634,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			// push 0
 			forward_page_temp[i++] = 0x6a;
 			forward_page_temp[i++] = 0x00;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 		}
 
 		forward_page_temp[i++] = 0x59;      // pop ecx
@@ -657,9 +642,8 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 
 		// 转回去继续执行
 		forward_page_temp[i++] = 0xc3;        // ret
-		break;
 	}
-	case Architecture::kAmd64: {
+	else {
 		if (instr_size < 14) {
 			return false;
 		}
@@ -693,7 +677,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			i += MakeStackFrameStart(arch, &forward_page_temp[i], 0x20);
 
 			// 获取TlsValue
-			i += MakeTlsGetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 
 			// 判断是否重入
@@ -704,7 +688,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0x00;
 			// je _next
 			forward_page_temp[i++] = 0x74;
-			forward_page_temp[i++] = 7 + 13 + old_instr_.size() + 14;
+			forward_page_temp[i++] = 7 + 13 + hook.old_instr_.size() + 14;
 
 			// 低1位为1，是重入，执行原指令并转回
                 
@@ -730,8 +714,8 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0x59;        // pop rcx
 			forward_page_temp[i++] = 0x58;        // pop rax
 
-			memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
-			i += old_instr_.size();
+			memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+			i += hook.old_instr_.size();
 
 			// 跳回原函数正常执行
 			std::vector<uint8_t> temp;
@@ -749,7 +733,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0xc2;
 			*(uint32_t*)&forward_page_temp[i] = 0x1;
 			i += 4;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 			i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
 
@@ -1017,7 +1001,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 		forward_page_temp[i++] = 0x8b;
 		forward_page_temp[i++] = 0x51;
 		forward_page_temp[i++] = 0x10;
-		i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+		i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 		// mov rcx, rsi     // 再次拿到context
 		forward_page_temp[i++] = 0x48;
@@ -1194,12 +1178,12 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 
 		// je _skip_exec_old_insrt
 		forward_page_temp[i++] = 0x74;
-		forward_page_temp[i++] = 1 + old_instr_.size() + 2;
+		forward_page_temp[i++] = 1 + hook.old_instr_.size() + 2;
 
 		forward_page_temp[i++] = 0x9d;      // popfd
 		// 执行原指令
-		memcpy(&forward_page_temp[i], old_instr_.data(), old_instr_.size());
-		i += old_instr_.size();
+		memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+		i += hook.old_instr_.size();
 		// jmp _next_exec_old_insrt
 		forward_page_temp[i++] = 0xeb;
 		forward_page_temp[i++] = 0x01;      // +1
@@ -1235,7 +1219,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 
 		// 恢复jmp_addr环境
 		// 从Tls中获取jmp_addr
-		i += MakeTlsGetValue(arch, &forward_page_temp[i], tls_id_);
+		i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
 
 		// mov qword ptr ss:[rsp+rdi+0x60], rax     // 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
 		forward_page_temp[i++] = 0x48;
@@ -1253,7 +1237,7 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 			forward_page_temp[i++] = 0xc2;
 			*(uint32_t*)&forward_page_temp[i] = 0x0;
 			i += 4;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], tls_id_);
+			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
 		}
             
 		i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
@@ -1278,39 +1262,35 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 
 		// 转回去继续执行
 		forward_page_temp[i++] = 0xc3;        // ret
-		break;
 	}
-	}
-	process_->WriteMemory(forward_page_, forward_page_temp, forward_page_size);
+
+	hook.process_->WriteMemory(hook.forward_page_, forward_page_temp, forward_page_size);
 
 	// 为目标地址挂hook
-	hook_addr_ = hook_addr;
+	hook.hook_addr_ = hook_addr;
 
         
-	if (process_->IsCurrent() && 
+	if (hook.process_->IsCurrent() &&
 		(
 			arch == Architecture::kX32 && instr_size <= 8 || 
 			arch == Architecture::kAmd64 && instr_size <= 16
 		)
 	) {
 		DWORD old_protect;
-		if (!process_->SetMemoryProtect(hook_addr, 0x1000, PAGE_EXECUTE_READWRITE, &old_protect)) {
+		if (!hook.process_->SetMemoryProtect(hook_addr, 0x1000, PAGE_EXECUTE_READWRITE, &old_protect)) {
 			return false;
 		}
 		// 通过原子指令进行hook，降低错误的概率
 		bool success = true;
-		switch (arch) {
-		case Architecture::kX32: {
-			MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
+		if (arch == Architecture::kX32) {
+			MakeJmp(arch, &jmp_instr, hook_addr, hook.forward_page_);
 			if (jmp_instr.size() < 8) {
 				size_t old_size = jmp_instr.size();
 				jmp_instr.resize(8);
 				memcpy(&jmp_instr[old_size], ((uint8_t*)hook_addr) + old_size, 8 - old_size);
 			}
 			InterlockedExchange64((volatile long long*)hook_addr, *(LONGLONG*)&jmp_instr[0]);
-			break;
-		}
-		case Architecture::kAmd64:
+		} else {
 #ifdef _WIN64
 			MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
 			if (jmp_instr.size() < 16) {
@@ -1324,28 +1304,37 @@ bool InlineHook::InstallEx(uint64_t hook_addr, uint64_t callback, size_t instr_s
 #else
                 success = false;
 #endif
-			break;
 		}
-		process_->SetMemoryProtect(hook_addr, 0x1000, old_protect, &old_protect);
+		hook.process_->SetMemoryProtect(hook_addr, 0x1000, old_protect, &old_protect);
 		if (success == false) return false;
 	}
 	else {
-		MakeJmp(arch, &jmp_instr, hook_addr, forward_page_);
-		process_->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
+		MakeJmp(arch, &jmp_instr, hook_addr, hook.forward_page_);
+		hook.process_->WriteMemory(hook_addr, &jmp_instr[0], instr_size, true);
 	}
 	return true;
 }
 
-bool InlineHook::InstallX32Ex(uint32_t hook_addr, HookCallbackX32 callback, size_t instr_size,
-	bool save_volatile_register, uint64_t forward_page_size)
+bool InlineHook::InstallX32Ex(
+	const Process* proc,
+	uint32_t hook_addr, 
+	HookCallbackX32 callback, 
+	size_t instr_size,
+	bool save_volatile_register,
+	uint64_t forward_page_size)
 {
-	return InstallEx(hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kX32, forward_page_size);
+	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kX32, forward_page_size);
 }
 
-bool InlineHook::InstallAmd64Ex(uint64_t hook_addr, HookCallbackAmd64 callback, size_t instr_size,
-	bool save_volatile_register, uint64_t forward_page_size)
+bool InlineHook::InstallAmd64Ex(
+	const Process* proc,
+	uint64_t hook_addr,
+	HookCallbackAmd64 callback,
+	size_t instr_size,
+	bool save_volatile_register,
+	uint64_t forward_page_size)
 {
-	return InstallEx(hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kAmd64, forward_page_size);
+	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kAmd64, forward_page_size);
 }
 
 namespace {
@@ -1384,28 +1373,50 @@ bool InstallAmd64Callback(InlineHook::HookContextAmd64* ctx)
 }
 }
 
-bool InlineHook::InstallX32(uint32_t hook_addr, std::function<bool(HookContextX32* ctx)>&& callback,
-	size_t instr_size, bool save_volatile_register, uint64_t forward_page_size)
+bool InlineHook::InstallX32(
+	const Process* proc,
+	uint32_t hook_addr,
+	std::function<bool(HookContextX32* ctx)>&& callback,
+	size_t instr_size,
+	bool save_volatile_register,
+	uint64_t forward_page_size)
 {
 	// TODO 跨进程hook支持
-	if (!process_->IsCurrent())
+	if (!proc->IsCurrent())
 		throw std::exception("Cross-process hooks are not yet supported");
 
 	// 把function加入回调函数表中
-	callbacks_x32[process_->ProcId()].emplace(hook_addr, std::move(callback));
-	return InstallX32Ex(hook_addr, &InstallX32Callback, instr_size, save_volatile_register, forward_page_size);
+	callbacks_x32[proc->ProcId()].emplace(hook_addr, std::move(callback));
+	return InstallX32Ex(proc, hook_addr, &InstallX32Callback, instr_size, save_volatile_register, forward_page_size);
+}
+
+bool InlineHook::InstallAmd64(
+	const Process* proc,
+	uint64_t hook_addr, 
+	std::function<bool(HookContextAmd64* ctx)>&& callback,
+	size_t instr_size,
+	bool save_volatile_register,
+	uint64_t forward_page_size)
+{
+	// TODO 跨进程hook支持
+	if (!proc->IsCurrent())
+		throw std::exception("Cross-process hooks are not yet supported");
+
+	// 把function加入回调函数表中
+	callbacks_amd64[proc->ProcId()].emplace(hook_addr, std::move(callback));
+	return InstallAmd64Ex(proc, hook_addr, &InstallAmd64Callback, instr_size, save_volatile_register, forward_page_size);
+}
+
+bool InlineHook::InstallX32(uint32_t hook_addr, std::function<bool(HookContextX32* ctx)>&& callback, size_t instr_size,
+	bool save_volatile_register, uint64_t forward_page_size)
+{
+	return InstallX32(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
 }
 
 bool InlineHook::InstallAmd64(uint64_t hook_addr, std::function<bool(HookContextAmd64* ctx)>&& callback,
 	size_t instr_size, bool save_volatile_register, uint64_t forward_page_size)
 {
-	// TODO 跨进程hook支持
-	if (!process_->IsCurrent())
-		throw std::exception("Cross-process hooks are not yet supported");
-
-	// 把function加入回调函数表中
-	callbacks_amd64[process_->ProcId()].emplace(hook_addr, std::move(callback));
-	return InstallAmd64Ex(hook_addr, &InstallAmd64Callback, instr_size, save_volatile_register, forward_page_size);
+	return InstallAmd64(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
 }
 
 void InlineHook::Uninstall()
@@ -1418,6 +1429,7 @@ void InlineHook::Uninstall()
 		process_->FreeMemory(forward_page_);
 		forward_page_ = 0;
 	}
+	
 
 	if (tls_id_ != TLS_OUT_OF_INDEXES) {
 		TlsFree(tls_id_);
