@@ -32,12 +32,19 @@ const unsigned char hexData[240] = {
 
 void Origin()
 {
+	int i = 0;
+	i = 1;
+	i = 2;
+	i = 4;
+	printf("Origin\n");
+	printf("Origin\n");
 	printf("Origin\n");
 }
 
-void Hooked()
+bool Hooked(geek::InlineHook::HookContextAmd64* ctx)
 {
 	printf("Hooked\n");
+	return true;
 }
 
 int main() {
@@ -52,11 +59,8 @@ int main() {
 	// 	printf("%llx - %llx\n", o, *reinterpret_cast<const uint64_t*>(o));
 	// }
 
-	geek::InlineHook::InstallX32Ex(&geek::ThisProc(), (uint32_t)Origin, [](auto ctx)
-		{
-			Hooked();
-			return true;
-		});
+	Origin();
+	geek::InlineHook::InstallAmd64Ex(&geek::ThisProc(), (size_t)Origin, Hooked);
 	Origin();
 }
 

@@ -6,7 +6,15 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(${HEAD_PATH})
 
 set(EXECUTABLE_OUTPUT_PATH ${EXEC_PATH})
+
 add_executable(example main.cpp)
 
+set_property(
+    TARGET example
+    APPEND_STRING 
+    PROPERTY 
+        LINK_FLAGS_DEBUG " /INCREMENTAL:NO"
+)
+
 link_directories(${LIB_PATH})
-target_link_libraries(example ${GEEK_LIB})
+target_link_libraries(example PRIVATE ${GEEK_LIB})
