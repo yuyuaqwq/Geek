@@ -335,9 +335,9 @@ bool Process::IsX32() const noexcept
 
 }
 
-bool Process::IsCur() const
+bool Process::IsCurrent() const
 {
-	return this == nullptr || *process_handle_ == ThisProc().Handle();
+	return *process_handle_ == ThisProc().Handle();
 }
 
 std::optional<uint64_t> Process::AllocMemory(uint64_t addr, size_t len, DWORD type, DWORD protect) const
@@ -372,7 +372,7 @@ bool Process::FreeMemory(uint64_t addr, size_t size, DWORD type) const
 bool Process::ReadMemory(uint64_t addr, void* buf, size_t len) const
 {
 	SIZE_T readByte;
-	if (IsCur()) {
+	if (IsCurrent()) {
 		memcpy(buf, (void*)addr, len);
 		return true;
 	}
@@ -424,7 +424,7 @@ bool Process::WriteMemory(uint64_t addr, const void* buf, size_t len, bool force
 		}
 	}
 	else {
-		if (IsCur()) {
+		if (IsCurrent()) {
 			memcpy((void*)addr, buf, len);
 		}
 		else if (!::WriteProcessMemory(Handle(), (void*)addr, buf, len, &readByte)) {
@@ -712,7 +712,7 @@ std::optional<Thread> Process::CreateThread(uint64_t start_routine, uint64_t par
 {
 	DWORD thread_id = 0;
 	HANDLE thread_handle = NULL;
-	if (IsCur()) {
+	if (IsCurrent()) {
 		thread_handle = ::CreateThread(NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(start_routine), reinterpret_cast<PVOID64>(parameter), dwCreationFlags, &thread_id);
 	}
 	else {
@@ -905,7 +905,7 @@ bool Process::SetThreadContext(Thread* thread, _CONTEXT64& context, DWORD flags)
 
 bool Process::WaitExit(DWORD dwMilliseconds) const
 {
-	if (IsCur()) {
+	if (IsCurrent()) {
 		return false;
 	}
 	return WaitForSingleObject(Handle(), dwMilliseconds) == WAIT_OBJECT_0;
@@ -962,7 +962,7 @@ std::optional<DWORD> Process::GetExitCode() const
 
 std::optional<Image> Process::LoadImageFromImageBase(uint64_t base) const
 {
-	if (IsCur()) {
+	if (IsCurrent()) {
 		return Image::LoadFromImageBuf((void*)base, base);
 	}
 	else {
@@ -989,7 +989,7 @@ bool Process::FreeLibraryFromImage(Image* image, bool call_dll_entry) const
 
 std::optional<uint64_t> Process::LoadLibraryW(std::wstring_view lib_name, bool sync)
 {
-	if (IsCur()) {
+	if (IsCurrent()) {
 		auto addr = ::LoadLibraryW(lib_name.data());
 		if (!addr) {
 			return {};
@@ -1067,7 +1067,7 @@ std::optional<uint64_t> Process::LoadLibraryW(std::wstring_view lib_name, bool s
 
 bool Process::FreeLibrary(uint64_t module_base) const
 {
-	if (IsCur()) {
+	if (IsCurrent()) {
 		return ::FreeLibrary((HMODULE)module_base);
 	}
 	do {
@@ -1183,7 +1183,7 @@ bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync) const
 
 	std::array<uint8_t, 0x1000> temp_data = { 0 };
 	uint8_t* temp = temp_data.data();
-	if (IsCur()) {
+	if (IsCurrent()) {
 		temp = reinterpret_cast<uint8_t*>(exec_page);
 	}
 
@@ -1393,7 +1393,7 @@ bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync) const
 	// pop ebp
 	temp[i++] = 0x5d;
 
-	if (sync && IsCur()) {
+	if (sync && IsCurrent()) {
 		temp[i++] = 0xc3;
 	}
 	else {
@@ -1403,7 +1403,7 @@ bool Process::CallGenerateCodeX86(uint64_t exec_page, bool sync) const
 		i += 2;
 	}
 
-	if (!IsCur()) {
+	if (!IsCurrent()) {
 		if (!WriteMemory(exec_page, temp, 0x1000)) {
 			return false;
 		}
@@ -1427,7 +1427,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* conte
 
 	bool success = false;
 	do {
-		if (sync && IsCur()) {
+		if (sync && IsCurrent()) {
 			ExecPageHeaderX86 header;
 			header.call_addr = static_cast<uint32_t>(call_addr);
 			header.context_addr = reinterpret_cast<uint32_t>(context);
@@ -1476,7 +1476,7 @@ bool Process::Call(uint64_t call_addr, CallContextX86* context, bool sync) const
 	uint64_t exec_page = 0;
 	bool init_exec_page = true;
 	bool success = false;
-	if (sync && IsCur()) {
+	if (sync && IsCurrent()) {
 		static CallPageX86 call_page(nullptr, true);
 		exec_page = call_page.exec_page();
 		if (!exec_page) {
@@ -1507,7 +1507,7 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 
 	std::array<uint8_t, 0x1000> temp_data = { 0 };
 	uint8_t* temp = temp_data.data();
-	if (IsCur()) {
+	if (IsCurrent()) {
 		temp = reinterpret_cast<uint8_t*>(exec_page);
 	}
 
@@ -1890,7 +1890,7 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	// ret
 	temp[i++] = 0xc3;
 
-	if (!IsCur()) {
+	if (!IsCurrent()) {
 		if (!WriteMemory(exec_page, temp, 0x1000)) {
 			return false;
 		}
@@ -1914,7 +1914,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 
 	bool success = false;
 	do {
-		if (sync && IsCur()) {
+		if (sync && IsCurrent()) {
 			ExecPageHeaderAmd64 header;
 			header.call_addr = call_addr;
 			header.context_addr = reinterpret_cast<uint64_t>(context);
@@ -1963,7 +1963,7 @@ bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync) con
 	uint64_t exec_page = 0;
 	bool init_exec_page = true;
 	bool success = false;
-	if (sync && IsCur()) {
+	if (sync && IsCurrent()) {
 		static CallPageAmd64 call_page(nullptr, true);
 		exec_page = call_page.exec_page();
 		if (!exec_page) {
@@ -2068,7 +2068,7 @@ const ModuleList& Process::Modules() const
 
 bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_parameter, bool sync)
 {
-	if (IsCur()) {
+	if (IsCurrent()) {
 		uint32_t rva = image->NtHeader().OptionalHeader().AddressOfEntryPoint();
 		if (image->IsDll()) {
 			if (image->IsPE32()) {

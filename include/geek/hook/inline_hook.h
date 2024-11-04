@@ -17,6 +17,8 @@ enum class Architecture {
 class InlineHook {
 public:
     struct HookContextX32 {
+        uint32_t proc_id;
+
         uint32_t* const stack;
         uint32_t esp;
         uint32_t jmp_addr;
@@ -35,6 +37,8 @@ public:
         uint32_t eflags;
     };
     struct HookContextAmd64 {
+        uint32_t proc_id;
+
         uint64_t* const stack;
         uint64_t rsp;
         uint64_t jmp_addr;
@@ -61,10 +65,11 @@ public:
         uint64_t rflags;
     };
 
-    using HookCallbackX32 = bool(__fastcall*)(HookContextX32* context);
-    using HookCallbackAmd64 = bool(*)(HookContextAmd64* context);
+    using HookCallbackX32 = bool(__fastcall*)(HookContextX32* ctx);
+    using HookCallbackAmd64 = bool(*)(HookContextAmd64* ctx);
 
-    explicit InlineHook(Process* process = nullptr);
+    explicit InlineHook();
+    explicit InlineHook(Process* process);
     ~InlineHook() = default;
     
     /**
@@ -110,7 +115,7 @@ public:
      * @param forward_page_size 转发页面，至少需要0x1000，前0x1000不可覆写，可以指定较多的空间，便于交互数据
      * @return 
      */
-    bool Install(
+    bool InstallEx(
         uint64_t hook_addr,
         uint64_t callback,
         size_t instr_size = 0,
@@ -118,17 +123,30 @@ public:
         Architecture arch = Architecture::kCurrentRunning,
         uint64_t forward_page_size = 0x1000
     );
+    bool InstallX32Ex(
+        uint32_t hook_addr,
+        HookCallbackX32 callback,
+        size_t instr_size = 0,
+        bool save_volatile_register = true,
+        uint64_t forward_page_size = 0x1000);
+
+    bool InstallAmd64Ex(
+        uint64_t hook_addr,
+        HookCallbackAmd64 callback,
+        size_t instr_size = 0,
+        bool save_volatile_register = true,
+        uint64_t forward_page_size = 0x1000);
 
     bool InstallX32(
-        uint64_t hook_addr,
-        HookCallbackX32 callback,
+        uint32_t hook_addr,
+        std::function<bool(HookContextX32* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
     bool InstallAmd64(
         uint64_t hook_addr,
-        HookCallbackAmd64 callback,
+        std::function<bool(HookContextAmd64* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
@@ -139,11 +157,9 @@ public:
     void Uninstall();
 
     uint64_t forward_page() const { return forward_page_; }
-
+    Process* process() const { return process_; }
 
 private:
-    Architecture GetCurrentRunningArch() const;
-
     Process* process_;
     uint64_t hook_addr_ = 0;
     uint64_t forward_page_ = 0;

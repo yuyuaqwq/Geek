@@ -98,7 +98,7 @@ public:
     HANDLE Handle() const noexcept;
     DWORD ProcId() const noexcept;
     bool IsX32() const noexcept;
-    bool IsCur() const;
+    bool IsCurrent() const;
 
     std::optional<uint64_t> AllocMemory(uint64_t addr, size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
     std::optional<uint64_t> AllocMemory(size_t len, DWORD type = MEM_RESERVE | MEM_COMMIT, DWORD protect = PAGE_READWRITE) const;
