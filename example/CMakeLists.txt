@@ -4,6 +4,7 @@ project(example)
 set(CMAKE_CXX_STANDARD 17)
 
 include_directories(${HEAD_PATH})
+include_directories(${ASMJIT_HEAD_PATH})
 
 set(EXECUTABLE_OUTPUT_PATH ${EXEC_PATH})
 

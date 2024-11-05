@@ -11,6 +11,7 @@
 #include <geek/process/process.h>
 
 #include "geek/hook/inline_hook.h"
+#include <geek/asm/assembler.h>
 
 const unsigned char hexData[240] = {
 	0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
@@ -41,13 +42,87 @@ void Origin()
 	printf("Origin\n");
 }
 
-bool Hooked(geek::InlineHook::HookContextAmd64* ctx)
+bool Hooked(geek::InlineHook::HookContextX64* ctx)
 {
 	printf("Hooked\n");
 	return true;
 }
 
+//#include <asmjit/asmjit.h>
+//#include <iostream>
+//
+//using namespace asmjit;
+//
+//int main() {
+//	// 创建 JitRuntime 运行时环境
+//	JitRuntime runtime;
+//
+//	// 创建 CodeHolder 并初始化
+//	CodeHolder code;
+//	code.init(runtime.environment());
+//
+//	// 创建汇编器并绑定到 CodeHolder
+//	x86::Assembler assembler(&code);
+//
+//	// 编写汇编代码：int add(int a, int b) { return a + b; }
+//	assembler.mov(x86::eax, x86::ecx);   // 将第一个参数 (ecx) 移动到 eax
+//	assembler.add(x86::eax, x86::edx);   // 将第二个参数 (edx) 加到 eax
+//	assembler.ret();                     // 返回
+//
+//	// 定义函数指针类型
+//	typedef int (*AddFunc)(int, int);
+//	AddFunc addFunc;
+//
+//	// 将生成的代码映射到可执行内存，并获取函数指针
+//	Error err = runtime.add(&addFunc, &code);
+//	if (err) {
+//		std::cerr << "Error: " << DebugUtils::errorAsString(err) << std::endl;
+//		return 1;
+//	}
+//
+//	// 调用生成的函数
+//	int result = addFunc(5, 3);
+//	std::cout << "Result of 5 + 3 = " << result << std::endl;  // 输出：Result of 5 + 3 = 8
+//
+//	// 释放 JIT 生成的函数
+//	runtime.release(addFunc);
+//
+//	return 0;
+//}
+
+
+class MyClass
+{
+public:
+	MyClass(
+		int a1,
+		int a2,
+		int a3,
+		int a4)
+		: a1_(a1)
+		, a2_(a2)
+		, a3_(a3)
+		, a4_(a4)
+	{
+
+	}
+
+
+	~MyClass();
+
+private:
+	int a1_;
+	int a2_;
+	int a3_;
+	int a4_;
+};
+
 int main() {
+	auto assembler = geek::Assembler::Alloc(geek::Arch::kX86);
+	assembler.mov(geek::regs::eax, 123);
+	assembler.mov(geek::regs::eax, 234.566f);
+	assembler.mov(geek::regs::ecx, geek::asm_ptr(114514));
+
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
 	//
 	// hexData[0];
@@ -59,9 +134,9 @@ int main() {
 	// 	printf("%llx - %llx\n", o, *reinterpret_cast<const uint64_t*>(o));
 	// }
 
-	Origin();
-	geek::InlineHook::InstallAmd64Ex(&geek::ThisProc(), (size_t)Origin, Hooked);
-	Origin();
+	// Origin();
+	// geek::InlineHook::InstallAmd64(&geek::ThisProc(), (size_t)Origin, Hooked);
+	// Origin();
 }
 
 // auto dir = geek::File::GetAppDirectory();

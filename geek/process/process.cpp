@@ -98,25 +98,25 @@ struct ExecPageHeaderX86 {
 	uint32_t stack_addr;
 };
 
-class CallPageAmd64 {
+class CallPageX64 {
 public:
-	CallPageAmd64(Process* process, bool sync)
+	CallPageX64(Process* process, bool sync)
 		: process_(process) {
 		auto res = process->AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (res) {
 			exec_page_ = *res;
-			process->CallGenerateCodeAmd64(exec_page_, sync);
+			process->CallGenerateCodeX64(exec_page_, sync);
 		}
 	}
 
-	~CallPageAmd64() {
+	~CallPageX64() {
 		Close();
 	}
 
-	CallPageAmd64(const CallPageAmd64&) = delete;
-	void operator=(const CallPageAmd64&) = delete;
+	CallPageX64(const CallPageX64&) = delete;
+	void operator=(const CallPageX64&) = delete;
 
-	CallPageAmd64(CallPageAmd64&& rv) {
+	CallPageX64(CallPageX64&& rv) {
 		Close();
 		process_ = rv.process_;
 		exec_page_ = rv.exec_page_;
@@ -138,7 +138,7 @@ private:
 	uint64_t exec_page_ = 0;
 };
 
-struct ExecPageHeaderAmd64 {
+struct ExecPageHeaderX64 {
 	uint64_t call_addr;
 	uint64_t context_addr;
 	uint64_t stack_count;
@@ -1140,7 +1140,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, const std::vector<uin
 		}
 	}
 	else {
-		auto context = CallContextAmd64{};
+		auto context = CallContextX64{};
 		if (par_list.size() >= 5) {
 			auto list = std::initializer_list<uint64_t>(&par_list[4], &*(par_list.end() - 1) + 1);
 			context.stack = list;
@@ -1501,7 +1501,7 @@ bool Process::Call(uint64_t call_addr, CallContextX86* context, bool sync) const
 	return success;
 }
 
-bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
+bool Process::CallGenerateCodeX64(uint64_t exec_page, bool sync) const
 {
 	constexpr int32_t exec_offset = 0x800;
 
@@ -1558,11 +1558,11 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	*(uint32_t*)&temp[i] = 0x428;
 	i += 4;
 
-	// mov rax, [ExecPageHeaderAmd64.call_addr]
+	// mov rax, [ExecPageHeaderX64.call_addr]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(ExecPageHeaderAmd64, call_addr);
+	temp[i++] = offsetof(ExecPageHeaderX64, call_addr);
         
 	// 调用地址放到第一个局部变量
 	// mov [rsp+0x400], rax
@@ -1573,11 +1573,11 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	*(uint32_t*)&temp[i] = 0x400;
 	i += 4;
 
-	// mov rax, [ExecPageHeaderAmd64.context_addr]
+	// mov rax, [ExecPageHeaderX64.context_addr]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(ExecPageHeaderAmd64, context_addr);
+	temp[i++] = offsetof(ExecPageHeaderX64, context_addr);
 	// context放到第二个局部变量
         
 	// mov [rsp+0x400+0x8], rax
@@ -1589,17 +1589,17 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	i += 4;
 
 	// copy stack
-	// mov rsi, [ExecPageHeaderAmd64.stack_addr]
+	// mov rsi, [ExecPageHeaderX64.stack_addr]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x71;
-	temp[i++] = offsetof(ExecPageHeaderAmd64, stack_addr);
+	temp[i++] = offsetof(ExecPageHeaderX64, stack_addr);
 
-	// mov rcx, [ExecPageHeaderAmd64.stack_count]
+	// mov rcx, [ExecPageHeaderX64.stack_count]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x49;
-	temp[i++] = offsetof(ExecPageHeaderAmd64, stack_count);
+	temp[i++] = offsetof(ExecPageHeaderX64, stack_count);
 
 	// 从rsp+0x20开始复制
 	// mov rdi, rsp
@@ -1635,91 +1635,91 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(CallContextAmd64, rax);
+	temp[i++] = offsetof(CallContextX64, rax);
 
 	// mov rdx, [context.rdx]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x51;
-	temp[i++] = offsetof(CallContextAmd64, rdx);
+	temp[i++] = offsetof(CallContextX64, rdx);
 
 	// mov rbx, [context.rbx]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x59;
-	temp[i++] = offsetof(CallContextAmd64, rbx);
+	temp[i++] = offsetof(CallContextX64, rbx);
 
 	// mov rbp, [context.rbp]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x69;
-	temp[i++] = offsetof(CallContextAmd64, rbp);
+	temp[i++] = offsetof(CallContextX64, rbp);
 
 	// mov rsi, [context.rsi]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x71;
-	temp[i++] = offsetof(CallContextAmd64, rsi);
+	temp[i++] = offsetof(CallContextX64, rsi);
 
 	// mov rdi, [context.rdi]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x79;
-	temp[i++] = offsetof(CallContextAmd64, rdi);
+	temp[i++] = offsetof(CallContextX64, rdi);
 
 	// mov r8, [context.r8]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(CallContextAmd64, r8);
+	temp[i++] = offsetof(CallContextX64, r8);
 
 	// mov r9, [context.r9]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x49;
-	temp[i++] = offsetof(CallContextAmd64, r9);
+	temp[i++] = offsetof(CallContextX64, r9);
 
 	// mov r10, [context.r10]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x51;
-	temp[i++] = offsetof(CallContextAmd64, r10);
+	temp[i++] = offsetof(CallContextX64, r10);
 
 	// mov r11, [context.r11]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x59;
-	temp[i++] = offsetof(CallContextAmd64, r11);
+	temp[i++] = offsetof(CallContextX64, r11);
 
 	// mov r12, [context.r12]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x61;
-	temp[i++] = offsetof(CallContextAmd64, r12);
+	temp[i++] = offsetof(CallContextX64, r12);
 
 	// mov r13, [context.r13]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x69;
-	temp[i++] = offsetof(CallContextAmd64, r13);
+	temp[i++] = offsetof(CallContextX64, r13);
 
 	// mov r14, [context.r14]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x71;
-	temp[i++] = offsetof(CallContextAmd64, r14);
+	temp[i++] = offsetof(CallContextX64, r14);
 
 	// mov r15, [context.r15]
 	temp[i++] = 0x4c;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x79;
-	temp[i++] = offsetof(CallContextAmd64, r15);
+	temp[i++] = offsetof(CallContextX64, r15);
 
 	// mov rcx, [context.rcx]
 	temp[i++] = 0x48;
 	temp[i++] = 0x8b;
 	temp[i++] = 0x49;
-	temp[i++] = offsetof(CallContextAmd64, rcx);
+	temp[i++] = offsetof(CallContextX64, rcx);
 
 	// call [rsp + 0x400]
 	temp[i++] = 0xff;
@@ -1751,85 +1751,85 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(CallContextAmd64, rax);
+	temp[i++] = offsetof(CallContextX64, rax);
 
 	// mov [context.rdx], rdx
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x51;
-	temp[i++] = offsetof(CallContextAmd64, rdx);
+	temp[i++] = offsetof(CallContextX64, rdx);
 
 	// mov [context.rbx], rbx
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x59;
-	temp[i++] = offsetof(CallContextAmd64, rbx);
+	temp[i++] = offsetof(CallContextX64, rbx);
 
 	// mov [context.rbp], rbp
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x69;
-	temp[i++] = offsetof(CallContextAmd64, rbp);
+	temp[i++] = offsetof(CallContextX64, rbp);
 
 	// mov [context.rsi], rsi
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x71;
-	temp[i++] = offsetof(CallContextAmd64, rsi);
+	temp[i++] = offsetof(CallContextX64, rsi);
 
 	// mov [context.rdi], rdi
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x79;
-	temp[i++] = offsetof(CallContextAmd64, rdi);
+	temp[i++] = offsetof(CallContextX64, rdi);
 
 	// mov [context.r8], r8
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x41;
-	temp[i++] = offsetof(CallContextAmd64, r8);
+	temp[i++] = offsetof(CallContextX64, r8);
 
 	// mov [context.r9], r9
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x49;
-	temp[i++] = offsetof(CallContextAmd64, r9);
+	temp[i++] = offsetof(CallContextX64, r9);
 
 	// mov [context.r10], r10
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x51;
-	temp[i++] = offsetof(CallContextAmd64, r10);
+	temp[i++] = offsetof(CallContextX64, r10);
 
 	// mov [context.r11], r11
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x59;
-	temp[i++] = offsetof(CallContextAmd64, r11);
+	temp[i++] = offsetof(CallContextX64, r11);
 
 	// mov [context.r12], r12
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x61;
-	temp[i++] = offsetof(CallContextAmd64, r12);
+	temp[i++] = offsetof(CallContextX64, r12);
 
 	// mov [context.r13], r13
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x69;
-	temp[i++] = offsetof(CallContextAmd64, r13);
+	temp[i++] = offsetof(CallContextX64, r13);
 
 	// mov [context.r14], r14
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x71;
-	temp[i++] = offsetof(CallContextAmd64, r14);
+	temp[i++] = offsetof(CallContextX64, r14);
 
 	// mov [context.r15], r15
 	temp[i++] = 0x4c;
 	temp[i++] = 0x89;
 	temp[i++] = 0x79;
-	temp[i++] = offsetof(CallContextAmd64, r15);
+	temp[i++] = offsetof(CallContextX64, r15);
 
 
 	// mov rax(context), rcx
@@ -1849,7 +1849,7 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	temp[i++] = 0x48;
 	temp[i++] = 0x89;
 	temp[i++] = 0x48;
-	temp[i++] = offsetof(CallContextAmd64, rcx);
+	temp[i++] = offsetof(CallContextX64, rcx);
 
 
 	// add rsp, 0x428
@@ -1898,7 +1898,7 @@ bool Process::CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const
 	return true;
 }
 
-bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync, bool init_exec_page) const
+bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextX64* context, bool sync, bool init_exec_page) const
 {
 	constexpr int32_t header_offset = 0x0;
 	constexpr int32_t context_offset = 0x100;
@@ -1907,7 +1907,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 	constexpr int32_t exec_offset = 0x800;
 
 	if (init_exec_page) {
-		if (!CallGenerateCodeAmd64(exec_page, sync)) {
+		if (!CallGenerateCodeX64(exec_page, sync)) {
 			return false;
 		}
 	}
@@ -1915,12 +1915,12 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 	bool success = false;
 	do {
 		if (sync && IsCurrent()) {
-			ExecPageHeaderAmd64 header;
+			ExecPageHeaderX64 header;
 			header.call_addr = call_addr;
 			header.context_addr = reinterpret_cast<uint64_t>(context);
 			header.stack_count = context->stack.size();
 			header.stack_addr = reinterpret_cast<uint64_t>(context->stack.begin());
-			using Func = void(*)(ExecPageHeaderAmd64*);
+			using Func = void(*)(ExecPageHeaderX64*);
 			Func func = reinterpret_cast<Func>(exec_page + exec_offset);
 			func(&header);
 		}
@@ -1932,7 +1932,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 				return false;
 			}
 
-			ExecPageHeaderAmd64 header;
+			ExecPageHeaderX64 header;
 			header.call_addr = call_addr;
 			header.context_addr = exec_page + context_offset;
 			header.stack_count = context->stack.size();
@@ -1950,7 +1950,7 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 				if (!thread.value().WaitExit()) {
 					break;
 				}
-				ReadMemory(exec_page + context_offset, context, offsetof(CallContextAmd64, stack));
+				ReadMemory(exec_page + context_offset, context, offsetof(CallContextX64, stack));
 			}
 		}
 		success = true;
@@ -1958,13 +1958,13 @@ bool Process::Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* con
 	return success;
 }
 
-bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync) const
+bool Process::Call(uint64_t call_addr, CallContextX64* context, bool sync) const
 {
 	uint64_t exec_page = 0;
 	bool init_exec_page = true;
 	bool success = false;
 	if (sync && IsCurrent()) {
-		static CallPageAmd64 call_page(nullptr, true);
+		static CallPageX64 call_page(nullptr, true);
 		exec_page = call_page.exec_page();
 		if (!exec_page) {
 			return false;
@@ -1975,7 +1975,7 @@ bool Process::Call(uint64_t call_addr, CallContextAmd64* context, bool sync) con
 		auto res = AllocMemory(NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (res) {
 			exec_page = *res;
-			CallGenerateCodeAmd64(exec_page, sync);
+			CallGenerateCodeX64(exec_page, sync);
 		}
 		if (!exec_page) {
 			return false;

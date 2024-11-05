@@ -54,7 +54,7 @@ struct CallContextX86 {
     std::initializer_list<uint32_t> stack;  // 目前调用完，不会将栈拷贝回来，如果是创建线程调用，则最多只能传递32个参数
 };
 
-struct CallContextAmd64 {
+struct CallContextX64 {
     uint64_t rax = 0;
     uint64_t rcx = 0;
     uint64_t rdx = 0;
@@ -177,9 +177,9 @@ public:
     bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX86* context, bool sync = true, bool init_exec_page = true) const;
     bool Call(uint64_t call_addr, CallContextX86* context, bool sync = true) const;
 
-    bool CallGenerateCodeAmd64(uint64_t exec_page, bool sync) const;
-    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextAmd64* context, bool sync = true, bool init_exec_page = true) const;
-    bool Call(uint64_t call_addr, CallContextAmd64* context, bool sync = true) const;
+    bool CallGenerateCodeX64(uint64_t exec_page, bool sync) const;
+    bool Call(uint64_t exec_page, uint64_t call_addr, CallContextX64* context, bool sync = true, bool init_exec_page = true) const;
+    bool Call(uint64_t call_addr, CallContextX64* context, bool sync = true) const;
 
     //TODO RepairImportAddressTable
     // bool RepairImportAddressTable(Image* image, bool skip_not_loaded = false);

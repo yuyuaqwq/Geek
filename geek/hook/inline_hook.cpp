@@ -30,10 +30,10 @@ uint64_t GetInstrOffset(uint64_t instr_addr, size_t instr_size, uint64_t dst_add
 }
 
 // 生成跳转到指定地址的指令
-uint64_t MakeJmp(Architecture arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr)
+uint64_t MakeJmp(Arch arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr)
 {
 	switch (arch) {
-	case Architecture::kX32: {
+	case Arch::kX86: {
 		if (buf->size() < 5) {
 			buf->resize(5);
 		}
@@ -45,7 +45,7 @@ uint64_t MakeJmp(Architecture arch, std::vector<uint8_t>* buf, uint64_t cur_addr
 		}
 		break;
 	}
-	case Architecture::kAmd64: {
+	case Arch::kX64: {
 		if (buf->size() < 14) buf->resize(14);
 		buf->operator[](0) = 0x68;        // push low_addr
 		*(uint32_t*)&buf->operator[](1) = (uint64_t)jmp_addr & 0xffffffff;
@@ -67,14 +67,14 @@ uint64_t MakeJmp(Architecture arch, std::vector<uint8_t>* buf, uint64_t cur_addr
 
 // 生成构建栈帧的指令
 // 会使用rdi寄存器
-uint64_t MakeStackFrameStart(Architecture arch, uint8_t* buf, int8_t size)
+uint64_t MakeStackFrameStart(Arch arch, uint8_t* buf, int8_t size)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX32: {
+	case Arch::kX86: {
 		break;
 	}
-	case Architecture::kAmd64: {
+	case Arch::kX64: {
 
 		// 构建栈帧
 		buf[i++] = 0x48;        // sub rsp, size
@@ -107,14 +107,14 @@ uint64_t MakeStackFrameStart(Architecture arch, uint8_t* buf, int8_t size)
 }
 
 // 生成结束栈帧的指令
-uint64_t MakeStackFrameEnd(Architecture arch, uint8_t* buf, int8_t size)
+uint64_t MakeStackFrameEnd(Arch arch, uint8_t* buf, int8_t size)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX32: {
+	case Arch::kX86: {
 		break;
 	}
-	case Architecture::kAmd64: {
+	case Arch::kX64: {
 		// 恢复栈对齐
 		{
 			// add rsp, rdi
@@ -136,12 +136,12 @@ uint64_t MakeStackFrameEnd(Architecture arch, uint8_t* buf, int8_t size)
 
 // 生成TlsSetValue的指令
 // X86:会使用rax，要求value已经推到栈中
-// Amd64:会使用rcx，rax，要求value放在rdx中，且已经构建好栈帧
-uint64_t MakeTlsSetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
+// X64:会使用rcx，rax，要求value放在rdx中，且已经构建好栈帧
+uint64_t MakeTlsSetValue(Arch arch, uint8_t* buf, uint32_t tls_id)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX32: {
+	case Arch::kX86: {
 		// call TlsSetValue
 		// push tls_id_
 		buf[i++] = 0x68;
@@ -158,7 +158,7 @@ uint64_t MakeTlsSetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 		buf[i++] = 0xd0;
 		break;
 	}
-	case Architecture::kAmd64: {
+	case Arch::kX64: {
 		// call TlsSetValue
 		// mov rcx, tls_id_
 		buf[i++] = 0x48;
@@ -181,11 +181,11 @@ uint64_t MakeTlsSetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 
 // 生成TlsGetValue的指令
 // 会使用rcx，rax，要求已经构建好栈帧
-uint64_t MakeTlsGetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
+uint64_t MakeTlsGetValue(Arch arch, uint8_t* buf, uint32_t tls_id)
 {
 	int i = 0;
 	switch (arch) {
-	case Architecture::kX32: {
+	case Arch::kX86: {
 		// push tls_id_
 		buf[i++] = 0x68;
 		*(uint32_t*)&buf[i] = tls_id;
@@ -201,7 +201,7 @@ uint64_t MakeTlsGetValue(Architecture arch, uint8_t* buf, uint32_t tls_id)
 		buf[i++] = 0xd0;
 		break;
 	}
-	case Architecture::kAmd64: {
+	case Arch::kX64: {
 		// mov rcx, tls_id_
 		buf[i++] = 0x48;
 		buf[i++] = 0xb9;
@@ -233,19 +233,12 @@ std::optional<InlineHook> InlineHook::InstallEx(
 	const Process* proc,
 	uint64_t hook_addr,
 	uint64_t callback,
+	Arch arch,
 	size_t instr_size,
 	bool save_volatile_register,
-	Architecture arch,
 	uint64_t forward_page_size)
 {
 	InlineHook hook{ proc };
-	if (arch == Architecture::kCurrentRunning)
-	{
-		if (proc->IsX32())
-			arch = Architecture::kX32;
-		else
-			arch = Architecture::kAmd64;
-	}
 
 	hook.tls_id_ = TlsAlloc();
 	if (hook.tls_id_ == TLS_OUT_OF_INDEXES) {
@@ -280,7 +273,7 @@ std::optional<InlineHook> InlineHook::InstallEx(
 	}
 
 	if (instr_size == 0) {
-		if (arch == Architecture::kX32) {
+		if (arch == Arch::kX86) {
 			while (instr_size < 5) {
 				instr_size += insn_len_x86_32(&temp[instr_size]);
 			}
@@ -299,7 +292,7 @@ std::optional<InlineHook> InlineHook::InstallEx(
         
 	std::vector<uint8_t> jmp_instr(instr_size);
 
-	if (arch == Architecture::kX32) {
+	if (arch == Arch::kX86) {
 		if (instr_size < 5) {
 			return std::nullopt;
 		}
@@ -1272,8 +1265,8 @@ std::optional<InlineHook> InlineHook::InstallEx(
         
 	if (hook.process_->IsCurrent() &&
 		(
-			arch == Architecture::kX32 && instr_size <= 8 || 
-			arch == Architecture::kAmd64 && instr_size <= 16
+			arch == Arch::kX86 && instr_size <= 8 || 
+			arch == Arch::kX64 && instr_size <= 16
 		)
 	) {
 		DWORD old_protect;
@@ -1282,7 +1275,7 @@ std::optional<InlineHook> InlineHook::InstallEx(
 		}
 		// 通过原子指令进行hook，降低错误的概率
 		bool success = true;
-		if (arch == Architecture::kX32) {
+		if (arch == Arch::kX86) {
 			MakeJmp(arch, &jmp_instr, hook_addr, hook.forward_page_);
 			if (jmp_instr.size() < 8) {
 				size_t old_size = jmp_instr.size();
@@ -1315,40 +1308,40 @@ std::optional<InlineHook> InlineHook::InstallEx(
 	return hook;
 }
 
-std::optional<InlineHook> InlineHook::InstallX32Ex(
+std::optional<InlineHook> InlineHook::InstallX86Ex(
 	const Process* proc,
 	uint32_t hook_addr, 
-	HookCallbackX32 callback, 
+	HookCallbackX86 callback, 
 	size_t instr_size,
 	bool save_volatile_register,
 	uint64_t forward_page_size)
 {
-	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kX32, forward_page_size);
+	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), Arch::kX86, instr_size, save_volatile_register, forward_page_size);
 }
 
-std::optional<InlineHook> InlineHook::InstallAmd64Ex(
+std::optional<InlineHook> InlineHook::InstallX64Ex(
 	const Process* proc,
 	uint64_t hook_addr,
-	HookCallbackAmd64 callback,
+	HookCallbackX64 callback,
 	size_t instr_size,
 	bool save_volatile_register,
 	uint64_t forward_page_size)
 {
-	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), instr_size, save_volatile_register, Architecture::kAmd64, forward_page_size);
+	return InstallEx(proc, hook_addr, reinterpret_cast<uint64_t>(callback), Arch::kX64, instr_size, save_volatile_register, forward_page_size);
 }
 
 namespace {
-using CallbackX32 = std::function<bool(InlineHook::HookContextX32* ctx)>;
+using CallbackX32 = std::function<bool(InlineHook::HookContextX86* ctx)>;
 std::unordered_map<uint32_t, std::unordered_map<uint64_t, CallbackX32>> callbacks_x32;
 
-using CallbackAmd64 = std::function<bool(InlineHook::HookContextAmd64* ctx)>;
-std::unordered_map<uint32_t, std::unordered_map<uint64_t, CallbackAmd64>> callbacks_amd64;
+using CallbackX64 = std::function<bool(InlineHook::HookContextX64* ctx)>;
+std::unordered_map<uint32_t, std::unordered_map<uint64_t, CallbackX64>> callbacks_x64;
 
 /**
  * function版install内部使用的callback
  * 转发给function
  */
-bool __fastcall InstallX32Callback(InlineHook::HookContextX32* ctx)
+bool __fastcall InstallX32Callback(InlineHook::HookContextX86* ctx)
 {
 	// 查找进程对应的回调列表
 	auto cbs = callbacks_x32.find(GetCurrentProcessId());
@@ -1360,11 +1353,11 @@ bool __fastcall InstallX32Callback(InlineHook::HookContextX32* ctx)
 	return c->second(ctx);
 }
 
-bool InstallAmd64Callback(InlineHook::HookContextAmd64* ctx)
+bool InstallX64Callback(InlineHook::HookContextX64* ctx)
 {
 	// 查找进程对应的回调列表
-	auto cbs = callbacks_amd64.find(GetCurrentProcessId());
-	assert(cbs != callbacks_amd64.end());
+	auto cbs = callbacks_x64.find(GetCurrentProcessId());
+	assert(cbs != callbacks_x64.end());
 	// 根据hook地址找到对应的function
 	auto c = cbs->second.find(ctx->hook_addr);
 	assert(c != cbs->second.end());
@@ -1373,10 +1366,10 @@ bool InstallAmd64Callback(InlineHook::HookContextAmd64* ctx)
 }
 }
 
-std::optional<InlineHook> InlineHook::InstallX32(
+std::optional<InlineHook> InlineHook::InstallX86(
 	const Process* proc,
 	uint32_t hook_addr,
-	std::function<bool(HookContextX32* ctx)>&& callback,
+	std::function<bool(HookContextX86* ctx)>&& callback,
 	size_t instr_size,
 	bool save_volatile_register,
 	uint64_t forward_page_size)
@@ -1387,13 +1380,13 @@ std::optional<InlineHook> InlineHook::InstallX32(
 
 	// 把function加入回调函数表中
 	callbacks_x32[proc->ProcId()].emplace(hook_addr, std::move(callback));
-	return InstallX32Ex(proc, hook_addr, &InstallX32Callback, instr_size, save_volatile_register, forward_page_size);
+	return InstallX86Ex(proc, hook_addr, &InstallX32Callback, instr_size, save_volatile_register, forward_page_size);
 }
 
-std::optional<InlineHook> InlineHook::InstallAmd64(
+std::optional<InlineHook> InlineHook::InstallX64(
 	const Process* proc,
 	uint64_t hook_addr, 
-	std::function<bool(HookContextAmd64* ctx)>&& callback,
+	std::function<bool(HookContextX64* ctx)>&& callback,
 	size_t instr_size,
 	bool save_volatile_register,
 	uint64_t forward_page_size)
@@ -1403,20 +1396,20 @@ std::optional<InlineHook> InlineHook::InstallAmd64(
 		throw std::exception("Cross-process hooks are not yet supported");
 
 	// 把function加入回调函数表中
-	callbacks_amd64[proc->ProcId()].emplace(hook_addr, std::move(callback));
-	return InstallAmd64Ex(proc, hook_addr, &InstallAmd64Callback, instr_size, save_volatile_register, forward_page_size);
+	callbacks_x64[proc->ProcId()].emplace(hook_addr, std::move(callback));
+	return InstallX64Ex(proc, hook_addr, &InstallX64Callback, instr_size, save_volatile_register, forward_page_size);
 }
 
-std::optional<InlineHook> InlineHook::InstallX32(uint32_t hook_addr, std::function<bool(HookContextX32* ctx)>&& callback, size_t instr_size,
+std::optional<InlineHook> InlineHook::InstallX86(uint32_t hook_addr, std::function<bool(HookContextX86* ctx)>&& callback, size_t instr_size,
 	bool save_volatile_register, uint64_t forward_page_size)
 {
-	return InstallX32(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
+	return InstallX86(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
 }
 
-std::optional<InlineHook> InlineHook::InstallAmd64(uint64_t hook_addr, std::function<bool(HookContextAmd64* ctx)>&& callback,
+std::optional<InlineHook> InlineHook::InstallX64(uint64_t hook_addr, std::function<bool(HookContextX64* ctx)>&& callback,
 	size_t instr_size, bool save_volatile_register, uint64_t forward_page_size)
 {
-	return InstallAmd64(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
+	return InstallX64(&ThisProc(), hook_addr, std::move(callback), instr_size, save_volatile_register, forward_page_size);
 }
 
 void InlineHook::Uninstall()

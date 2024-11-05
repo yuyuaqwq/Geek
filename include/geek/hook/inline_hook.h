@@ -5,18 +5,13 @@
 
 #include <vector>
 #include <geek/process/process.h>
+#include <geek/global.h>
 
 
 namespace geek {
-enum class Architecture {
-    kCurrentRunning,
-    kX32,
-    kAmd64,
-};
-
 class InlineHook {
 public:
-    struct HookContextX32 {
+    struct HookContextX86 {
         uint32_t* const stack;
         uint32_t esp;
         uint32_t jmp_addr;
@@ -34,7 +29,7 @@ public:
         uint32_t edi;
         uint32_t eflags;
     };
-    struct HookContextAmd64 {
+    struct HookContextX64 {
         uint64_t* const stack;
         uint64_t rsp;
         uint64_t jmp_addr;
@@ -61,8 +56,8 @@ public:
         uint64_t rflags;
     };
 
-    using HookCallbackX32 = bool(__fastcall*)(HookContextX32* ctx);
-    using HookCallbackAmd64 = bool(*)(HookContextAmd64* ctx);
+    using HookCallbackX86 = bool(__fastcall*)(HookContextX86* ctx);
+    using HookCallbackX64 = bool(*)(HookContextX64* ctx);
 
     ~InlineHook() = default;
     
@@ -99,7 +94,7 @@ public:
      * 4. 如果需要修改rsp或者jmp_addr，注意堆栈平衡
      *      默认情况下jmp_addr是指向被hook处的下一行指令
      *      push和pop顺序为    push esp -> push jmp_addr -> push xxx    call    pop xxx -> pop&save jmp_addr -> pop esp -> 是否执行原指令 -> get&push jmp_addr -> ret
-     * 5. Amd64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
+     * 5. X64下构建栈帧时应该是以16字节对齐的，否则部分指令(浮点等)可能会异常
      *
      * @param hook_addr 要hook的地址
      * @param callback 回调的函数指针
@@ -113,53 +108,53 @@ public:
         const Process* proc,
         uint64_t hook_addr,
         uint64_t callback,
+        Arch arch,
         size_t instr_size = 0,
         bool save_volatile_register = true,
-        Architecture arch = Architecture::kCurrentRunning,
         uint64_t forward_page_size = 0x1000
     );
-    static std::optional<InlineHook> InstallX32Ex(
+    static std::optional<InlineHook> InstallX86Ex(
         const Process* proc,
         uint32_t hook_addr,
-        HookCallbackX32 callback,
+        HookCallbackX86 callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallAmd64Ex(
+    static std::optional<InlineHook> InstallX64Ex(
         const Process* proc,
         uint64_t hook_addr,
-        HookCallbackAmd64 callback,
+        HookCallbackX64 callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX32(
+    static std::optional<InlineHook> InstallX86(
         const Process* proc,
         uint32_t hook_addr,
-        std::function<bool(HookContextX32* ctx)>&& callback,
+        std::function<bool(HookContextX86* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallAmd64(
+    static std::optional<InlineHook> InstallX64(
         const Process* proc,
         uint64_t hook_addr,
-        std::function<bool(HookContextAmd64* ctx)>&& callback,
+        std::function<bool(HookContextX64* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX32(
+    static std::optional<InlineHook> InstallX86(
         uint32_t hook_addr,
-        std::function<bool(HookContextX32* ctx)>&& callback,
+        std::function<bool(HookContextX86* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallAmd64(
+    static std::optional<InlineHook> InstallX64(
         uint64_t hook_addr,
-        std::function<bool(HookContextAmd64* ctx)>&& callback,
+        std::function<bool(HookContextX64* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
