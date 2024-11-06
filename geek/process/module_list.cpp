@@ -4,7 +4,7 @@
 
 #include "list_entry.h"
 #include <geek/process/process.h>
-#include <geek/utils/converter.h>
+#include <geek/utils/strutil.h>
 
 namespace geek {
 ModuleList::ModuleList(Process* proc)
@@ -95,11 +95,11 @@ ModuleListNode ModuleList::FindByModuleBase(uint64_t base) const
 
 ModuleListNode ModuleList::FindByModuleName(std::wstring_view name) const
 {
-	auto n = Convert::ToUppercase(name);
+	auto n = StrUtil::ToUppercase(name);
 
 	for (auto& m : *this)
 	{
-		auto n2 = Convert::ToUppercase(m.BaseDllName());
+		auto n2 = StrUtil::ToUppercase(m.BaseDllName());
 		if (n2 == n)
 			return m;
 	}
@@ -261,8 +261,8 @@ std::wstring ModuleListNode::DebugName() const
 {
 	if (!IsValid())
 		return L"<Invalid>";
-	return L"[Addr:0x" + Convert::ToHexWString(DllBase(), IsX32() ? 8 : 16)
-		+ L" Size:" + Convert::ToHexWString(SizeOfImage(), 8) + L"] "
+	return L"[Addr:0x" + StrUtil::ToHexWString(DllBase(), IsX32() ? 8 : 16)
+		+ L" Size:" + StrUtil::ToHexWString(SizeOfImage(), 8) + L"] "
 		+ BaseDllName();
 }
 }

@@ -3,7 +3,7 @@
 
 #include "geek/errordefs.h"
 #include <geek/utils/handle.h>
-#include <geek/utils/converter.h>
+#include <geek/utils/strutil.h>
 
 namespace geek {
 ProcessList::ProcessList()
@@ -46,10 +46,10 @@ ProcessListNode ProcessList::end() const
 
 ProcessListNode ProcessList::FindFirstByProcName(std::wstring_view name) const
 {
-	auto n = Convert::ToUppercase(name);
+	auto n = StrUtil::ToUppercase(name);
 	for (auto& p : *this)
 	{
-		auto n2 = Convert::ToUppercase(p.ProcessName());
+		auto n2 = StrUtil::ToUppercase(p.ProcessName());
 		if (n == n2)
 			return p;
 	}
@@ -59,10 +59,10 @@ ProcessListNode ProcessList::FindFirstByProcName(std::wstring_view name) const
 std::vector<ProcessListNode> ProcessList::FindAllByProcName(std::wstring_view name) const
 {
 	std::vector<ProcessListNode> total;
-	auto n = Convert::ToUppercase(name);
+	auto n = StrUtil::ToUppercase(name);
 	for (auto& p : *this)
 	{
-		auto n2 = Convert::ToUppercase(p.ProcessName());
+		auto n2 = StrUtil::ToUppercase(p.ProcessName());
 		if (n == n2)
 			total.push_back(p);
 	}

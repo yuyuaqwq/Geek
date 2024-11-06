@@ -5,15 +5,16 @@
 #include <vector>
 #include <optional>
 
-#include <geek/pe/image_section_header_table.h>
-#include <geek/pe/image_nt_header.h>
-
 #ifndef WINNT
 #include <Windows.h>
 #include <geek/utils/file.h>
 #else
 #include <ntimage.h>
 #endif
+
+#include <geek/global.h>
+#include <geek/pe/image_section_header_table.h>
+#include <geek/pe/image_nt_header.h>
 
 namespace geek {
 class Image {
@@ -59,8 +60,8 @@ public:
     bool CheckSum() const;
     void RepairCheckSum() const;
 
-    bool CheckDigitalSignature() { } //TODO CheckDigitalSignature
-    std::vector<uint8_t> CalculationAuthHashCalc() { } //TODO CalculationAuthHashCalc
+    // bool CheckDigitalSignature() { } //TODO CheckDigitalSignature
+    // std::vector<uint8_t> CalculationAuthHashCalc() { } //TODO CalculationAuthHashCalc
 
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type);
 
@@ -68,9 +69,7 @@ private:
     friend class ImageNtHeader;
     friend class ImageSectionHeaderTable;
 
-    class Impl;
-    std::unique_ptr<Impl> impl_;
-
+    _GEEK_IMPL
 };
 
 } // namespace geek

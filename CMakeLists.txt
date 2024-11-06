@@ -24,5 +24,10 @@ endif()
 set(SRC_HEAD_PATH ${PROJECT_SOURCE_DIR})
 set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/third-party)
 
+set(ASMJIT_HEAD_PATH ${THIRD_PARTY_DIR}/asmjit/src)
+
+set(ASMJIT_STATIC TRUE)
+add_subdirectory(${THIRD_PARTY_DIR}/asmjit)
+
 add_subdirectory(geek)
 add_subdirectory(example)

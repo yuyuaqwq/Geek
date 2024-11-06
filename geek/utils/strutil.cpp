@@ -1,4 +1,4 @@
-#include <geek/utils/converter.h>
+#include <geek/utils/strutil.h>
 
 #include <Windows.h>
 
@@ -7,7 +7,7 @@
 #include <sstream>
 
 namespace geek {
-std::string Convert::Utf16leToUtf8(const std::wstring& str)
+std::string StrUtil::Utf16leToUtf8(const std::wstring& str)
 {
 	int len = WideCharToMultiByte(CP_UTF8, 0, str.c_str(), -1, NULL, 0, NULL, NULL);
 	if (!len) {
@@ -20,7 +20,7 @@ std::string Convert::Utf16leToUtf8(const std::wstring& str)
 	return buf.data();
 }
 
-std::wstring Convert::Utf8ToUtf16le(const std::string& str)
+std::wstring StrUtil::Utf8ToUtf16le(const std::string& str)
 {
 	int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
 	if (!len) {
@@ -33,7 +33,7 @@ std::wstring Convert::Utf8ToUtf16le(const std::string& str)
 	return buf.data();
 }
 
-std::string Convert::Utf16leToAnsi(const std::wstring& str)
+std::string StrUtil::Utf16leToAnsi(const std::wstring& str)
 {
 	int len = WideCharToMultiByte(CP_ACP, 0, str.c_str(), -1, NULL, 0, NULL, NULL);
 	if (!len) {
@@ -46,7 +46,7 @@ std::string Convert::Utf16leToAnsi(const std::wstring& str)
 	return buf.data();
 }
 
-std::wstring Convert::AnsiToUtf16le(const std::string& str)
+std::wstring StrUtil::AnsiToUtf16le(const std::string& str)
 {
 	int len = MultiByteToWideChar(CP_ACP, 0, str.c_str(), -1, NULL, 0);
 	if (!len) {
@@ -59,13 +59,13 @@ std::wstring Convert::AnsiToUtf16le(const std::string& str)
 	return buf.data();
 }
 
-std::string Convert::AnsiToUtf8(const std::string& str)
+std::string StrUtil::AnsiToUtf8(const std::string& str)
 {
 	auto str_utf16le = AnsiToUtf16le(str);
 	return Utf16leToUtf8(str_utf16le);
 }
 
-std::string Convert::Base64Encode(const void* input, size_t size, const char* codes)
+std::string StrUtil::Base64Encode(const void* input, size_t size, const char* codes)
 {
 	const unsigned char* c_input = (const unsigned char*)input;
 	std::string output;
@@ -93,7 +93,7 @@ std::string Convert::Base64Encode(const void* input, size_t size, const char* co
 	return output;
 }
 
-std::vector<uint8_t> Convert::Base64Decode(const char* input, size_t size, const char* codes)
+std::vector<uint8_t> StrUtil::Base64Decode(const char* input, size_t size, const char* codes)
 {
 	const unsigned char* c_input = (const unsigned char*)input;
 	std::vector<uint8_t> output;
@@ -122,42 +122,42 @@ std::vector<uint8_t> Convert::Base64Decode(const char* input, size_t size, const
 	return output;
 }
 
-std::string Convert::ToLowercase(std::string_view str)
+std::string StrUtil::ToLowercase(std::string_view str)
 {
 	std::string total(str.size(), '\0');
 	std::transform(str.begin(), str.end(), total.begin(), [](auto ch) { return std::tolower(ch); });
 	return total;
 }
 
-std::wstring Convert::ToLowercase(std::wstring_view str)
+std::wstring StrUtil::ToLowercase(std::wstring_view str)
 {
 	std::wstring total(str.size(), L'\0');
 	std::transform(str.begin(), str.end(), total.begin(), [](auto ch) { return std::tolower(ch); });
 	return total;
 }
 
-std::string Convert::ToUppercase(std::string_view str)
+std::string StrUtil::ToUppercase(std::string_view str)
 {
 	std::string total(str.size(), '\0');
 	std::transform(str.begin(), str.end(), total.begin(), [](auto ch) { return std::toupper(ch); });
 	return total;
 }
 
-std::wstring Convert::ToUppercase(std::wstring_view str)
+std::wstring StrUtil::ToUppercase(std::wstring_view str)
 {
 	std::wstring total(str.size(), L'\0');
 	std::transform(str.begin(), str.end(), total.begin(), [](auto ch) { return std::toupper(ch); });
 	return total;
 }
 
-std::string Convert::ToHexString(uint64_t val, int reserve)
+std::string StrUtil::ToHexString(uint64_t val, int reserve)
 {
 	std::stringstream ss;
 	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill('0') << (val & 0xFFFFFFFF);
 	return ss.str();
 }
 
-std::wstring Convert::ToHexWString(uint64_t val, int reserve)
+std::wstring StrUtil::ToHexWString(uint64_t val, int reserve)
 {
 	std::wstringstream ss;
 	ss << std::hex << std::uppercase << std::setw(reserve) << std::setfill(L'0') << (val & 0xFFFFFFFF);

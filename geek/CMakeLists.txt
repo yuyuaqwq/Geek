@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 include_directories(${HEAD_PATH})
 include_directories(${SRC_HEAD_PATH})
+include_directories(${ASMJIT_HEAD_PATH})
 
 aux_source_directory(./ SRC)
 aux_source_directory(./hook SRC)
@@ -13,12 +14,13 @@ aux_source_directory(./pe/data_directory SRC)
 aux_source_directory(./process SRC)
 aux_source_directory(./utils SRC)
 aux_source_directory(./wow64ext SRC)
+aux_source_directory(./asm SRC)
 
 add_library(${GEEK_LIB} STATIC ${SRC})
 
+target_link_libraries(${GEEK_LIB} PRIVATE asmjit::asmjit)
 
-# 假设你的静态库在 geek/lib 中构建
-# 设置安装路径
+
 include(GNUInstallDirs)
 
 # 安装库
