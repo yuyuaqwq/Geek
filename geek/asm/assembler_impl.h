@@ -1,7 +1,8 @@
 #pragma once
 #include <geek/asm/assembler.h>
-#include <asmjit/asmjit.h>
 
+#include <asmjit/asmjit.h>
+#include "assembler_p_impl.h"
 #include <geek/utils/debug.h>
 
 namespace geek {
@@ -16,27 +17,20 @@ public:
 	asmjit::x86::Assembler assembler_;
 };
 
-struct RegDeleter {
-	RegDeleter() noexcept = default;
-
-	void operator()(void* ptr) const noexcept {
-		deleter(ptr);
-	}
-
-	void(*deleter)(void* ptr);
-};
-
-std::unique_ptr<asmjit::x86::Reg, RegDeleter> ToAsmJit(regs r);
-
 Assembler::ErrorCode FromAsmJit(asmjit::ErrorCode code) noexcept;
 asmjit::ErrorCode ToAsmJit(Assembler::ErrorCode code) noexcept;
+asmjit::LabelType ToAsmJit(AsmLabelType type);
 
 asmjit::Imm ToAsmJit(const internal::Imm& imm);
 asmjit::x86::Mem ToAsmJit(const internal::Mem& mem);
 
-#define TO_ASMJIT_REG(x) std::unique_ptr<asmjit::x86::x, RegDeleter> ToAsmJit##x(regs r);
+const asmjit::x86::Reg& ToAsmJit(const internal::Reg& r);
+const asmjit::x86::Gp& ToAsmJit(const internal::Gp& gp);
+const asmjit::x86::Vec& ToAsmJit(const internal::Vec& gp);
+const asmjit::x86::CReg& ToAsmJit(const internal::CReg& gp);
+const asmjit::x86::DReg& ToAsmJit(const internal::DReg& gp);
+const asmjit::x86::SReg& ToAsmJit(const internal::SReg& gp);
+const asmjit::x86::Rip& ToAsmJit(const internal::Rip& gp);
 
-TO_ASMJIT_REG(Gp)
-TO_ASMJIT_REG(Vec)
-TO_ASMJIT_REG(Rip)
+const asmjit::Label& ToAsmJit(const internal::Label& label);
 }

@@ -60,8 +60,8 @@ public:
     bool CheckSum() const;
     void RepairCheckSum() const;
 
-    bool CheckDigitalSignature() { } //TODO CheckDigitalSignature
-    std::vector<uint8_t> CalculationAuthHashCalc() { } //TODO CalculationAuthHashCalc
+    // bool CheckDigitalSignature() { } //TODO CheckDigitalSignature
+    // std::vector<uint8_t> CalculationAuthHashCalc() { } //TODO CalculationAuthHashCalc
 
     static std::optional<std::vector<uint8_t>> GetResource(HMODULE handle_module, DWORD resource_id, LPCWSTR type);
 

@@ -13,6 +13,8 @@
 #include "geek/hook/inline_hook.h"
 #include <geek/asm/assembler.h>
 
+using namespace geek;
+
 const unsigned char hexData[240] = {
 	0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
 	0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -42,7 +44,7 @@ void Origin()
 	printf("Origin\n");
 }
 
-bool Hooked(geek::InlineHook::HookContextX64* ctx)
+bool Hooked(InlineHook::HookContextX64* ctx)
 {
 	printf("Hooked\n");
 	return true;
@@ -118,10 +120,16 @@ private:
 };
 
 int main() {
-	auto assembler = geek::Assembler::Alloc(geek::Arch::kX86);
-	assembler.mov(geek::regs::eax, 123);
-	assembler.mov(geek::regs::eax, 234.566f);
-	assembler.mov(geek::regs::ecx, geek::asm_ptr(114514));
+	auto assembler = Assembler::Alloc(Arch::kX86);
+
+	assembler.mov(asm_regs::eax, 0x114514);
+	assembler.mov(asm_regs::eax, asm_regs::ebx);
+	assembler.mov(asm_regs::ecx, asm_ops::ptr(0x3333));
+
+	auto c = assembler.GetCode();
+	for (auto b : c) {
+		printf("%02X ", b);
+	}
 
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
 	//

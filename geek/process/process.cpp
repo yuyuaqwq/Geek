@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <psapi.h>
 #include <geek/process/ntinc.h>
-#include <geek/utils/converter.h>
+#include <geek/utils/strutil.h>
 #include <geek/utils/searcher.h>
 
 #include "geek/errordefs.h"

@@ -1,50 +1,312 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include <geek/global.h>
 #include <geek/asm/assembler_p.h>
-#include <geek/asm/regs.h>
+#include <geek/asm/asm_ops.h>
+#include <geek/asm/asm_regs.h>
 
 namespace geek {
-//! Creates `[base.reg + offset]` memory operand.
-internal::Mem asm_ptr(regs base, int32_t offset = 0, uint32_t size = 0);
-//! Creates `[base.reg + (index << shift) + offset]` memory operand (scalar index).
-internal::Mem asm_ptr(regs base, regs index, uint32_t shift = 0, int32_t offset = 0, uint32_t size = 0);
-
-//! Creates `[base]` absolute memory operand.
-internal::Mem asm_ptr(uint64_t base, uint32_t size = 0);
-//! Creates `[base + (index.reg << shift)]` absolute memory operand.
-internal::Mem asm_ptr(uint64_t base, regs index, uint32_t shift = 0, uint32_t size = 0);
+enum class AsmLabelType : uint8_t {
+	//! Anonymous label that can optionally have a name, which is only used for debugging purposes.
+	kAnonymous = 0,
+	//! Local label (always has parentId).
+	kLocal = 1,
+	//! Global label (never has parentId).
+	kGlobal = 2,
+	//! External label (references an external symbol).
+	kExternal = 3,
+	//! Maximum value of `LabelType`.
+	kMaxValue = kExternal
+};
 
 class Assembler {
 public:
 	enum ErrorCode : uint32_t;
-
-	class Error {
-	public:
-		Error(ErrorCode code);
-
-		ErrorCode code() const noexcept { return code_; }
-		std::string msg() const;
-
-	private:
-		ErrorCode code_;
-	};
+	class Error;
 
 	static Assembler Alloc(Arch arch);
 	~Assembler();
 
-	Error mov(regs o1, regs o2);
-	Error mov(regs o1, const internal::Imm& o2);
-	Error mov(regs o1, const internal::Mem& o2);
+	internal::Label NewLabel() const;
+	internal::Label NewNamedLabel(std::string_view name, AsmLabelType type = AsmLabelType::kGlobal) const;
+	std::vector<uint8_t> GetCode() const;
 
-	Error mov(const internal::Mem& o1, regs o2);
-	Error mov(const internal::Mem& o1, const internal::Imm& o2);
+	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(adc, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(adc, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(adc, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(add, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(add, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(add, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(add, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(add, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(and_, Gp, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(and_, Gp, Mem);                                   // ANY
+	_GEEK_ASM_INST_2X(and_, Gp, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(and_, Mem, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(and_, Mem, Imm);                                  // ANY
+	_GEEK_ASM_INST_2X(bound, Gp, Mem);                                // X86
+	_GEEK_ASM_INST_2X(bsf, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(bsf, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(bsr, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(bsr, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_1X(bswap, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(bt, Gp, Gp);                                       // ANY
+	_GEEK_ASM_INST_2X(bt, Gp, Imm);                                      // ANY
+	_GEEK_ASM_INST_2X(bt, Mem, Gp);                                      // ANY
+	_GEEK_ASM_INST_2X(bt, Mem, Imm);                                     // ANY
+	_GEEK_ASM_INST_2X(btc, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(btc, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(btc, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(btc, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(btr, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(btr, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(btr, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(btr, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(bts, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(bts, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(bts, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(bts, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_1X(cbw, Gp_AX);                                      // ANY [EXPLICIT] AX      <- Sign Extend AL
+	_GEEK_ASM_INST_2X(cdq, Gp_EDX, Gp_EAX);                             // ANY [EXPLICIT] EDX:EAX <- Sign Extend EAX
+	_GEEK_ASM_INST_1X(cdqe, Gp_EAX);                                   // X64 [EXPLICIT] RAX     <- Sign Extend EAX
+	_GEEK_ASM_INST_2X(cqo, Gp_RDX, Gp_RAX);                             // X64 [EXPLICIT] RDX:RAX <- Sign Extend RAX
+	_GEEK_ASM_INST_2X(cwd, Gp_DX, Gp_AX);                               // ANY [EXPLICIT] DX:AX   <- Sign Extend AX
+	_GEEK_ASM_INST_1X(cwde, Gp_EAX);                                   // ANY [EXPLICIT] EAX     <- Sign Extend AX
+	_GEEK_ASM_INST_1X(call, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(call, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(call, Label);                                    // ANY
+	_GEEK_ASM_INST_1X(call, Imm);                                      // ANY
+
+	_GEEK_ASM_INST_2X(cmp, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(cmp, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(cmp, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(cmp, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(cmp, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(cmps, DS_ZSI, ES_ZDI);                           // ANY [EXPLICIT]
+
+	_GEEK_ASM_INST_1X(dec, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(dec, Mem);                                        // ANY
+	_GEEK_ASM_INST_2X(div, Gp, Gp);                                     // ANY [EXPLICIT]  AH[Rem]: AL[Quot] <- AX / r8
+	_GEEK_ASM_INST_2X(div, Gp, Mem);                                    // ANY [EXPLICIT]  AH[Rem]: AL[Quot] <- AX / m8
+	_GEEK_ASM_INST_3X(div, Gp, Gp, Gp);                                 // ANY [EXPLICIT] xDX[Rem]:xAX[Quot] <- xDX:xAX / r16|r32|r64
+	_GEEK_ASM_INST_3X(div, Gp, Gp, Mem);                                // ANY [EXPLICIT] xDX[Rem]:xAX[Quot] <- xDX:xAX / m16|m32|m64
+	_GEEK_ASM_INST_2X(idiv, Gp, Gp);                                   // ANY [EXPLICIT]  AH[Rem]: AL[Quot] <- AX / r8
+	_GEEK_ASM_INST_2X(idiv, Gp, Mem);                                  // ANY [EXPLICIT]  AH[Rem]: AL[Quot] <- AX / m8
+	_GEEK_ASM_INST_3X(idiv, Gp, Gp, Gp);                               // ANY [EXPLICIT] xDX[Rem]:xAX[Quot] <- xDX:xAX / r16|r32|r64
+	_GEEK_ASM_INST_3X(idiv, Gp, Gp, Mem);                              // ANY [EXPLICIT] xDX[Rem]:xAX[Quot] <- xDX:xAX / m16|m32|m64
+	_GEEK_ASM_INST_2X(imul, Gp, Gp);                                   // ANY [EXPLICIT] AX <- AL * r8 | ra <- ra * rb
+	_GEEK_ASM_INST_2X(imul, Gp, Mem);                                  // ANY [EXPLICIT] AX <- AL * m8 | ra <- ra * m16|m32|m64
+	_GEEK_ASM_INST_3X(imul, Gp, Gp, Imm);                              // ANY
+	_GEEK_ASM_INST_3X(imul, Gp, Mem, Imm);                             // ANY
+	_GEEK_ASM_INST_3X(imul, Gp, Gp, Gp);                               // ANY [EXPLICIT] xDX:xAX <- xAX * r16|r32|r64
+	_GEEK_ASM_INST_3X(imul, Gp, Gp, Mem);                              // ANY [EXPLICIT] xDX:xAX <- xAX * m16|m32|m64
+	_GEEK_ASM_INST_1X(inc, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(inc, Mem);                                        // ANY
+	_GEEK_ASM_INST_2X(jecxz, Gp, Label);                              // ANY [EXPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_2X(jecxz, Gp, Imm);                                // ANY [EXPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_1X(jmp, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(jmp, Mem);                                        // ANY
+	_GEEK_ASM_INST_1X(jmp, Label);                                      // ANY
+	_GEEK_ASM_INST_1X(jmp, Imm);                                        // ANY
+	_GEEK_ASM_INST_2X(lcall, Imm, Imm);                               // ANY
+	_GEEK_ASM_INST_1X(lcall, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(lea, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(ljmp, Imm, Imm);                                 // ANY
+	_GEEK_ASM_INST_1X(ljmp, Mem);                                      // ANY
+	_GEEK_ASM_INST_2X(lods, Gp_ZAX, DS_ZSI);                           // ANY [EXPLICIT]
+	_GEEK_ASM_INST_2X(loop, Gp_ZCX, Label);                            // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_2X(loop, Gp_ZCX, Imm);                              // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_2X(loope, Gp_ZCX, Label);                          // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_2X(loope, Gp_ZCX, Imm);                            // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_2X(loopne, Gp_ZCX, Label);                        // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_2X(loopne, Gp_ZCX, Imm);                          // ANY [EXPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_2X(mov, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(mov, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(mov, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(mov, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(mov, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, Gp, CReg);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, CReg, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, Gp, DReg);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, DReg, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, Gp, SReg);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, Mem, SReg);                                  // ANY
+	_GEEK_ASM_INST_2X(mov, SReg, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(mov, SReg, Mem);                                  // ANY
+	_GEEK_ASM_INST_2X(movabs, Gp, Mem);                              // X64
+	_GEEK_ASM_INST_2X(movabs, Gp, Imm);                              // X64
+	_GEEK_ASM_INST_2X(movabs, Mem, Gp);                              // X64
+
+	_GEEK_ASM_INST_2X(movs, ES_ZDI, DS_ZSI);                           // ANY [EXPLICIT]
+	_GEEK_ASM_INST_2X(movsx, Gp, Gp);                                 // ANY
+	_GEEK_ASM_INST_2X(movsx, Gp, Mem);                                // ANY
+	_GEEK_ASM_INST_2X(movsxd, Gp, Gp);                               // X64
+	_GEEK_ASM_INST_2X(movsxd, Gp, Mem);                              // X64
+	_GEEK_ASM_INST_2X(movzx, Gp, Gp);                                 // ANY
+	_GEEK_ASM_INST_2X(movzx, Gp, Mem);                                // ANY
+	_GEEK_ASM_INST_2X(mul, Gp_AX, Gp);                                  // ANY [EXPLICIT] AX      <-  AL * r8
+	_GEEK_ASM_INST_2X(mul, Gp_AX, Mem);                                 // ANY [EXPLICIT] AX      <-  AL * m8
+	_GEEK_ASM_INST_3X(mul, Gp_ZDX, Gp_ZAX, Gp);                         // ANY [EXPLICIT] xDX:xAX <- xAX * r16|r32|r64
+	_GEEK_ASM_INST_3X(mul, Gp_ZDX, Gp_ZAX, Mem);                        // ANY [EXPLICIT] xDX:xAX <- xAX * m16|m32|m64
+	_GEEK_ASM_INST_1X(neg, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(neg, Mem);                                        // ANY
+	_GEEK_ASM_INST_0X(nop);                                             // ANY
+	_GEEK_ASM_INST_1X(nop, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(nop, Mem);                                        // ANY
+	_GEEK_ASM_INST_2X(nop, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(nop, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_1X(not_, Gp);                                        // ANY
+	_GEEK_ASM_INST_1X(not_, Mem);                                       // ANY
+	_GEEK_ASM_INST_2X(or_, Gp, Gp);                                      // ANY
+	_GEEK_ASM_INST_2X(or_, Gp, Mem);                                     // ANY
+	_GEEK_ASM_INST_2X(or_, Gp, Imm);                                     // ANY
+	_GEEK_ASM_INST_2X(or_, Mem, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(or_, Mem, Imm);                                    // ANY
+	_GEEK_ASM_INST_1X(pop, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(pop, Mem);                                        // ANY
+	_GEEK_ASM_INST_1X(pop, SReg);;                                      // ANY
+	_GEEK_ASM_INST_0X(popa);                                           // X86
+	_GEEK_ASM_INST_0X(popad);                                         // X86
+	_GEEK_ASM_INST_0X(popf);                                           // ANY
+	_GEEK_ASM_INST_0X(popfd);                                         // X86
+	_GEEK_ASM_INST_0X(popfq);                                         // X64
+	_GEEK_ASM_INST_1X(push, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(push, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(push, SReg);                                     // ANY
+	_GEEK_ASM_INST_1X(push, Imm);                                      // ANY
+	_GEEK_ASM_INST_0X(pusha);                                         // X86
+	_GEEK_ASM_INST_0X(pushad);                                       // X86
+	_GEEK_ASM_INST_0X(pushf);                                         // ANY
+	_GEEK_ASM_INST_0X(pushfd);                                       // X86
+	_GEEK_ASM_INST_0X(pushfq);                                       // X64
+	_GEEK_ASM_INST_2X(rcl, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(rcl, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(rcl, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(rcl, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(rcr, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(rcr, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(rcr, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(rcr, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(rol, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(rol, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(rol, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(rol, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(ror, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(ror, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(ror, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(ror, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(sbb, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(sbb, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(sbb, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(sbb, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(sbb, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(sal, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(sal, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(sal, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(sal, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(sar, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(sar, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(sar, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(sar, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(scas, Gp_ZAX, ES_ZDI);                           // ANY [EXPLICIT]
+	_GEEK_ASM_INST_2X(shl, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(shl, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(shl, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(shl, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(shr, Gp, Gp_CL);                                  // ANY
+	_GEEK_ASM_INST_2X(shr, Mem, Gp_CL);                                 // ANY
+	_GEEK_ASM_INST_2X(shr, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(shr, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_3X(shld, Gp, Gp, Gp_CL);                            // ANY
+	_GEEK_ASM_INST_3X(shld, Mem, Gp, Gp_CL);                           // ANY
+	_GEEK_ASM_INST_3X(shld, Gp, Gp, Imm);                              // ANY
+	_GEEK_ASM_INST_3X(shld, Mem, Gp, Imm);                             // ANY
+	_GEEK_ASM_INST_3X(shrd, Gp, Gp, Gp_CL);                            // ANY
+	_GEEK_ASM_INST_3X(shrd, Mem, Gp, Gp_CL);                           // ANY
+	_GEEK_ASM_INST_3X(shrd, Gp, Gp, Imm);                              // ANY
+	_GEEK_ASM_INST_3X(shrd, Mem, Gp, Imm);                             // ANY
+	_GEEK_ASM_INST_2X(stos, ES_ZDI, Gp_ZAX);                           // ANY [EXPLICIT]
+	_GEEK_ASM_INST_2X(sub, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(sub, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(sub, Gp, Imm);                                    // ANY
+	_GEEK_ASM_INST_2X(sub, Mem, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(sub, Mem, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(test, Gp, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(test, Gp, Imm);                                  // ANY
+	_GEEK_ASM_INST_2X(test, Mem, Gp);                                  // ANY
+	_GEEK_ASM_INST_2X(test, Mem, Imm);                                 // ANY
+	_GEEK_ASM_INST_2X(ud0, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(ud0, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(ud1, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(ud1, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_0X(ud2);                                             // ANY
+	_GEEK_ASM_INST_2X(xadd, Gp, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(xadd, Mem, Gp);                                  // ANY
+	_GEEK_ASM_INST_2X(xchg, Gp, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(xchg, Mem, Gp);                                  // ANY
+	_GEEK_ASM_INST_2X(xchg, Gp, Mem);                                  // ANY
+	_GEEK_ASM_INST_2X(xor_, Gp, Gp);                                    // ANY
+	_GEEK_ASM_INST_2X(xor_, Gp, Mem);                                   // ANY
+	_GEEK_ASM_INST_2X(xor_, Gp, Imm);                                   // ANY
+	_GEEK_ASM_INST_2X(xor_, Mem, Gp);                                   // ANY
+	_GEEK_ASM_INST_2X(xor_, Mem, Imm);                                  // ANY
+
+	//! \name Deprecated 32-bit Instructions
+	//! \{
+
+	_GEEK_ASM_INST_1X(aaa, Gp);                                         // X86 [EXPLICIT]
+	_GEEK_ASM_INST_2X(aad, Gp, Imm);                                    // X86 [EXPLICIT]
+	_GEEK_ASM_INST_2X(aam, Gp, Imm);                                    // X86 [EXPLICIT]
+	_GEEK_ASM_INST_1X(aas, Gp);                                         // X86 [EXPLICIT]
+	_GEEK_ASM_INST_1X(daa, Gp);                                         // X86 [EXPLICIT]
+	_GEEK_ASM_INST_1X(das, Gp);                                         // X86 [EXPLICIT]
+
+	//! \name ENTER/LEAVE Instructions
+	//! \{
+
+	_GEEK_ASM_INST_2X(enter, Imm, Imm);                               // ANY
+	_GEEK_ASM_INST_0X(leave);                                         // ANY
+
+  //! \name IN/OUT Instructions
+  //! \{
+
+  // NOTE: For some reason Doxygen is messed up here and thinks we are in cond.
+
+	_GEEK_ASM_INST_2X(in, Gp_ZAX, Imm);                                  // ANY
+	_GEEK_ASM_INST_2X(in, Gp_ZAX, Gp_DX);                                // ANY
+	_GEEK_ASM_INST_2X(ins, ES_ZDI, Gp_DX);                              // ANY
+	_GEEK_ASM_INST_2X(out, Imm, Gp_ZAX);                                // ANY
+	_GEEK_ASM_INST_2X(out, Gp_DX, Gp_ZAX);                              // ANY
+	_GEEK_ASM_INST_2X(outs, Gp_DX, DS_ZSI);                            // ANY
+
+	//! \name Clear/Set CF/DF Instructions
+	//! \{
+
+	_GEEK_ASM_INST_0X(clc);                                             // ANY
+	_GEEK_ASM_INST_0X(cld);                                             // ANY
+	_GEEK_ASM_INST_0X(cmc);                                             // ANY
+	_GEEK_ASM_INST_0X(stc);                                             // ANY
+	_GEEK_ASM_INST_0X(std);                                             // ANY
 
 private:
 	Assembler(Arch arch);
 
 	_GEEK_IMPL
+};
+
+class Assembler::Error {
+public:
+	Error(ErrorCode code);
+
+	ErrorCode code() const { return code_; }
+	std::string msg() const;
+
+private:
+	ErrorCode code_;
 };
 
 //! AsmJit error codes.

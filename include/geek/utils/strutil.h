@@ -1,13 +1,26 @@
 #ifndef GEEK_UTILS_CONVERTER_H_
 #define GEEK_UTILS_CONVERTER_H_
 
-#include <string>
+#include <sstream>
 #include <vector>
 
 namespace geek {
 
-class Convert {
+class StrUtil {
 public:
+    template<class... Args>
+    static std::string Combine(const Args&... args) {
+        std::stringstream ss;
+        (ss << ... << args);
+        return ss.str();
+    }
+    template<class... Args>
+    static std::wstring CombineWide(Args&&... args) {
+        std::wstringstream ss;
+        ss << (std::forward<Args>(args) << ...);
+        return ss.str();
+    }
+
     static std::string Utf16leToUtf8(const std::wstring& str);
 
     static std::wstring Utf8ToUtf16le(const std::string& str);

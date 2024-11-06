@@ -1,23 +1,24 @@
 #include <geek/utils/debug.h>
-
 #include <Windows.h>
-#include <sstream>
 
 namespace geek {
-void DebugOutput(const wchar_t* str) noexcept
+void DebugOutput(std::string_view str) noexcept
 {
 #if defined(_WIN32)
-	::OutputDebugStringW(str);
+	::OutputDebugStringA(str.data());
 #else
 	::fputs(str, stderr);
 #endif
 }
 
-void AssertionFailed(const wchar_t* file, int line, const wchar_t* msg) noexcept
+void AssertionFailed(std::string_view file, int line, std::string_view msg) noexcept
 {
-    std::wstringstream wss;
-    wss << L"[geek] Assertion failed at" << file << L"(line " << line << "): " << msg;
-    DebugOutput(wss.str().c_str());
+    DebugOutput(StrUtil::Combine("[Geek] Assertion failed at ", file, " (line ", line, "):", msg));
     ::abort();
+}
+
+std::string internal::MsgOfThrow(std::string_view file, int line, std::string_view msg) noexcept
+{
+	return StrUtil::Combine("[Geek] Exception at ", file, " (line ", line, "):", msg);
 }
 }
