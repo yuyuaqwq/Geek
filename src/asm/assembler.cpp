@@ -113,16 +113,24 @@ Assembler::Error Assembler::Bind(const asm_op::Label& label) const {
 	return FromAsmJit(static_cast<asmjit::ErrorCode>(e));
 }
 
+size_t Assembler::CodeSize() const {
+	return impl_->code_.codeSize();
+}
+
+const uint8_t* Assembler::CodeBuffer() const {
+	return impl_->code_.sectionById(0)->data();
+}
+
 std::vector<uint8_t> Assembler::PackCode() const
 {
-	std::vector<uint8_t> buf(impl_->code_.codeSize());
-	PackCodeTo(buf.data(), buf.size());
+	std::vector<uint8_t> buf(CodeSize());
+	CopyCodeTo(buf.data(), buf.size());
 	return buf;
 }
 
-size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size) const {
-	auto s = std::min(size, impl_->code_.codeSize());
-	memcpy(ptr, impl_->code_.sectionById(0)->data(), s);
+size_t Assembler::CopyCodeTo(uint8_t* ptr, size_t size) const {
+	auto s = std::min(size, CodeSize());
+	memcpy(ptr, CodeBuffer(), s);
 	return s;
 }
 

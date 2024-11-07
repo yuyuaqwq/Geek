@@ -28,8 +28,11 @@ public:
 	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal) const;
 	Error Bind(const asm_op::Label& label) const;
 
+	size_t CodeSize() const;
+	const uint8_t* CodeBuffer() const;
+
 	std::vector<uint8_t> PackCode() const;
-	size_t PackCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
+	size_t CopyCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY
