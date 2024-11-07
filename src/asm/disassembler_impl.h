@@ -11,7 +11,7 @@ public:
 
 	ZydisDecoder decoder_;
 	ZydisFormatter formatter_;
-	std::vector<uint8_t> code_buffer_;
-	DisAsmConfig config_{};
+	std::vector<uint8_t> code_data_;
+	Config config_{};
 };
 }

@@ -12,7 +12,7 @@
 	if (impl_->config_.assert_every_inst) { \
 		GEEK_ASSERT(err.IsSuccess(), "Assembler make instruction failed:", err.msg()); \
 	} \
-	return err; \
+	return err \
 
 #define _GEEK_ASM_INST_0X_IMPL(op)								\
 	_GEEK_ASM_INST_0X(Assembler::op) {							\
@@ -34,6 +34,38 @@
 		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1), ToAsmJit(o2)));\
 	}
 
+#define _GEEK_ASM_INST_1C_IMPL(op, t0)	\
+  _GEEK_ASM_INST_1X_IMPL(op##a, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##ae, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##b, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##be, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##c, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##e, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##g, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##ge, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##l, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##le, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##na, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nae, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nb, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nbe, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nc, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##ne, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##ng, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nge, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nl, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nle, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##no, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##np, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##ns, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##nz, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##o, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##p, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##pe, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##po, t0);	\
+  _GEEK_ASM_INST_1X_IMPL(op##s, t0);		\
+  _GEEK_ASM_INST_1X_IMPL(op##z, t0)		\
+
 namespace geek {
 namespace {
 asmjit::JitRuntime* Runtime() {
@@ -50,10 +82,15 @@ Assembler::Assembler(Arch arch)
 	impl_ = std::make_unique<Impl>(this, arch, Runtime());
 }
 
-const AsmConfig& Assembler::Config() const {
+Arch Assembler::GetArch() const {
+	return impl_->arch_;
+}
+
+
+const Assembler::Config& Assembler::GetConfig() const {
 	return impl_->config_;
 }
-AsmConfig& Assembler::Config() {
+Assembler::Config& Assembler::GetConfig() {
 	return impl_->config_;
 }
 
@@ -78,9 +115,15 @@ Assembler::Error Assembler::Bind(const asm_op::Label& label) const {
 
 std::vector<uint8_t> Assembler::PackCode() const
 {
-	auto size = impl_->code_.codeSize();
-	auto data = impl_->code_.sectionById(0)->data();
-	return { data, data + size };
+	std::vector<uint8_t> buf(impl_->code_.codeSize());
+	PackCodeTo(buf.data(), buf.size());
+	return buf;
+}
+
+size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size) const {
+	auto s = std::min(size, impl_->code_.codeSize());
+	memcpy(ptr, impl_->code_.sectionById(0)->data(), s);
+	return s;
 }
 
 Assembler::Error::Error(ErrorCode code)
@@ -170,6 +213,8 @@ _GEEK_ASM_INST_3X_IMPL(imul, Gp, Gp, Gp)
 _GEEK_ASM_INST_3X_IMPL(imul, Gp, Gp, Mem)
 _GEEK_ASM_INST_1X_IMPL(inc, Gp)
 _GEEK_ASM_INST_1X_IMPL(inc, Mem)
+_GEEK_ASM_INST_1C_IMPL(j, Label);
+_GEEK_ASM_INST_1C_IMPL(j, Imm);
 _GEEK_ASM_INST_2X_IMPL(jecxz, Gp, Label)
 _GEEK_ASM_INST_2X_IMPL(jecxz, Gp, Imm)
 _GEEK_ASM_INST_1X_IMPL(jmp, Gp)
@@ -277,6 +322,8 @@ _GEEK_ASM_INST_2X_IMPL(sar, Mem, Gp_CL)
 _GEEK_ASM_INST_2X_IMPL(sar, Gp, Imm)
 _GEEK_ASM_INST_2X_IMPL(sar, Mem, Imm)
 _GEEK_ASM_INST_2X_IMPL(scas, Gp_ZAX, ES_ZDI)
+_GEEK_ASM_INST_1C_IMPL(set, Gp);
+_GEEK_ASM_INST_1C_IMPL(set, Mem);
 _GEEK_ASM_INST_2X_IMPL(shl, Gp, Gp_CL)
 _GEEK_ASM_INST_2X_IMPL(shl, Mem, Gp_CL)
 _GEEK_ASM_INST_2X_IMPL(shl, Gp, Imm)
@@ -355,4 +402,20 @@ _GEEK_ASM_INST_0X_IMPL(cld)
 _GEEK_ASM_INST_0X_IMPL(cmc)
 _GEEK_ASM_INST_0X_IMPL(stc)
 _GEEK_ASM_INST_0X_IMPL(std)
+
+Assembler::Error Assembler::db(uint8_t x, size_t repeat_count) {
+	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.db(x, repeat_count));
+}
+
+Assembler::Error Assembler::dw(uint16_t x, size_t repeat_count) {
+	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dw(x, repeat_count));
+}
+
+Assembler::Error Assembler::dd(uint32_t x, size_t repeat_count) {
+	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dd(x, repeat_count));
+}
+
+Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) {
+	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dq(x, repeat_count));
+}
 }

@@ -15,7 +15,8 @@ public:
 	asmjit::JitRuntime* runtime_;
 	asmjit::CodeHolder code_;
 	asmjit::x86::Assembler assembler_;
-	AsmConfig config_{};
+	Config config_{};
+	Arch arch_;
 };
 
 Assembler::ErrorCode FromAsmJit(asmjit::ErrorCode code) noexcept;

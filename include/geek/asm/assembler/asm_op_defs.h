@@ -11,6 +11,38 @@
 #define _GEEK_ASM_INST_3X(op, t0, t1, t2) \
 	geek::Assembler::Error op(const geek::asm_op::t0& o0, const geek::asm_op::t1& o1, const geek::asm_op::t2& o2)
 
+#define _GEEK_ASM_INST_1C(op, t0)	\
+  _GEEK_ASM_INST_1X(op##a, t0);		\
+  _GEEK_ASM_INST_1X(op##ae, t0);	\
+  _GEEK_ASM_INST_1X(op##b, t0);		\
+  _GEEK_ASM_INST_1X(op##be, t0);	\
+  _GEEK_ASM_INST_1X(op##c, t0);		\
+  _GEEK_ASM_INST_1X(op##e, t0);		\
+  _GEEK_ASM_INST_1X(op##g, t0);		\
+  _GEEK_ASM_INST_1X(op##ge, t0);	\
+  _GEEK_ASM_INST_1X(op##l, t0);		\
+  _GEEK_ASM_INST_1X(op##le, t0);	\
+  _GEEK_ASM_INST_1X(op##na, t0);	\
+  _GEEK_ASM_INST_1X(op##nae, t0);	\
+  _GEEK_ASM_INST_1X(op##nb, t0);	\
+  _GEEK_ASM_INST_1X(op##nbe, t0);	\
+  _GEEK_ASM_INST_1X(op##nc, t0);	\
+  _GEEK_ASM_INST_1X(op##ne, t0);	\
+  _GEEK_ASM_INST_1X(op##ng, t0);	\
+  _GEEK_ASM_INST_1X(op##nge, t0);	\
+  _GEEK_ASM_INST_1X(op##nl, t0);	\
+  _GEEK_ASM_INST_1X(op##nle, t0);	\
+  _GEEK_ASM_INST_1X(op##no, t0);	\
+  _GEEK_ASM_INST_1X(op##np, t0);	\
+  _GEEK_ASM_INST_1X(op##ns, t0);	\
+  _GEEK_ASM_INST_1X(op##nz, t0);	\
+  _GEEK_ASM_INST_1X(op##o, t0);		\
+  _GEEK_ASM_INST_1X(op##p, t0);		\
+  _GEEK_ASM_INST_1X(op##pe, t0);	\
+  _GEEK_ASM_INST_1X(op##po, t0);	\
+  _GEEK_ASM_INST_1X(op##s, t0);		\
+  _GEEK_ASM_INST_1X(op##z, t0)		\
+
 namespace geek {
 namespace asm_op {
 class Imm {
@@ -18,12 +50,11 @@ public:
 	template<class T>
 	static constexpr bool IsConstexprConstructible = std::is_integral_v<T>
 												  || std::is_enum_v<T>
-												  || std::is_pointer_v<T>
-												  || std::is_function_v<T>;
+												  || std::is_pointer_v<T>;
 
 	template<class T, class = typename std::enable_if_t<IsConstexprConstructible<std::decay_t<T>>>>
 	constexpr Imm(const T& val) noexcept {
-		data_.u64 = static_cast<uint64_t>(val);
+		data_.u64 = uint64_t(val);
 		index_ = 0;
 	}
 

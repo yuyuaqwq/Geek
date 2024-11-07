@@ -56,8 +56,8 @@ std::vector<DisAsmInstruction> DisAssembler::Impl::DecodeInstructions() const {
 	char buffer[256];
 
 	auto runtime_address = config_.runtime_address;
-	auto data = code_buffer_.data();
-	auto size = code_buffer_.size();
+	auto data = code_data_.data();
+	auto size = code_data_.size();
 	while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder_, data, size, &instruction, operands)))
 	{
 		// We have to pass a `runtime_address` different to `ZYDIS_RUNTIME_ADDRESS_NONE` to

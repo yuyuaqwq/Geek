@@ -9,22 +9,22 @@ DisAssembler::DisAssembler(MachineMode machine_mode, StackWidth stack_width, For
 
 DisAssembler::~DisAssembler() {}
 
-const std::vector<uint8_t>& DisAssembler::CodeBuffer() const {
-	return impl_->code_buffer_;
+const std::vector<uint8_t>& DisAssembler::CodeData() const {
+	return impl_->code_data_;
 }
 
-void DisAssembler::SetCodeBuffer(const std::vector<uint8_t>& buf) {
-	impl_->code_buffer_ = buf;
+void DisAssembler::SetCodeData(const std::vector<uint8_t>& buf) {
+	impl_->code_data_ = buf;
 }
 
-void DisAssembler::SetCodeBuffer(std::vector<uint8_t>&& buf) {
-	impl_->code_buffer_ = std::move(buf);
+void DisAssembler::SetCodeData(std::vector<uint8_t>&& buf) {
+	impl_->code_data_ = std::move(buf);
 }
 
-const DisAsmConfig& DisAssembler::Config() const {
+const DisAssembler::Config& DisAssembler::GetConfig() const {
 	return impl_->config_;
 }
-DisAsmConfig& DisAssembler::Config() {
+DisAssembler::Config& DisAssembler::GetConfig() {
 	return impl_->config_;
 }
 

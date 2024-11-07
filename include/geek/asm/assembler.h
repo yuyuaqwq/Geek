@@ -7,26 +7,29 @@
 #include <geek/asm/assembler/asm_op.h>
 
 namespace geek {
-struct AsmConfig {
-	bool assert_every_inst = false;
-};
-
 class Assembler {
 public:
+	struct Config {
+		bool assert_every_inst = true;
+	};
+
 	enum ErrorCode : uint32_t;
 	class Error;
 
 	Assembler(Arch arch);
 	~Assembler();
 
-	const AsmConfig& Config() const;
-	AsmConfig& Config();
+	Arch GetArch() const;
+
+	const Config& GetConfig() const;
+	Config& GetConfig();
 
 	asm_op::Label NewLabel() const;
 	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal) const;
 	Error Bind(const asm_op::Label& label) const;
 
 	std::vector<uint8_t> PackCode() const;
+	size_t PackCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY
@@ -43,12 +46,12 @@ public:
 	_GEEK_ASM_INST_2X(and_, Gp, Imm);                                   // ANY
 	_GEEK_ASM_INST_2X(and_, Mem, Gp);                                   // ANY
 	_GEEK_ASM_INST_2X(and_, Mem, Imm);                                  // ANY
-	_GEEK_ASM_INST_2X(bound, Gp, Mem);                                // X86
+	_GEEK_ASM_INST_2X(bound, Gp, Mem);									// X86
 	_GEEK_ASM_INST_2X(bsf, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(bsf, Gp, Mem);                                    // ANY
 	_GEEK_ASM_INST_2X(bsr, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(bsr, Gp, Mem);                                    // ANY
-	_GEEK_ASM_INST_1X(bswap, Gp);                                     // ANY
+	_GEEK_ASM_INST_1X(bswap, Gp);										// ANY
 	_GEEK_ASM_INST_2X(bt, Gp, Gp);                                       // ANY
 	_GEEK_ASM_INST_2X(bt, Gp, Imm);                                      // ANY
 	_GEEK_ASM_INST_2X(bt, Mem, Gp);                                      // ANY
@@ -101,6 +104,8 @@ public:
 	_GEEK_ASM_INST_3X(imul, Gp, Gp, Mem);                              // ANY [EXPLICIT] xDX:xAX <- xAX * m16|m32|m64
 	_GEEK_ASM_INST_1X(inc, Gp);                                         // ANY
 	_GEEK_ASM_INST_1X(inc, Mem);                                        // ANY
+	_GEEK_ASM_INST_1C(j, Label);										 // ANY
+	_GEEK_ASM_INST_1C(j, Imm);										// ANY
 	_GEEK_ASM_INST_2X(jecxz, Gp, Label);                              // ANY [EXPLICIT] Short jump if CX/ECX/RCX is zero.
 	_GEEK_ASM_INST_2X(jecxz, Gp, Imm);                                // ANY [EXPLICIT] Short jump if CX/ECX/RCX is zero.
 	_GEEK_ASM_INST_1X(jmp, Gp);                                         // ANY
@@ -208,6 +213,8 @@ public:
 	_GEEK_ASM_INST_2X(sar, Gp, Imm);                                    // ANY
 	_GEEK_ASM_INST_2X(sar, Mem, Imm);                                   // ANY
 	_GEEK_ASM_INST_2X(scas, Gp_ZAX, ES_ZDI);                           // ANY [EXPLICIT]
+	_GEEK_ASM_INST_1C(set, Gp);
+	_GEEK_ASM_INST_1C(set, Mem);
 	_GEEK_ASM_INST_2X(shl, Gp, Gp_CL);                                  // ANY
 	_GEEK_ASM_INST_2X(shl, Mem, Gp_CL);                                 // ANY
 	_GEEK_ASM_INST_2X(shl, Gp, Imm);                                    // ANY
@@ -286,6 +293,11 @@ public:
 	_GEEK_ASM_INST_0X(cmc);                                             // ANY
 	_GEEK_ASM_INST_0X(stc);                                             // ANY
 	_GEEK_ASM_INST_0X(std);                                             // ANY
+
+	Error db(uint8_t x, size_t repeat_count = 1);
+	Error dw(uint16_t x, size_t repeat_count = 1);
+	Error dd(uint32_t x, size_t repeat_count = 1);
+	Error dq(uint64_t x, size_t repeat_count = 1);
 
 	_GEEK_IMPL
 };

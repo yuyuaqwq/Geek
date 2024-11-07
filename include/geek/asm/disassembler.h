@@ -5,13 +5,14 @@
 #include <geek/global.h>
 
 namespace geek {
-struct DisAsmConfig {
-	uint64_t runtime_address;
-};
-
 class DisAsmInstruction;
+
 class DisAssembler {
 public:
+	struct Config {
+		uint64_t runtime_address = 0x1000;
+	};
+
 	enum class MachineMode : uint8_t {
 		/**
 		 * 64 位长模式。
@@ -114,12 +115,12 @@ public:
 	DisAssembler(MachineMode machine_mode, StackWidth stack_width, FormatterStyle style = FormatterStyle::kIntel);
 	~DisAssembler();
 
-	const std::vector<uint8_t>& CodeBuffer() const;
-	void SetCodeBuffer(const std::vector<uint8_t>& buf);
-	void SetCodeBuffer(std::vector<uint8_t>&& buf);
+	const std::vector<uint8_t>& CodeData() const;
+	void SetCodeData(const std::vector<uint8_t>& buf);
+	void SetCodeData(std::vector<uint8_t>&& buf);
 
-	const DisAsmConfig& Config() const;
-	DisAsmConfig& Config();
+	const Config& GetConfig() const;
+	Config& GetConfig();
 
 	std::vector<DisAsmInstruction> DecodeInstructions() const;
 
