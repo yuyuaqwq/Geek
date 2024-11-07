@@ -10,7 +10,7 @@
 #include <geek/utils/file.h>
 #include <geek/process/process.h>
 
-#include "geek/hook/inline_hook.h"
+#include <geek/hook/inline_hook.h>
 #include <geek/asm/assembler.h>
 
 using namespace geek;
@@ -122,11 +122,11 @@ private:
 int main() {
 	auto assembler = Assembler::Alloc(Arch::kX86);
 
-	assembler.mov(asm_regs::eax, 0x114514);
-	assembler.mov(asm_regs::eax, asm_regs::ebx);
-	assembler.mov(asm_regs::ecx, asm_ops::ptr(0x3333));
+	assembler.mov(asm_reg::eax, 0x114514);
+	assembler.mov(asm_reg::eax, asm_reg::ebx);
+	assembler.mov(asm_reg::ecx, asm_op::ptr(0x3333));
 
-	auto c = assembler.GetCode();
+	auto c = assembler.PackCode();
 	for (auto b : c) {
 		printf("%02X ", b);
 	}

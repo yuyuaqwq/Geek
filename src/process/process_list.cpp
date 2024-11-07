@@ -1,7 +1,7 @@
 #include <geek/process/process_list.h>
 #include <psapi.h>
 
-#include "geek/errordefs.h"
+#include "errordefs.h"
 #include <geek/utils/handle.h>
 #include <geek/utils/strutil.h>
 

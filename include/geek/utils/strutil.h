@@ -15,10 +15,10 @@ public:
         return ss.str();
     }
     template<class... Args>
-    static std::wstring CombineWide(Args&&... args) {
-        std::wstringstream ss;
-        ss << (std::forward<Args>(args) << ...);
-        return ss.str();
+    static std::wstring WCombine(const Args&... args) {
+        std::wstringstream wss;
+        (wss << ... << args);
+        return wss.str();
     }
 
     static std::string Utf16leToUtf8(const std::wstring& str);

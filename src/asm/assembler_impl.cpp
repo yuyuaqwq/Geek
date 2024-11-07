@@ -3,7 +3,8 @@
 #include <queue>
 #include <memory>
 
-#include <geek/utils/debug.h>
+#include "utils/debug.h"
+#include "asm/assembler/asm_op_defs_impl.h"
 
 namespace geek {
 Assembler::Impl::Impl(Assembler* owner, Arch arch, asmjit::JitRuntime* runtime)
@@ -193,21 +194,21 @@ asmjit::ErrorCode ToAsmJit(Assembler::ErrorCode code) noexcept
 	}
 }
 
-asmjit::LabelType ToAsmJit(AsmLabelType type)
+asmjit::LabelType ToAsmJit(asm_op::Label::Type type)
 {
 	switch (type)
 	{
-	case AsmLabelType::kAnonymous: return asmjit::LabelType::kAnonymous;
-	case AsmLabelType::kLocal: return asmjit::LabelType::kLocal;
-	case AsmLabelType::kGlobal: return asmjit::LabelType::kGlobal;
-	case AsmLabelType::kExternal: return asmjit::LabelType::kExternal;
+	case asm_op::Label::kAnonymous: return asmjit::LabelType::kAnonymous;
+	case asm_op::Label::kLocal: return asmjit::LabelType::kLocal;
+	case asm_op::Label::kGlobal: return asmjit::LabelType::kGlobal;
+	case asm_op::Label::kExternal: return asmjit::LabelType::kExternal;
 	default:
 		GEEK_ASSERT(false, "Unknow label type:", static_cast<uint8_t>(type));
 		return asmjit::LabelType::kMaxValue;
 	}
 }
 
-asmjit::Imm ToAsmJit(const internal::Imm& imm)
+asmjit::Imm ToAsmJit(const asm_op::Imm& imm)
 {
 	if (imm.is_integral()) {
 		return imm.integral();
@@ -222,12 +223,12 @@ asmjit::Imm ToAsmJit(const internal::Imm& imm)
 	return {};
 }
 
-asmjit::x86::Mem ToAsmJit(const internal::Mem& mem)
+asmjit::x86::Mem ToAsmJit(const asm_op::Mem& mem)
 {
 	return mem.impl_->mem_;
 }
 
-const asmjit::x86::Reg& ToAsmJit(const internal::Reg& r)
+const asmjit::x86::Reg& ToAsmJit(const asm_op::Reg& r)
 {
 	return *r.impl_->reg_;
 }
@@ -236,43 +237,43 @@ namespace {
 	
 }
 
-const asmjit::x86::Gp& ToAsmJit(const internal::Gp& gp)
+const asmjit::x86::Gp& ToAsmJit(const asm_op::Gp& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isGp());
 	return *reinterpret_cast<asmjit::x86::Gp*>(gp.impl_->reg_.get());
 }
 
-const asmjit::x86::Vec& ToAsmJit(const internal::Vec& gp)
+const asmjit::x86::Vec& ToAsmJit(const asm_op::Vec& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isVec());
 	return *reinterpret_cast<asmjit::x86::Vec*>(gp.impl_->reg_.get());
 }
 
-const asmjit::x86::CReg& ToAsmJit(const internal::CReg& gp)
+const asmjit::x86::CReg& ToAsmJit(const asm_op::CReg& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isCReg());
 	return *reinterpret_cast<asmjit::x86::CReg*>(gp.impl_->reg_.get());
 }
 
-const asmjit::x86::DReg& ToAsmJit(const internal::DReg& gp)
+const asmjit::x86::DReg& ToAsmJit(const asm_op::DReg& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isDReg());
 	return *reinterpret_cast<asmjit::x86::DReg*>(gp.impl_->reg_.get());
 }
 
-const asmjit::x86::SReg& ToAsmJit(const internal::SReg& gp)
+const asmjit::x86::SReg& ToAsmJit(const asm_op::SReg& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isSReg());
 	return *reinterpret_cast<asmjit::x86::SReg*>(gp.impl_->reg_.get());
 }
 
-const asmjit::x86::Rip& ToAsmJit(const internal::Rip& gp)
+const asmjit::x86::Rip& ToAsmJit(const asm_op::Rip& gp)
 {
 	GEEK_ASSERT_X(gp.impl_->reg_->isRip());
 	return *reinterpret_cast<asmjit::x86::Rip*>(gp.impl_->reg_.get());
 }
 
-const asmjit::Label& ToAsmJit(const internal::Label& label)
+const asmjit::Label& ToAsmJit(const asm_op::Label& label)
 {
 	return label.impl_->label_;
 }

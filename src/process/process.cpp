@@ -11,7 +11,7 @@
 #include <geek/utils/strutil.h>
 #include <geek/utils/searcher.h>
 
-#include "geek/errordefs.h"
+#include "errordefs.h"
 
 namespace geek {
 namespace {

@@ -1,10 +1,10 @@
-#include <geek/asm/asm_ops.h>
+#include <geek/asm/assembler/asm_op.h>
 
-#include "assembler_impl.h"
-#include "assembler_p_impl.h"
+#include "asm/assembler_impl.h"
+#include "asm/assembler/asm_op_defs_impl.h"
 
 namespace geek {
-namespace asm_ops {
+namespace asm_op {
 Mem ptr(const Gp& base, int32_t offset, uint32_t size) {
 	Mem m;
 	m.impl_ = std::make_unique<Mem::Impl>(asmjit::x86::ptr(ToAsmJit(base), offset, size));

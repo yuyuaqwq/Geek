@@ -1,9 +1,8 @@
 #pragma once
-#include <geek/asm/assembler_p.h>
+#include <geek/asm/assembler/asm_op_defs.h>
 
 namespace geek {
-namespace asm_ops {
-using namespace internal;
+namespace asm_op {
 //! Creates `[base.reg + offset]` memory operand.
 Mem ptr(const Gp& base, int32_t offset = 0, uint32_t size = 0);
 //! Creates `[base.reg + (index << shift) + offset]` memory operand (scalar index).
@@ -37,5 +36,4 @@ Mem ptr_rel(uint64_t base, const Reg& index, uint32_t shift = 0, uint32_t size =
 //! Creates `[base + (index.reg << shift)]` relative memory operand (relative).
 Mem ptr_rel(uint64_t base, const Vec& index, uint32_t shift = 0, uint32_t size = 0);
 }
-
 }

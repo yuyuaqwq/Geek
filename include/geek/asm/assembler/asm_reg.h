@@ -1,10 +1,10 @@
 #pragma once
-#include <geek/asm/assembler_p.h>
+#include <geek/asm/assembler/asm_op_defs.h>
 
-#define _GEEK_ASM_REG(t, x) static inline auto x = geek::internal::t(geek::internal::RegisterId::x)
+#define _GEEK_ASM_REG(t, x) static inline auto x = geek::asm_op::t(geek::asm_op::RegisterId::x)
 
 namespace geek {
-namespace asm_regs {
+namespace asm_reg {
 _GEEK_ASM_REG(GpbLo, al);
 _GEEK_ASM_REG(GpbLo, bl);
 _GEEK_ASM_REG(GpbLo, cl);

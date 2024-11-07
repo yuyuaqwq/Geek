@@ -1,3 +1,6 @@
 [submodule "third-party/asmjit"]
 	path = third-party/asmjit
 	url = git@github.com:asmjit/asmjit.git
+[submodule "third-party/zydis"]
+	path = third-party/zydis
+	url = git@github.com:zyantific/zydis.git

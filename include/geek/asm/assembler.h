@@ -3,24 +3,10 @@
 #include <vector>
 
 #include <geek/global.h>
-#include <geek/asm/assembler_p.h>
-#include <geek/asm/asm_ops.h>
-#include <geek/asm/asm_regs.h>
+#include <geek/asm/assembler/asm_reg.h>
+#include <geek/asm/assembler/asm_op.h>
 
 namespace geek {
-enum class AsmLabelType : uint8_t {
-	//! Anonymous label that can optionally have a name, which is only used for debugging purposes.
-	kAnonymous = 0,
-	//! Local label (always has parentId).
-	kLocal = 1,
-	//! Global label (never has parentId).
-	kGlobal = 2,
-	//! External label (references an external symbol).
-	kExternal = 3,
-	//! Maximum value of `LabelType`.
-	kMaxValue = kExternal
-};
-
 class Assembler {
 public:
 	enum ErrorCode : uint32_t;
@@ -29,9 +15,9 @@ public:
 	static Assembler Alloc(Arch arch);
 	~Assembler();
 
-	internal::Label NewLabel() const;
-	internal::Label NewNamedLabel(std::string_view name, AsmLabelType type = AsmLabelType::kGlobal) const;
-	std::vector<uint8_t> GetCode() const;
+	asm_op::Label NewLabel() const;
+	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal) const;
+	std::vector<uint8_t> PackCode() const;
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY

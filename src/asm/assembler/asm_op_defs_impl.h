@@ -1,9 +1,9 @@
 #pragma once
-#include <geek/asm/assembler_p.h>
+#include <geek/asm/assembler/asm_op_defs.h>
 #include <asmjit/asmjit.h>
 
 namespace geek {
-namespace internal {
+namespace asm_op {
 class Mem::Impl {
 public:
 	Impl(asmjit::x86::Mem&& m);

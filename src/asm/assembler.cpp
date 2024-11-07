@@ -3,6 +3,9 @@
 #include <cassert>
 
 #include <mutex>
+
+#include "asm/assembler/asm_op_defs_impl.h"
+
 #define _GEEK_ASM_INST_0X_IMPL(op)								\
 	_GEEK_ASM_INST_0X(Assembler::op) {							\
 		auto e = impl_->assembler_.op();						\
@@ -38,21 +41,21 @@ Assembler::~Assembler()
 {
 }
 
-internal::Label Assembler::NewLabel() const
+asm_op::Label Assembler::NewLabel() const
 {
-	internal::Label ret;
-	ret.impl_ = std::make_unique<internal::Label::Impl>(impl_->assembler_.newLabel());
+	asm_op::Label ret;
+	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newLabel());
 	return ret;
 }
 
-internal::Label Assembler::NewNamedLabel(std::string_view name, AsmLabelType type) const
+asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Type type) const
 {
-	internal::Label ret;
-	ret.impl_ = std::make_unique<internal::Label::Impl>(impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
+	asm_op::Label ret;
+	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
 	return ret;
 }
 
-std::vector<uint8_t> Assembler::GetCode() const
+std::vector<uint8_t> Assembler::PackCode() const
 {
 	auto size = impl_->code_.codeSize();
 	auto data = impl_->code_.sectionById(0)->data();

@@ -21,13 +21,15 @@ else()
     endif()
 endif()
 
-set(SRC_HEAD_PATH ${PROJECT_SOURCE_DIR})
+set(SRC_HEAD_PATH ${PROJECT_SOURCE_DIR}/src)
 set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/third-party)
 
 set(ASMJIT_HEAD_PATH ${THIRD_PARTY_DIR}/asmjit/src)
+set(ZYDIS_HEAD_PATH ${THIRD_PARTY_DIR}/zydis/include)
 
 set(ASMJIT_STATIC TRUE)
 add_subdirectory(${THIRD_PARTY_DIR}/asmjit)
+add_subdirectory(${THIRD_PARTY_DIR}/zydis)
 
-add_subdirectory(geek)
+add_subdirectory(src)
 add_subdirectory(example)

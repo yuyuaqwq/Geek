@@ -5,14 +5,14 @@
 #define _GEEK_ASM_INST_0X(op) \
 	geek::Assembler::Error op()
 #define _GEEK_ASM_INST_1X(op, t0) \
-	geek::Assembler::Error op(const geek::internal::t0& o0)
+	geek::Assembler::Error op(const geek::asm_op::t0& o0)
 #define _GEEK_ASM_INST_2X(op, t0, t1) \
-	geek::Assembler::Error op(const geek::internal::t0& o0, const geek::internal::t1& o1)
+	geek::Assembler::Error op(const geek::asm_op::t0& o0, const geek::asm_op::t1& o1)
 #define _GEEK_ASM_INST_3X(op, t0, t1, t2) \
-	geek::Assembler::Error op(const geek::internal::t0& o0, const geek::internal::t1& o1, const geek::internal::t2& o2)
+	geek::Assembler::Error op(const geek::asm_op::t0& o0, const geek::asm_op::t1& o1, const geek::asm_op::t2& o2)
 
 namespace geek {
-namespace internal {
+namespace asm_op {
 class Imm {
 public:
 	template<class T>
@@ -50,7 +50,7 @@ private:
 
 class Mem {
 public:
-	Mem() = default;
+	Mem();
 	~Mem();
 
 	Mem(const Mem& right);
@@ -61,7 +61,20 @@ public:
 
 class Label {
 public:
-	Label() = default;
+	enum Type : uint8_t {
+		//! Anonymous label that can optionally have a name, which is only used for debugging purposes.
+		kAnonymous = 0,
+		//! Local label (always has parentId).
+		kLocal = 1,
+		//! Global label (never has parentId).
+		kGlobal = 2,
+		//! External label (references an external symbol).
+		kExternal = 3,
+		//! Maximum value of `LabelType`.
+		kMaxValue = kExternal
+	};
+
+	Label();
 	~Label();
 
 	Label(const Label& right);
