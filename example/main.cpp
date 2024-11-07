@@ -13,6 +13,8 @@
 #include <geek/hook/inline_hook.h>
 #include <geek/asm/assembler.h>
 
+#include <geek/asm/disassembler.h>
+
 using namespace geek;
 
 const unsigned char hexData[240] = {
@@ -119,16 +121,38 @@ private:
 	int a4_;
 };
 
+
+
 int main() {
-	auto assembler = Assembler::Alloc(Arch::kX86);
+	// 实例化一个汇编器
+	auto a = Assembler(Arch::kX64);
+	a.Config().assert_every_inst = true;
 
-	assembler.mov(asm_reg::eax, 0x114514);
-	assembler.mov(asm_reg::eax, asm_reg::ebx);
-	assembler.mov(asm_reg::ecx, asm_op::ptr(0x3333));
+	auto label = a.NewLabel();						// 分配一个标签
 
-	auto c = assembler.PackCode();
-	for (auto b : c) {
-		printf("%02X ", b);
+	int jjjbb = 0;
+	a.mov(asm_reg::eax, 0x114514);
+	a.mov(asm_reg::eax, asm_reg::ebx);
+	a.Bind(label);									// 绑定标签
+	a.mov(asm_reg::ecx, asm_op::ptr(0x3333));		// ptr表示取内存
+	a.sub(asm_reg::al, 123);
+	a.jmp(label);
+	a.push(asm_reg::ebp);
+	a.pop(asm_reg::edi);
+
+	// 打包硬编码
+	auto c = a.PackCode();
+
+	// 实例化一个反汇编器
+	auto da = DisAssembler(DisAssembler::MachineMode::kLong64, DisAssembler::StackWidth::k64);
+	// 设置硬编码缓冲区
+	da.SetCodeBuffer(c);
+	// 设置指令初始地址
+	da.Config().runtime_address = 0x1000;
+
+	// 遍历解析的指令
+	for (auto& inst : da.DecodeInstructions()) {
+		std::cout << inst.SimpleFormat() << std::endl;
 	}
 
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");

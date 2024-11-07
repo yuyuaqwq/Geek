@@ -7,16 +7,25 @@
 #include <geek/asm/assembler/asm_op.h>
 
 namespace geek {
+struct AsmConfig {
+	bool assert_every_inst = false;
+};
+
 class Assembler {
 public:
 	enum ErrorCode : uint32_t;
 	class Error;
 
-	static Assembler Alloc(Arch arch);
+	Assembler(Arch arch);
 	~Assembler();
+
+	const AsmConfig& Config() const;
+	AsmConfig& Config();
 
 	asm_op::Label NewLabel() const;
 	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal) const;
+	Error Bind(const asm_op::Label& label) const;
+
 	std::vector<uint8_t> PackCode() const;
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
@@ -278,9 +287,6 @@ public:
 	_GEEK_ASM_INST_0X(stc);                                             // ANY
 	_GEEK_ASM_INST_0X(std);                                             // ANY
 
-private:
-	Assembler(Arch arch);
-
 	_GEEK_IMPL
 };
 
@@ -290,6 +296,8 @@ public:
 
 	ErrorCode code() const { return code_; }
 	std::string msg() const;
+
+	bool IsSuccess() const;
 
 private:
 	ErrorCode code_;

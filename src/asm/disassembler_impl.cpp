@@ -47,4 +47,32 @@ DisAssembler::Impl::Impl(MachineMode machine_mode, StackWidth stack_width, Forma
 	ZydisDecoderInit(&decoder_, ToZydis(machine_mode), ToZydis(stack_width));
 	ZydisFormatterInit(&formatter_, ToZydis(style));
 }
+
+std::vector<DisAsmInstruction> DisAssembler::Impl::DecodeInstructions() const {
+	std::vector<DisAsmInstruction> total;
+
+	ZydisDecodedInstruction instruction;
+	ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+	char buffer[256];
+
+	auto runtime_address = config_.runtime_address;
+	auto data = code_buffer_.data();
+	auto size = code_buffer_.size();
+	while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder_, data, size, &instruction, operands)))
+	{
+		// We have to pass a `runtime_address` different to `ZYDIS_RUNTIME_ADDRESS_NONE` to
+		// enable printing of absolute addresses
+		ZydisFormatterFormatInstruction(&formatter_, &instruction, operands,
+			instruction.operand_count_visible, &buffer[0], sizeof(buffer), runtime_address,
+			ZYAN_NULL);
+
+		total.emplace_back(runtime_address, buffer);
+
+		data += instruction.length;
+		size -= instruction.length;
+		runtime_address += instruction.length;
+	}
+
+	return total;
+}
 }

@@ -5,29 +5,33 @@
 #include <mutex>
 
 #include "asm/assembler/asm_op_defs_impl.h"
+#include "utils/debug.h"
+
+#define _GEEK_ASM_INST_MAKE_RET(e) \
+	Error err{ FromAsmJit(static_cast<asmjit::ErrorCode>(e)) }; \
+	if (impl_->config_.assert_every_inst) { \
+		GEEK_ASSERT(err.IsSuccess(), "Assembler make instruction failed:", err.msg()); \
+	} \
+	return err; \
 
 #define _GEEK_ASM_INST_0X_IMPL(op)								\
 	_GEEK_ASM_INST_0X(Assembler::op) {							\
-		auto e = impl_->assembler_.op();						\
-		return FromAsmJit(static_cast<asmjit::ErrorCode>(e));	\
+		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op());		\
 	}
 
-#define _GEEK_ASM_INST_1X_IMPL(op, t0)							\
-	_GEEK_ASM_INST_1X(Assembler::op, t0) {						\
-		auto e = impl_->assembler_.op(ToAsmJit(o0));			\
-		return FromAsmJit(static_cast<asmjit::ErrorCode>(e));	\
+#define _GEEK_ASM_INST_1X_IMPL(op, t0)								\
+	_GEEK_ASM_INST_1X(Assembler::op, t0) {							\
+		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0)));\
 	}
 
-#define _GEEK_ASM_INST_2X_IMPL(op, t0, t1)							\
-	_GEEK_ASM_INST_2X(Assembler::op, t0, t1) {						\
-		auto e = impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1));	\
-		return FromAsmJit(static_cast<asmjit::ErrorCode>(e));		\
+#define _GEEK_ASM_INST_2X_IMPL(op, t0, t1)											\
+	_GEEK_ASM_INST_2X(Assembler::op, t0, t1) {										\
+		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1)));	\
 	}
 
-#define _GEEK_ASM_INST_3X_IMPL(op, t0, t1, t2)										\
-	_GEEK_ASM_INST_3X(Assembler::op, t0, t1, t2) {									\
-		auto e = impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1), ToAsmJit(o2));	\
-		return FromAsmJit(static_cast<asmjit::ErrorCode>(e));						\
+#define _GEEK_ASM_INST_3X_IMPL(op, t0, t1, t2)													\
+	_GEEK_ASM_INST_3X(Assembler::op, t0, t1, t2) {												\
+		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1), ToAsmJit(o2)));\
 	}
 
 namespace geek {
@@ -39,6 +43,18 @@ asmjit::JitRuntime* Runtime() {
 }
 Assembler::~Assembler()
 {
+}
+
+Assembler::Assembler(Arch arch)
+{
+	impl_ = std::make_unique<Impl>(this, arch, Runtime());
+}
+
+const AsmConfig& Assembler::Config() const {
+	return impl_->config_;
+}
+AsmConfig& Assembler::Config() {
+	return impl_->config_;
 }
 
 asm_op::Label Assembler::NewLabel() const
@@ -53,6 +69,11 @@ asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Typ
 	asm_op::Label ret;
 	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
 	return ret;
+}
+
+Assembler::Error Assembler::Bind(const asm_op::Label& label) const {
+	auto e = impl_->assembler_.bind(ToAsmJit(label));
+	return FromAsmJit(static_cast<asmjit::ErrorCode>(e));
 }
 
 std::vector<uint8_t> Assembler::PackCode() const
@@ -72,14 +93,8 @@ std::string Assembler::Error::msg() const
 	return asmjit::DebugUtils::errorAsString(ToAsmJit(code_));
 }
 
-Assembler Assembler::Alloc(Arch arch)
-{
-	return { arch };
-}
-
-Assembler::Assembler(Arch arch)
-{
-	impl_ = std::make_unique<Impl>(this, arch, Runtime());
+bool Assembler::Error::IsSuccess() const {
+	return code() == kErrorOk;
 }
 
 _GEEK_ASM_INST_2X_IMPL(adc, Gp, Gp)

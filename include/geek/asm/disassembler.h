@@ -1,7 +1,15 @@
 #pragma once
+#include <vector>
+#include <string>
+
 #include <geek/global.h>
 
 namespace geek {
+struct DisAsmConfig {
+	uint64_t runtime_address;
+};
+
+class DisAsmInstruction;
 class DisAssembler {
 public:
 	enum class MachineMode : uint8_t {
@@ -104,7 +112,31 @@ public:
 	};
 
 	DisAssembler(MachineMode machine_mode, StackWidth stack_width, FormatterStyle style = FormatterStyle::kIntel);
+	~DisAssembler();
+
+	const std::vector<uint8_t>& CodeBuffer() const;
+	void SetCodeBuffer(const std::vector<uint8_t>& buf);
+	void SetCodeBuffer(std::vector<uint8_t>&& buf);
+
+	const DisAsmConfig& Config() const;
+	DisAsmConfig& Config();
+
+	std::vector<DisAsmInstruction> DecodeInstructions() const;
 
 	_GEEK_IMPL
+};
+
+class DisAsmInstruction {
+public:
+	DisAsmInstruction(uint64_t runtime_address, std::string_view instruction);
+
+	uint64_t runtime_address() const { return runtime_address_; }
+	std::string_view instruction() const { return instruction_; }
+
+	std::string SimpleFormat() const;
+
+private:
+	uint64_t runtime_address_;
+	std::string instruction_;
 };
 }

@@ -7,7 +7,11 @@ class DisAssembler::Impl {
 public:
 	Impl(MachineMode machine_mode, StackWidth stack_width, FormatterStyle style);
 
+	std::vector<DisAsmInstruction> DecodeInstructions() const;
+
 	ZydisDecoder decoder_;
 	ZydisFormatter formatter_;
+	std::vector<uint8_t> code_buffer_;
+	DisAsmConfig config_{};
 };
 }
