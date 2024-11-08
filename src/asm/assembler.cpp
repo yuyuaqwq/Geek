@@ -98,21 +98,21 @@ Assembler::Config& Assembler::GetConfig() {
 	return impl_->config_;
 }
 
-asm_op::Label Assembler::NewLabel() const
+asm_op::Label Assembler::NewLabel()
 {
 	asm_op::Label ret;
 	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newLabel());
 	return ret;
 }
 
-asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Type type) const
+asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Type type)
 {
 	asm_op::Label ret;
 	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
 	return ret;
 }
 
-Assembler::Error Assembler::Bind(const asm_op::Label& label) const {
+Assembler::Error Assembler::bind(const asm_op::Label& label) {
 	auto e = impl_->assembler_.bind(ToAsmJit(label));
 	return FromAsmJit(static_cast<asmjit::ErrorCode>(e));
 }
@@ -128,11 +128,11 @@ const uint8_t* Assembler::CodeBuffer() const {
 std::vector<uint8_t> Assembler::PackCode() const
 {
 	std::vector<uint8_t> buf(CodeSize());
-	CopyCodeTo(buf.data(), buf.size());
+	PackCodeTo(buf.data(), buf.size());
 	return buf;
 }
 
-size_t Assembler::CopyCodeTo(uint8_t* ptr, size_t size) const {
+size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size) const {
 	auto s = std::min(size, CodeSize());
 	memcpy(ptr, CodeBuffer(), s);
 	return s;
@@ -472,5 +472,9 @@ Assembler::Error Assembler::dd(uint32_t x, size_t repeat_count) {
 
 Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) {
 	MAKE_RET(dq(x, repeat_count));
+}
+
+Assembler::Error Assembler::EmbedUInt32(uint32_t value, size_t repeat_count) {
+	MAKE_RET(embedUInt32(value, repeat_count));
 }
 }

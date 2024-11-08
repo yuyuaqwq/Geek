@@ -8,7 +8,7 @@
 
 namespace geek {
 Assembler::Impl::Impl(Assembler* owner, Arch arch, asmjit::JitRuntime* runtime)
-	: owner_(owner), runtime_(runtime)
+	: owner_(owner), runtime_(runtime), arch_(arch)
 {
 	auto envi = runtime->environment();
 	asmjit::Arch a;

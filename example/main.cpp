@@ -36,21 +36,31 @@ const unsigned char hexData[240] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x45, 0x00, 0x00, 0x64, 0x86, 0x08, 0x00
 };
 
-void Origin()
-{
-	int i = 0;
-	i = 1;
-	i = 2;
-	i = 4;
-	printf("Origin\n");
-	printf("Origin\n");
-	printf("Origin\n");
+// 监视hook
+void emm1() {
+	int j = 1;
+	int j2 = 1;
+	int j3 = 1;
+	int j4 = 1;
+	std::cout << "emm1" << std::endl;
 }
 
-bool Hooked(InlineHook::HookContextX64* ctx)
-{
-	printf("Hooked\n");
+bool sbsb1(geek::InlineHook::HookContextX64* context) {
+	std::cout << "sbsb1" << std::endl;
 	return true;
+}
+
+
+// 接管hook
+void emm2() {
+	std::cout << "emm2" << std::endl;
+}
+
+bool sbsb2(geek::InlineHook::HookContextX64* context) {
+	std::cout << "sbsb2" << std::endl;
+	context->rsp += 4;
+	context->jmp_addr = context->stack[0];
+	return false;
 }
 
 //#include <asmjit/asmjit.h>
@@ -122,6 +132,9 @@ private:
 	int a4_;
 };
 
+void jjjj() {
+	printf("223---------------\n");
+}
 
 int jjjbb = 123;
 
@@ -130,26 +143,31 @@ int main() {
 	
 	auto label = a.NewLabel();									// 分配一个标签
 
-	a.mov(eax, 1234);
-	a.mov(asm_op::dword_ptr((intptr_t)&jjjbb), eax);
-	a.ret();
+	// a.mov(eax, 1234);
+	// a.mov(asm_op::dword_ptr((intptr_t)&jjjbb), eax);
 
-	jjjbb = 123;
-	int pp = jjjbb;
+	// a.jmp(asm_op::ptr(rip));
+	// a.dq((intptr_t)jjjj);
 
-	auto c = a.PackCode();					// 打包硬编码
 
-	auto f = a.PackToFunc<void()>();
-	(*f)();
-	
-	// 实例化一个反汇编器，设为64位
-	auto da = DisAssembler(DisAssembler::MachineMode::kLong64, DisAssembler::StackWidth::k64);
-	da.SetCodeData(c);						// 设置硬编码缓冲区
-	da.GetConfig().runtime_address = 0x1000;	// 设置指令初始地址
-	// 遍历解析的指令
-	for (auto& inst : da.DecodeInstructions()) {
-		std::cout << inst.SimpleFormat() << std::endl;
-	}
+	// a.jmp(asm_op::ptr(label));
+	// a.bind(label);
+	// a.dq((intptr_t)jjjj);
+	//
+	//
+	// auto c = a.PackCode();					// 打包硬编码
+	//
+	// auto f = a.PackToFunc<void()>();		// 打包成一个函数（unique_ptr）
+	// (*f)();
+	//
+	// // 实例化一个反汇编器，设为64位
+	// auto da = DisAssembler(DisAssembler::MachineMode::kLong64, DisAssembler::StackWidth::k64);
+	// da.SetCodeData(c);						// 设置硬编码缓冲区
+	// da.GetConfig().runtime_address = 0x1000;	// 设置指令初始地址
+	// // 遍历解析的指令
+	// for (auto& inst : da.DecodeInstructions()) {
+	// 	std::cout << inst.SimpleFormat() << std::endl;
+	// }
 
 
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
@@ -163,9 +181,9 @@ int main() {
 	// 	printf("%llx - %llx\n", o, *reinterpret_cast<const uint64_t*>(o));
 	// }
 
-	// Origin();
-	// InlineHook::InstallX64(&ThisProc(), (size_t)Origin, Hooked);
-	// Origin();
+	emm1();
+	InlineHook::InstallX64((size_t)emm1, sbsb1);
+	emm1();
 }
 
 // auto dir = geek::File::GetAppDirectory();

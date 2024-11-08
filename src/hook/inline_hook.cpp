@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include <geek/process/process.h>
+#include <geek/asm/assembler.h>
 #include "insn_len.h"
 
 
@@ -23,15 +24,14 @@ mov eax, dword ptr[eax + 18h]     ;指向DllBase基址
 
 
 namespace geek {
+using namespace asm_reg;
 namespace {
-uint64_t GetInstrOffset(uint64_t instr_addr, size_t instr_size, uint64_t dst_addr)
-{
+int64_t GetInstrOffset(uint64_t instr_addr, size_t instr_size, uint64_t dst_addr) {
 	return dst_addr - instr_addr - instr_size;
 }
 
 // 生成跳转到指定地址的指令
-uint64_t MakeJmp(Arch arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr)
-{
+uint64_t MakeJmp(Arch arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64_t jmp_addr) {
 	switch (arch) {
 	case Arch::kX86: {
 		if (buf->size() < 5) {
@@ -67,160 +67,79 @@ uint64_t MakeJmp(Arch arch, std::vector<uint8_t>* buf, uint64_t cur_addr, uint64
 
 // 生成构建栈帧的指令
 // 会使用rdi寄存器
-uint64_t MakeStackFrameStart(Arch arch, uint8_t* buf, int8_t size)
+void MakeStackFrameStart(Assembler& a, uint8_t size)
 {
-	int i = 0;
-	switch (arch) {
+	size_t i = 0;
+	switch (a.GetArch()) {
 	case Arch::kX86: {
 		break;
 	}
 	case Arch::kX64: {
-
 		// 构建栈帧
-		buf[i++] = 0x48;        // sub rsp, size
-		buf[i++] = 0x83;
-		buf[i++] = 0xec;
-		buf[i++] = size;
-
+		a.sub(rsp, size);
 		// 强制使栈16字节对齐
-		{
-			// mov rdi, rsp
-			buf[i++] = 0x48;
-			buf[i++] = 0x89;
-			buf[i++] = 0xe7;
-
-			// and rdi, 0x8
-			buf[i++] = 0x48;
-			buf[i++] = 0x83;
-			buf[i++] = 0xe7;
-			buf[i++] = 0x08;
-
-			// sub rsp, rdi
-			buf[i++] = 0x48;
-			buf[i++] = 0x29;
-			buf[i++] = 0xfc;
-		}
+		a.mov(rdi, rsp);
+		a.and_(rdi, 0x8);
+		a.sub(rsp, rdi);
 		break;
 	}
 	}
-	return i;
 }
 
 // 生成结束栈帧的指令
-uint64_t MakeStackFrameEnd(Arch arch, uint8_t* buf, int8_t size)
+void MakeStackFrameEnd(Assembler& a, int8_t size)
 {
-	int i = 0;
-	switch (arch) {
+	switch (a.GetArch()) {
 	case Arch::kX86: {
 		break;
 	}
 	case Arch::kX64: {
-		// 恢复栈对齐
-		{
-			// add rsp, rdi
-			buf[i++] = 0x48;
-			buf[i++] = 0x01;
-			buf[i++] = 0xfc;
-		}
-		// add rsp, size
-		buf[i++] = 0x48;
-		buf[i++] = 0x83;
-		buf[i++] = 0xc4;
-		buf[i++] = size;
-
+		a.add(rsp, rdi);
+		a.add(rsp, size);
 		break;
 	}
 	}
-	return i;
 }
 
 // 生成TlsSetValue的指令
 // X86:会使用rax，要求value已经推到栈中
 // X64:会使用rcx，rax，要求value放在rdx中，且已经构建好栈帧
-uint64_t MakeTlsSetValue(Arch arch, uint8_t* buf, uint32_t tls_id)
+void MakeTlsSetValue(Assembler& a, uint32_t tls_id)
 {
-	int i = 0;
-	switch (arch) {
+	switch (a.GetArch()) {
 	case Arch::kX86: {
-		// call TlsSetValue
-		// push tls_id_
-		buf[i++] = 0x68;
-		*(uint32_t*)&buf[i] = tls_id;
-		i += 4;
-
-		// mov eax, TlsSetValue
-		buf[i++] = 0xb8;
-		*(uint32_t*)&buf[i] = (uint32_t)TlsSetValue;
-		i += 4;
-
-		// call rax
-		buf[i++] = 0xff;
-		buf[i++] = 0xd0;
+		a.push(tls_id);
+		a.mov(eax, TlsSetValue);
+		a.call(rax);
 		break;
 	}
 	case Arch::kX64: {
-		// call TlsSetValue
-		// mov rcx, tls_id_
-		buf[i++] = 0x48;
-		buf[i++] = 0xb9;
-		*(uint64_t*)&buf[i] = tls_id;
-		i += 8;
-		// mov rax, TlsSetValue
-		buf[i++] = 0x48;
-		buf[i++] = 0xb8;
-		*(uint64_t*)&buf[i] = (uint64_t)TlsSetValue;
-		i += 8;
-		// call rax
-		buf[i++] = 0xff;
-		buf[i++] = 0xd0;
+		a.mov(rcx, tls_id);
+		a.mov(rax, TlsSetValue);
+		a.call(rax);
 		break;
 	}
 	}
-	return i;
 }
 
 // 生成TlsGetValue的指令
 // 会使用rcx，rax，要求已经构建好栈帧
-uint64_t MakeTlsGetValue(Arch arch, uint8_t* buf, uint32_t tls_id)
+void MakeTlsGetValue(Assembler& a, uint32_t tls_id)
 {
-	int i = 0;
-	switch (arch) {
+	switch (a.GetArch()) {
 	case Arch::kX86: {
-		// push tls_id_
-		buf[i++] = 0x68;
-		*(uint32_t*)&buf[i] = tls_id;
-		i += 4;
-
-		// mov eax, TlsGetValue
-		buf[i++] = 0xb8;
-		*(uint32_t*)&buf[i] = (uint32_t)TlsGetValue;
-		i += 4;
-
-		// call rax
-		buf[i++] = 0xff;
-		buf[i++] = 0xd0;
+		a.push(tls_id);
+		a.mov(eax, TlsGetValue);
+		a.call(rax);
 		break;
 	}
 	case Arch::kX64: {
-		// mov rcx, tls_id_
-		buf[i++] = 0x48;
-		buf[i++] = 0xb9;
-		*(uint64_t*)&buf[i] = (uint64_t)tls_id;
-		i += 8;
-
-		// mov rax, TlsGetValue
-		buf[i++] = 0x48;
-		buf[i++] = 0xb8;
-		*(uint64_t*)&buf[i] = (uint64_t)TlsGetValue;
-		i += 8;
-
-		// call rax
-		buf[i++] = 0xff;
-		buf[i++] = 0xd0;
+		a.mov(rcx, tls_id);
+		a.mov(rax, TlsGetValue);
+		a.call(rax);
 		break;
 	}
 	}
-	return i;
 }
 }
 
@@ -289,972 +208,551 @@ std::optional<InlineHook> InlineHook::InstallEx(
 	if (!hook.process_->ReadMemory(hook_addr, hook.old_instr_.data(), instr_size)) {
 		return std::nullopt;
 	}
-        
-	std::vector<uint8_t> jmp_instr(instr_size);
 
 	if (arch == Arch::kX86) {
-		if (instr_size < 5) {
-			return std::nullopt;
-		}
-
-		int i = 0;
-		uint32_t context_addr;
-
-		// 可重入与线程安全的处理
-		{
-			// 保存原寄存器
-			forward_page_temp[i++] = 0x50;        // push eax
-			forward_page_temp[i++] = 0x51;        // push ecx
-			forward_page_temp[i++] = 0x52;        // push edx
-			forward_page_temp[i++] = 0x9c;        // pushfd
-
-			// 获取TlsValue
-			i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-
-			// 判断是否重入
-			// cmp eax, 0
-			forward_page_temp[i++] = 0x83;
-			forward_page_temp[i++] = 0xf8;
-			forward_page_temp[i++] = 0x00;
-			// je _next
-			forward_page_temp[i++] = 0x74;
-			forward_page_temp[i++] = 4 + hook.old_instr_.size() + 5;
-
-			// 低1位为1，是重入，执行原指令并转回
-			forward_page_temp[i++] = 0x9d;        // popfd
-			forward_page_temp[i++] = 0x5a;        // pop rdx
-			forward_page_temp[i++] = 0x59;        // pop rcx
-			forward_page_temp[i++] = 0x58;        // pop rax
-
-			memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
-			i += hook.old_instr_.size();
-
-			// 跳回原函数正常执行
-			std::vector<uint8_t> temp;
-			MakeJmp(arch, &temp, forward_page_uint + i, hook_addr + instr_size);
-			memcpy(&forward_page_temp[i], &temp[0], temp.size());
-			i += temp.size();
-
-
-			// _next:
-			// 设置为1
-			// call TlsSetValue
-			// push 1
-			forward_page_temp[i++] = 0x6a;
-			forward_page_temp[i++] = 0x01;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-			forward_page_temp[i++] = 0x9d;        // popfq
-			forward_page_temp[i++] = 0x5a;        // pop rdx
-			forward_page_temp[i++] = 0x59;        // pop rcx
-			forward_page_temp[i++] = 0x58;        // pop rax
-		}
-
-		// sub rsp, 400
-		forward_page_temp[i++] = 0x81;
-		forward_page_temp[i++] = 0xec;
-		*(uint32_t*)&forward_page_temp[i] = 0x400;
-		i += 4;
-
-		// 构建context_addr
-		{
-			forward_page_temp[i++] = 0x50;        // push eax
-			forward_page_temp[i++] = 0x51;        // push ecx
-
-			// lea ecx, [esp+0x8]
-			forward_page_temp[i++] = 0x8d;
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x24;
-			forward_page_temp[i++] = 0x8;
-
-			// 压入原stack，跳过前面push的eax和ecx
-			// lea eax, [esp+0x400+0x8]
-			forward_page_temp[i++] = 0x8d;
-			forward_page_temp[i++] = 0x84;
-			forward_page_temp[i++] = 0x24;
-			*(uint32_t*)&forward_page_temp[i] = (uint32_t)0x400 + 8;
-			i += 4;
-
-			// mov [ecx], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x01;
-
-			// 实际上是压入esp
-			// mov [ecx+4], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x04;
-
-
-			// mov eax, hook_addr + instr_size
-			forward_page_temp[i++] = 0xb8;
-			*(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr + instr_size;
-			i += 4;
-			// mov [ecx+0x8], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x8;
-
-			// mov eax, forward_page
-			forward_page_temp[i++] = 0xb8;
-			*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
-			i += 4;
-			// mov [ecx+0xc], rax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0xc;
-
-			// mov eax, hook_addr
-			forward_page_temp[i++] = 0xb8;
-			*(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
-			i += 4;
-			// mov [ecx+0x10], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x10;
-
-			// pop eax      // 这里其实是ecx
-			forward_page_temp[i++] = 0x58;
-			// mov [ecx+0x44], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x44;
-
-			// pop eax
-			forward_page_temp[i++] = 0x58;
-			// mov [ecx+0x40], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x40;
-
-			// mov [ecx+0x48], edx
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x51;
-			forward_page_temp[i++] = 0x48;
-
-			// mov [ecx+0x4c], ebx
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x59;
-			forward_page_temp[i++] = 0x4c;
-
-			// mov [ecx+0x50], esp
-			//forward_page_temp[i++] = 0x89;
-			//forward_page_temp[i++] = 0x61;
-			//forward_page_temp[i++] = 0x50;
-
-			// mov [ecx+0x54], ebp
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x69;
-			forward_page_temp[i++] = 0x54;
-
-			// mov [ecx+0x58], esi
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x71;
-			forward_page_temp[i++] = 0x58;
-
-			// mov [ecx+0x5c], edi
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x79;
-			forward_page_temp[i++] = 0x5c;
-
-			forward_page_temp[i++] = 0x9c;        // pushfd
-			forward_page_temp[i++] = 0x58;        // pop eax
-			// mov [ecx+0x60], eax
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x60;
-
-		}
-            
-
-		// ecx保存到非易失寄存器
-		// mov esi, ecx
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xce;
-
-		// 准备调用
-		// 传递参数
-		// 使用fastcall，参数已在ecx中
-
-		forward_page_temp[i++] = 0xe8;        // call callback
-		*(uint32_t*)&forward_page_temp[i] = GetInstrOffset((forward_page_uint + i - 1), 5, callback);
-		i += 4;
-
-		// mov ecx, esi     // 再次拿到context
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xf1;
-
-		// 先把callback返回值保存起来
-		// mov [ecx + 0x280 + 0], al
-		forward_page_temp[i++] = 0x88;
-		forward_page_temp[i++] = 0x81; 
-		*(uint32_t*)&forward_page_temp[i] = (uint32_t)0x280 + 0;
-		i += 4;
-
-		// 将jmp_addr保存到tls中
-		// push [ecx+0x8]
-		forward_page_temp[i++] = 0xff;
-		forward_page_temp[i++] = 0x71;
-		forward_page_temp[i++] = 0x8;
-		i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-		// 恢复上下文环境
-		// 除ecx和eax
-		{
-			// mov eax, [ecx + 0x60]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x60;
-
-			forward_page_temp[i++] = 0x50;        // push eax
-			forward_page_temp[i++] = 0x9d;        // popfd
-
-			// mov edx, [ecx + 0x48]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x51;
-			forward_page_temp[i++] = 0x48;
-
-			// mov ebx, [ecx + 0x4c]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x59;
-			forward_page_temp[i++] = 0x4c;
-
-			// mov esp, [ecx + 0x50]
-			//forward_page_temp[i++] = 0x8b;
-			//forward_page_temp[i++] = 0x61;
-			//forward_page_temp[i++] = 0x50;
-
-			// mov ebp, [ecx + 0x54]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x69;
-			forward_page_temp[i++] = 0x54;
-
-			// mov esi, [ecx + 0x58]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x71;
-			forward_page_temp[i++] = 0x58;
-
-			// mov edi, [ecx + 0x5c]
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x79;
-			forward_page_temp[i++] = 0x5c;
-		}
-            
-
-		// 在原指令执行前还原所有环境，包括压入的jmp_addr
-
-		// 执行前设置hook回调中可能修改的esp
-		// mov esp, [ecx + 4]
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x61;
-		forward_page_temp[i++] = 0x04;
-
-            
-		// 拿到callback的返回值
-		// mov al, [ecx + 0x280 + 0]
-		forward_page_temp[i++] = 0x8a;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = (uint32_t)0x280 + 0;
-		i += 4;
-
-            
-		forward_page_temp[i++] = 0x9c;      // pushfd
-		// cmp al, 0
-		forward_page_temp[i++] = 0x3c;
-		forward_page_temp[i++] = 0x00;
-
-		// 上面的恢复上下文还没有恢复eax和ecx，这里再恢复eax和ecx
-		// mov eax, [ecx + 0x44]        // 这里原ecx先保存到eax
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x44;
-		i += 4;
-		// push eax     // 现在原ecx已经再栈上了
-		forward_page_temp[i++] = 0x50;
-
-		// mov eax, [ecx + 0x40]
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x40;
-		i += 4;
-
-		// pop ecx      // 恢复原ecx
-		forward_page_temp[i++] = 0x59;
-
-
-		// je _skip_exec_old_insrt
-		forward_page_temp[i++] = 0x74;
-		forward_page_temp[i++] = 1 + hook.old_instr_.size() + 2;
-
-		forward_page_temp[i++] = 0x9d;      // popfd
-		// 执行原指令
-		memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
-		i += hook.old_instr_.size();
-		// jmp _next_exec_old_insrt
-		forward_page_temp[i++] = 0xeb;
-		forward_page_temp[i++] = 0x01;      // +1
-
-		// _skip_exec_old_insrt:
-		forward_page_temp[i++] = 0x9d;      // popfd
-		// _next_exec_old_insrt:
-            
-
-		// push eax     // 预留一个栈位置，存放jmp_addr
-		forward_page_temp[i++] = 0x50;
-		forward_page_temp[i++] = 0x50;      // push eax
-		forward_page_temp[i++] = 0x51;      // push ecx
-
-
-
-		// 恢复jmp_addr环境
-
-		// 从Tls中获取jmp_addr
-		i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-
-		// 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
-		// mov [esp+0x08], eax
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0x44;
-		forward_page_temp[i++] = 0x24;
-		forward_page_temp[i++] = 0x08;
-
-		// 解锁
-		{
-			// 设置为0
-			// call TlsSetValue
-			// push 0
-			forward_page_temp[i++] = 0x6a;
-			forward_page_temp[i++] = 0x00;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
-		}
-
-		forward_page_temp[i++] = 0x59;      // pop ecx
-		forward_page_temp[i++] = 0x58;      // pop eax
-
-		// 转回去继续执行
-		forward_page_temp[i++] = 0xc3;        // ret
+		// if (instr_size < 5) {
+		// 	return std::nullopt;
+		// }
+		//
+		// size_t i = 0;
+		// uint32_t context_addr;
+		//
+		// // 可重入与线程安全的处理
+		// {
+		// 	// 保存原寄存器
+		// 	forward_page_temp[i++] = 0x50;        // push eax
+		// 	forward_page_temp[i++] = 0x51;        // push ecx
+		// 	forward_page_temp[i++] = 0x52;        // push edx
+		// 	forward_page_temp[i++] = 0x9c;        // pushfd
+		//
+		// 	// 获取TlsValue
+		// 	i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		//
+		//
+		// 	// 判断是否重入
+		// 	// cmp eax, 0
+		// 	forward_page_temp[i++] = 0x83;
+		// 	forward_page_temp[i++] = 0xf8;
+		// 	forward_page_temp[i++] = 0x00;
+		// 	// je _next
+		// 	forward_page_temp[i++] = 0x74;
+		// 	forward_page_temp[i++] = 4 + hook.old_instr_.size() + 5;
+		//
+		// 	// 低1位为1，是重入，执行原指令并转回
+		// 	forward_page_temp[i++] = 0x9d;        // popfd
+		// 	forward_page_temp[i++] = 0x5a;        // pop rdx
+		// 	forward_page_temp[i++] = 0x59;        // pop rcx
+		// 	forward_page_temp[i++] = 0x58;        // pop rax
+		//
+		// 	memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+		// 	i += hook.old_instr_.size();
+		//
+		// 	// 跳回原函数正常执行
+		// 	std::vector<uint8_t> temp;
+		// 	MakeJmp(arch, &temp, forward_page_uint + i, hook_addr + instr_size);
+		// 	memcpy(&forward_page_temp[i], &temp[0], temp.size());
+		// 	i += temp.size();
+		//
+		//
+		// 	// _next:
+		// 	// 设置为1
+		// 	// call TlsSetValue
+		// 	// push 1
+		// 	forward_page_temp[i++] = 0x6a;
+		// 	forward_page_temp[i++] = 0x01;
+		// 	i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		//
+		// 	forward_page_temp[i++] = 0x9d;        // popfq
+		// 	forward_page_temp[i++] = 0x5a;        // pop rdx
+		// 	forward_page_temp[i++] = 0x59;        // pop rcx
+		// 	forward_page_temp[i++] = 0x58;        // pop rax
+		// }
+		//
+		// // sub rsp, 400
+		// forward_page_temp[i++] = 0x81;
+		// forward_page_temp[i++] = 0xec;
+		// *(uint32_t*)&forward_page_temp[i] = 0x400;
+		// i += 4;
+		//
+		// // 构建context_addr
+		// {
+		// 	forward_page_temp[i++] = 0x50;        // push eax
+		// 	forward_page_temp[i++] = 0x51;        // push ecx
+		//
+		// 	// lea ecx, [esp+0x8]
+		// 	forward_page_temp[i++] = 0x8d;
+		// 	forward_page_temp[i++] = 0x4c;
+		// 	forward_page_temp[i++] = 0x24;
+		// 	forward_page_temp[i++] = 0x8;
+		//
+		// 	// 压入原stack，跳过前面push的eax和ecx
+		// 	// lea eax, [esp+0x400+0x8]
+		// 	forward_page_temp[i++] = 0x8d;
+		// 	forward_page_temp[i++] = 0x84;
+		// 	forward_page_temp[i++] = 0x24;
+		// 	*(uint32_t*)&forward_page_temp[i] = (uint32_t)0x400 + 8;
+		// 	i += 4;
+		//
+		// 	// mov [ecx], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x01;
+		//
+		// 	// 实际上是压入esp
+		// 	// mov [ecx+4], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x04;
+		//
+		//
+		// 	// mov eax, hook_addr + instr_size
+		// 	forward_page_temp[i++] = 0xb8;
+		// 	*(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr + instr_size;
+		// 	i += 4;
+		// 	// mov [ecx+0x8], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x8;
+		//
+		// 	// mov eax, forward_page
+		// 	forward_page_temp[i++] = 0xb8;
+		// 	*(uint32_t*)&forward_page_temp[i] = (uint32_t)forward_page_uint;
+		// 	i += 4;
+		// 	// mov [ecx+0xc], rax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0xc;
+		//
+		// 	// mov eax, hook_addr
+		// 	forward_page_temp[i++] = 0xb8;
+		// 	*(uint32_t*)&forward_page_temp[i] = (uint32_t)hook_addr;
+		// 	i += 4;
+		// 	// mov [ecx+0x10], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x10;
+		//
+		// 	// pop eax      // 这里其实是ecx
+		// 	forward_page_temp[i++] = 0x58;
+		// 	// mov [ecx+0x44], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x44;
+		//
+		// 	// pop eax
+		// 	forward_page_temp[i++] = 0x58;
+		// 	// mov [ecx+0x40], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x40;
+		//
+		// 	// mov [ecx+0x48], edx
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x51;
+		// 	forward_page_temp[i++] = 0x48;
+		//
+		// 	// mov [ecx+0x4c], ebx
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x59;
+		// 	forward_page_temp[i++] = 0x4c;
+		//
+		// 	// mov [ecx+0x50], esp
+		// 	//forward_page_temp[i++] = 0x89;
+		// 	//forward_page_temp[i++] = 0x61;
+		// 	//forward_page_temp[i++] = 0x50;
+		//
+		// 	// mov [ecx+0x54], ebp
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x69;
+		// 	forward_page_temp[i++] = 0x54;
+		//
+		// 	// mov [ecx+0x58], esi
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x71;
+		// 	forward_page_temp[i++] = 0x58;
+		//
+		// 	// mov [ecx+0x5c], edi
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x79;
+		// 	forward_page_temp[i++] = 0x5c;
+		//
+		// 	forward_page_temp[i++] = 0x9c;        // pushfd
+		// 	forward_page_temp[i++] = 0x58;        // pop eax
+		// 	// mov [ecx+0x60], eax
+		// 	forward_page_temp[i++] = 0x89;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x60;
+		//
+		// }
+  //           
+		//
+		// // ecx保存到非易失寄存器
+		// // mov esi, ecx
+		// forward_page_temp[i++] = 0x89;
+		// forward_page_temp[i++] = 0xce;
+		//
+		// // 准备调用
+		// // 传递参数
+		// // 使用fastcall，参数已在ecx中
+		//
+		// forward_page_temp[i++] = 0xe8;        // call callback
+		// *(uint32_t*)&forward_page_temp[i] = GetInstrOffset((forward_page_uint + i - 1), 5, callback);
+		// i += 4;
+		//
+		// // mov ecx, esi     // 再次拿到context
+		// forward_page_temp[i++] = 0x89;
+		// forward_page_temp[i++] = 0xf1;
+		//
+		// // 先把callback返回值保存起来
+		// // mov [ecx + 0x280 + 0], al
+		// forward_page_temp[i++] = 0x88;
+		// forward_page_temp[i++] = 0x81; 
+		// *(uint32_t*)&forward_page_temp[i] = (uint32_t)0x280 + 0;
+		// i += 4;
+		//
+		// // 将jmp_addr保存到tls中
+		// // push [ecx+0x8]
+		// forward_page_temp[i++] = 0xff;
+		// forward_page_temp[i++] = 0x71;
+		// forward_page_temp[i++] = 0x8;
+		// i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		//
+		// // 恢复上下文环境
+		// // 除ecx和eax
+		// {
+		// 	// mov eax, [ecx + 0x60]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x41;
+		// 	forward_page_temp[i++] = 0x60;
+		//
+		// 	forward_page_temp[i++] = 0x50;        // push eax
+		// 	forward_page_temp[i++] = 0x9d;        // popfd
+		//
+		// 	// mov edx, [ecx + 0x48]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x51;
+		// 	forward_page_temp[i++] = 0x48;
+		//
+		// 	// mov ebx, [ecx + 0x4c]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x59;
+		// 	forward_page_temp[i++] = 0x4c;
+		//
+		// 	// mov esp, [ecx + 0x50]
+		// 	//forward_page_temp[i++] = 0x8b;
+		// 	//forward_page_temp[i++] = 0x61;
+		// 	//forward_page_temp[i++] = 0x50;
+		//
+		// 	// mov ebp, [ecx + 0x54]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x69;
+		// 	forward_page_temp[i++] = 0x54;
+		//
+		// 	// mov esi, [ecx + 0x58]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x71;
+		// 	forward_page_temp[i++] = 0x58;
+		//
+		// 	// mov edi, [ecx + 0x5c]
+		// 	forward_page_temp[i++] = 0x8b;
+		// 	forward_page_temp[i++] = 0x79;
+		// 	forward_page_temp[i++] = 0x5c;
+		// }
+  //           
+		//
+		// // 在原指令执行前还原所有环境，包括压入的jmp_addr
+		//
+		// // 执行前设置hook回调中可能修改的esp
+		// // mov esp, [ecx + 4]
+		// forward_page_temp[i++] = 0x8b;
+		// forward_page_temp[i++] = 0x61;
+		// forward_page_temp[i++] = 0x04;
+		//
+  //           
+		// // 拿到callback的返回值
+		// // mov al, [ecx + 0x280 + 0]
+		// forward_page_temp[i++] = 0x8a;
+		// forward_page_temp[i++] = 0x81;
+		// *(uint32_t*)&forward_page_temp[i] = (uint32_t)0x280 + 0;
+		// i += 4;
+		//
+  //           
+		// forward_page_temp[i++] = 0x9c;      // pushfd
+		// // cmp al, 0
+		// forward_page_temp[i++] = 0x3c;
+		// forward_page_temp[i++] = 0x00;
+		//
+		// // 上面的恢复上下文还没有恢复eax和ecx，这里再恢复eax和ecx
+		// // mov eax, [ecx + 0x44]        // 这里原ecx先保存到eax
+		// forward_page_temp[i++] = 0x8b;
+		// forward_page_temp[i++] = 0x81;
+		// *(uint32_t*)&forward_page_temp[i] = 0x44;
+		// i += 4;
+		// // push eax     // 现在原ecx已经再栈上了
+		// forward_page_temp[i++] = 0x50;
+		//
+		// // mov eax, [ecx + 0x40]
+		// forward_page_temp[i++] = 0x8b;
+		// forward_page_temp[i++] = 0x81;
+		// *(uint32_t*)&forward_page_temp[i] = 0x40;
+		// i += 4;
+		//
+		// // pop ecx      // 恢复原ecx
+		// forward_page_temp[i++] = 0x59;
+		//
+		//
+		// // je _skip_exec_old_insrt
+		// forward_page_temp[i++] = 0x74;
+		// forward_page_temp[i++] = 1 + hook.old_instr_.size() + 2;
+		//
+		// forward_page_temp[i++] = 0x9d;      // popfd
+		// // 执行原指令
+		// memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
+		// i += hook.old_instr_.size();
+		// // jmp _next_exec_old_insrt
+		// forward_page_temp[i++] = 0xeb;
+		// forward_page_temp[i++] = 0x01;      // +1
+		//
+		// // _skip_exec_old_insrt:
+		// forward_page_temp[i++] = 0x9d;      // popfd
+		// // _next_exec_old_insrt:
+  //           
+		//
+		// // push eax     // 预留一个栈位置，存放jmp_addr
+		// forward_page_temp[i++] = 0x50;
+		// forward_page_temp[i++] = 0x50;      // push eax
+		// forward_page_temp[i++] = 0x51;      // push ecx
+		//
+		//
+		//
+		// // 恢复jmp_addr环境
+		//
+		// // 从Tls中获取jmp_addr
+		// i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		//
+		//
+		// // 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
+		// // mov [esp+0x08], eax
+		// forward_page_temp[i++] = 0x89;
+		// forward_page_temp[i++] = 0x44;
+		// forward_page_temp[i++] = 0x24;
+		// forward_page_temp[i++] = 0x08;
+		//
+		// // 解锁
+		// {
+		// 	// 设置为0
+		// 	// call TlsSetValue
+		// 	// push 0
+		// 	forward_page_temp[i++] = 0x6a;
+		// 	forward_page_temp[i++] = 0x00;
+		// 	i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		// }
+		//
+		// forward_page_temp[i++] = 0x59;      // pop ecx
+		// forward_page_temp[i++] = 0x58;      // pop eax
+		//
+		// // 转回去继续执行
+		// forward_page_temp[i++] = 0xc3;        // ret
 	}
 	else {
 		if (instr_size < 14) {
 			return std::nullopt;
 		}
-		int i = 0;
+		auto a = Assembler(Arch::kX64);
+		auto next_lab = a.NewLabel();
 
-		uint64_t context_addr;
+		// 保存原寄存器
+		a.push(rax);
+		a.push(rcx);
+		a.push(rdx);
+		a.push(rdi);
+		a.push(r8);
+		a.push(r9);
+		a.push(r10);
+		a.push(r11);
+		a.pushfq();
+		MakeStackFrameStart(a, 0x20);
+		// 获取TlsValue
+		MakeTlsGetValue(a, hook.tls_id_);
+		// 判断是否重入
+		a.cmp(rax, 0);
+		a.je(next_lab);
+		MakeStackFrameEnd(a, 0x20);
+		a.popfq();
+		a.pop(r11);
+		a.pop(r10);
+		a.pop(r9);
+		a.pop(r8);
+		a.pop(rdi);
+		a.pop(rdx);
+		a.pop(rcx);
+		a.pop(rax);
 
-		// 可重入与线程安全的处理
-		{
-			// 保存原寄存器
-			forward_page_temp[i++] = 0x50;        // push rax
-			forward_page_temp[i++] = 0x51;        // push rcx
-			forward_page_temp[i++] = 0x52;        // push rdx
-			forward_page_temp[i++] = 0x57;        // push rdi
+		// 跳回原函数正常执行
+		for (size_t i_ = 0; i_ < hook.old_instr_.size(); ++i_)
+			a.db(hook.old_instr_[i_]);
 
-			// push r8
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x50;
-			// push r9
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x51;
-			// push r10
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x52;
-			// push r11
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x53;
+		a.jmp(hook_addr + instr_size);
 
-			forward_page_temp[i++] = 0x9c;        // pushfq
+		a.bind(next_lab);
+		a.mov(rdx, 1);
+		MakeTlsSetValue(a, hook.tls_id_);
+		MakeStackFrameEnd(a, 0x20);
 
-			i += MakeStackFrameStart(arch, &forward_page_temp[i], 0x20);
+		a.popfq();
+		a.pop(r11);
+		a.pop(r10);
+		a.pop(r9);
+		a.pop(r8);
+		a.pop(rdi);
+		a.pop(rdx);
+		a.pop(rcx);
+		a.pop(rax);
 
-			// 获取TlsValue
-			i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		a.sub(rsp, 0x400);
 
-
-			// 判断是否重入
-			// cmp rax, 0
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x83;
-			forward_page_temp[i++] = 0xf8;
-			forward_page_temp[i++] = 0x00;
-			// je _next
-			forward_page_temp[i++] = 0x74;
-			forward_page_temp[i++] = 7 + 13 + hook.old_instr_.size() + 14;
-
-			// 低1位为1，是重入，执行原指令并转回
-                
-			i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
-
-			forward_page_temp[i++] = 0x9d;        // popfq
-
-			// pop r11
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x5b;
-			// pop r10
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x5a;
-			// pop r9
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x59;
-			// pop r8
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x58;
-
-			forward_page_temp[i++] = 0x5f;        // pop rdi
-			forward_page_temp[i++] = 0x5a;        // pop rdx
-			forward_page_temp[i++] = 0x59;        // pop rcx
-			forward_page_temp[i++] = 0x58;        // pop rax
-
-			memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
-			i += hook.old_instr_.size();
-
-			// 跳回原函数正常执行
-			std::vector<uint8_t> temp;
-			MakeJmp(arch, &temp, forward_page_uint + i, hook_addr + instr_size);
-			memcpy(&forward_page_temp[i], &temp[0], temp.size());
-			i += temp.size();
-
-
-			// _next:
-			// 设置为1
-			// call TlsSetValue
-			// mov rdx, 1
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0xc7;
-			forward_page_temp[i++] = 0xc2;
-			*(uint32_t*)&forward_page_temp[i] = 0x1;
-			i += 4;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-			i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
-
-			forward_page_temp[i++] = 0x9d;        // popfq
-
-			// pop r11
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x5b;
-			// pop r10
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x5a;
-			// pop r9
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x59;
-			// pop r8
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x58;
-
-			forward_page_temp[i++] = 0x5f;        // pop rdi
-			forward_page_temp[i++] = 0x5a;        // pop rdx
-			forward_page_temp[i++] = 0x59;        // pop rcx
-			forward_page_temp[i++] = 0x58;        // pop rax
-		}
-
-            
-		// sub rsp, 0x400
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x81;
-		forward_page_temp[i++] = 0xec;
-		*(uint32_t*)&forward_page_temp[i] = 0x400;
-		i += 4;
-
-		// 构建context_addr
-		{
-			forward_page_temp[i++] = 0x50;        // push rax
-			forward_page_temp[i++] = 0x51;        // push rcx
-
-			// lea rcx, [rsp+0x10]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8d;
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x24;
-			forward_page_temp[i++] = 0x10;
-
-			// 压入原stack，跳过前面push的rax和rcx
-			// lea rax, [rsp+0x400+0x10]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8d;
-			forward_page_temp[i++] = 0x84;
-			forward_page_temp[i++] = 0x24;
-			*(uint32_t*)&forward_page_temp[i] = 0x400 + 0x10;
-			i += 4;
-			// mov [rcx], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x01;
-
-			// 实际上是压入rsp
-			// mov [rcx+8], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x08;
-
-			// 提前压入转回地址，以便HookCallback能够修改
-			// mov rax, hook_addr + instr_size
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0xb8;
-			*(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr + instr_size;
-			i += 8;
-			// mov [rcx+0x10], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x10;
-
-			// mov rax, forward_page
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0xb8;
-			*(uint64_t*)&forward_page_temp[i] = (uint64_t)forward_page_uint;
-			i += 8;
-			// mov [rcx+0x18], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x18;
-
-			// mov rax, hook_addr
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0xb8;
-			*(uint64_t*)&forward_page_temp[i] = (uint64_t)hook_addr;
-			i += 8;
-			// mov [rcx+0x20], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x41;
-			forward_page_temp[i++] = 0x20;
-
-			// pop rax      // 这里其实是rcx
-			forward_page_temp[i++] = 0x58;
-			// mov [rcx+0x88], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0x88;
-			i += 4;
-
-			// pop rax
-			forward_page_temp[i++] = 0x58;
-			// mov [rcx+0x80], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0x80;
-			i += 4;
-
-
-			// mov [rcx+0x90], rdx
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x91;
-			*(uint32_t*)&forward_page_temp[i] = 0x90;
-			i += 4;
-
-
-			// mov [rcx+0x98], rbx
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x99;
-			*(uint32_t*)&forward_page_temp[i] = 0x98;
-			i += 4;
-
-
-			// mov [rcx+0xa0], rsp
-			//forward_page_temp[i++] = 0x48;
-			//forward_page_temp[i++] = 0x89;
-			//forward_page_temp[i++] = 0xa1;
-			//*(uint32_t*)&forward_page_temp[i] = 0xa0;
-			//i += 4;
-
-
-			// mov [rcx+0xa8], rbp
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xa9;
-			*(uint32_t*)&forward_page_temp[i] = 0xa8;
-			i += 4;
-
-			// mov [rcx+0xb0], rsi
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xb1;
-			*(uint32_t*)&forward_page_temp[i] = 0xb0;
-			i += 4;
-
-			// mov [rcx+0xb8], rdi
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xb9;
-			*(uint32_t*)&forward_page_temp[i] = 0xb8;
-			i += 4;
-
-
-			// mov [rcx+0xc0], r8
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0xc0;
-			i += 4;
-
-			// mov [rcx+0xc8], r9
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x89;
-			*(uint32_t*)&forward_page_temp[i] = 0xc8;
-			i += 4;
-
-			// mov [rcx+0xd0], r10
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x91;
-			*(uint32_t*)&forward_page_temp[i] = 0xd0;
-			i += 4;
-
-			// mov [rcx+0xd8], r11
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x99;
-			*(uint32_t*)&forward_page_temp[i] = 0xd8;
-			i += 4;
-
-			// mov [rcx+0xe0], r12
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xa1;
-			*(uint32_t*)&forward_page_temp[i] = 0xe0;
-			i += 4;
-
-			// mov [rcx+0xe8], r13
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xa9;
-			*(uint32_t*)&forward_page_temp[i] = 0xe8;
-			i += 4;
-
-			// mov [rcx+0xf0], r14
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xb1;
-			*(uint32_t*)&forward_page_temp[i] = 0xf0;
-			i += 4;
-
-			// mov [rcx+0xf8], r15
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0xb9;
-			*(uint32_t*)&forward_page_temp[i] = 0xf8;
-			i += 4;
-
-			forward_page_temp[i++] = 0x9c;        // pushfq
-			forward_page_temp[i++] = 0x58;        // pop rax
-			// mov [rcx+0x100], rax
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x89;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0x100;
-			i += 4;
-		}
+		a.push(rax);
+		a.push(rcx);
+		a.lea(rcx, ptr(rsp, 0x10));
+		// 压入原stack，跳过前面push的rax和rcx
+		a.lea(rax, ptr(rsp, 0x400 + 0x10));
+		a.mov(ptr(rcx), rax);
+		// 实际上是压入rsp
+		a.mov(ptr(rcx, 8), rax);
+		// 提前压入转回地址，以便HookCallback能够修改
+		a.mov(rax, hook_addr + instr_size);
+		a.mov(ptr(rcx, 0x10), rax);
+		a.mov(rax, forward_page_uint);
+		a.mov(ptr(rcx, 0x18), rax);
+		a.mov(rax, hook_addr);
+		a.mov(ptr(rcx, 0x20), rax);
+		// 这里其实是rcx
+		a.pop(rax);
+		a.mov(ptr(rcx, 0x88), rax);
+		a.pop(rax);
+		a.mov(ptr(rcx, 0x80), rax);
+		a.mov(ptr(rcx, 0x90), rdx);
+		a.mov(ptr(rcx, 0x98), rbx);
+		a.mov(ptr(rcx, 0xA8), rbp);
+		a.mov(ptr(rcx, 0xB0), rsi);
+		a.mov(ptr(rcx, 0xB8), rdi);
+		a.mov(ptr(rcx, 0xC0), r8);
+		a.mov(ptr(rcx, 0xC8), r9);
+		a.mov(ptr(rcx, 0xD0), r10);
+		a.mov(ptr(rcx, 0xD8), r11);
+		a.mov(ptr(rcx, 0xE0), r12);
+		a.mov(ptr(rcx, 0xE8), r13);
+		a.mov(ptr(rcx, 0xF0), r14);
+		a.mov(ptr(rcx, 0xF8), r15);
+		a.pushfq();
+		a.pop(rax);
+		a.mov(ptr(rcx, 0x100), rax);
 
 		// 遵循x64调用约定，为当前函数的使用提前分配栈空间
-		i += MakeStackFrameStart(arch, &forward_page_temp[i], 0x20);
+		MakeStackFrameStart(a, 0x20);
 
 		// 参数即rcx，在保存上下文时已经设置了
-
-		// mov rsi, rcx     // 将context保存到非易失寄存器
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xce;
-
+		// 将context保存到非易失寄存器
+		a.mov(rsi, rcx);
 		// 调用
-		forward_page_temp[i++] = 0x48;        // mov rax, addr
-		forward_page_temp[i++] = 0xb8;
-		*(uint64_t*)&forward_page_temp[i] = (uint64_t)callback;
-		i += 8;
-		// call rax
-		forward_page_temp[i++] = 0xff;
-		forward_page_temp[i++] = 0xd0;
-
-		// mov rcx, rsi     // 再次拿到context
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xf1;
-
-
+		a.mov(rax, callback);
+		a.call(rax);
+		// 再次拿到context
+		a.mov(rcx, rsi);
 		// 先保存callback的返回值
-		// mov [rcx + 0x280 + 0], al
-		forward_page_temp[i++] = 0x88;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x280 + 0;
-		i += 4;
-
+		a.mov(ptr(rcx, 0x280), al);
 		// 将jmp_addr保存到tls中
-		// mov rdx, [rcx+0x10]
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x51;
-		forward_page_temp[i++] = 0x10;
-		i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
+		a.mov(rdx, ptr(rcx, 0x10));
+		MakeTlsSetValue(a, hook.tls_id_);
+		// 再次拿到context
+		a.mov(rcx, rsi);
 
-		// mov rcx, rsi     // 再次拿到context
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xf1;
-
-		i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
-
-
+		MakeStackFrameEnd(a, 0x20);
 
 		// 恢复上下文环境
 		// 除rcx和rax
-		{
-			// mov rax, [rcx + 0x100]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0x100;
-			i += 4;
-			forward_page_temp[i++] = 0x50;        // push rax
-			forward_page_temp[i++] = 0x9d;        // popfq
-
-
-			// mov rdx, [rcx + 0x90]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x91;
-			*(uint32_t*)&forward_page_temp[i] = 0x90;
-			i += 4;
-
-			// mov rbx, [rcx + 0x98]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x99;
-			*(uint32_t*)&forward_page_temp[i] = 0x98;
-			i += 4;
-
-			// mov rsp, [rcx + 0xa0]
-			//forward_page_temp[i++] = 0x48;
-			//forward_page_temp[i++] = 0x8b;
-			//forward_page_temp[i++] = 0xa1;
-			//*(uint32_t*)&forward_page_temp[i] = 0xa0;
-			//i += 4;
-
-			// mov rbp, [rcx + 0xa8]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xa9;
-			*(uint32_t*)&forward_page_temp[i] = 0xa8;
-			i += 4;
-
-			// mov rsi, [rcx + 0xb0]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xb1;
-			*(uint32_t*)&forward_page_temp[i] = 0xb0;
-			i += 4;
-
-			// mov rdi, [rcx + 0xb8]
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xb9;
-			*(uint32_t*)&forward_page_temp[i] = 0xb8;
-			i += 4;
-
-
-			// mov r8, [rcx + 0xc0]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x81;
-			*(uint32_t*)&forward_page_temp[i] = 0xc0;
-			i += 4;
-
-			// mov r9, [rcx + 0xc8]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x89;
-			*(uint32_t*)&forward_page_temp[i] = 0xc8;
-			i += 4;
-
-			// mov r10, [rcx + 0xd0]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x91;
-			*(uint32_t*)&forward_page_temp[i] = 0xd0;
-			i += 4;
-
-			// mov r11, [rcx + 0xd8]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0x99;
-			*(uint32_t*)&forward_page_temp[i] = 0xd8;
-			i += 4;
-
-			// mov r12, [rcx + 0xe0]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xa1;
-			*(uint32_t*)&forward_page_temp[i] = 0xe0;
-			i += 4;
-
-			// mov r13, [rcx + 0xe8]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xa9;
-			*(uint32_t*)&forward_page_temp[i] = 0xe8;
-			i += 4;
-
-			// mov r14, [rcx + 0xf0]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xb1;
-			*(uint32_t*)&forward_page_temp[i] = 0xf0;
-			i += 4;
-
-			// mov r15, [rcx + 0xf8]
-			forward_page_temp[i++] = 0x4c;
-			forward_page_temp[i++] = 0x8b;
-			forward_page_temp[i++] = 0xb9;
-			*(uint32_t*)&forward_page_temp[i] = 0xf8;
-			i += 4;
-		}
-
+		a.mov(rax, ptr(rcx, 0x100));
+		a.push(rax);
+		a.popfq();
+		a.mov(rdx, ptr(rcx, 0x90));
+		a.mov(rbx, ptr(rcx, 0x98));
+		a.mov(rbp, ptr(rcx, 0xA8));
+		a.mov(rsi, ptr(rcx, 0xB0));
+		a.mov(rdi, ptr(rcx, 0xB8));
+		a.mov(r8, ptr(rcx, 0xC0));
+		a.mov(r9, ptr(rcx, 0xC8));
+		a.mov(r10, ptr(rcx, 0xD0));
+		a.mov(r11, ptr(rcx, 0xD8));
+		a.mov(r12, ptr(rcx, 0xE0));
+		a.mov(r13, ptr(rcx, 0xE8));
+		a.mov(r14, ptr(rcx, 0xF0));
+		a.mov(r15, ptr(rcx, 0xF8));
 
 		// 在原指令执行前还原所有环境，包括保存的jmp_addr
-
 		// 执行前设置hook回调中可能修改的rsp
-		// mov rax, [rcx + 8]
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x08;
-		// mov rsp, rax
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0xc4;
-
+		a.mov(rax, ptr(rcx, 8));
+		a.mov(rsp, rax);
 
 		// 准备执行原指令
 		// 拿到callback的返回值
-		// mov al, [rcx + 0x280 + 0]
-		forward_page_temp[i++] = 0x8a;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x280;
-		i += 4;
-
-		forward_page_temp[i++] = 0x9c;      // pushfd
-		// cmp al, 0
-		forward_page_temp[i++] = 0x3c;
-		forward_page_temp[i++] = 0x00;
-
+		a.mov(al, ptr(rcx, 0x280));
+		a.pushfq();
+		a.cmp(al, 0);
 
 		// 上面的恢复上下文环境还没有恢复rax和rcx，这里再恢复rax和rcx
-		// mov rax, [rcx + 0x88]        // 原rcx先保存到rax
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x88;
-		i += 4;
+		a.mov(rax, ptr(rcx, 0x88));		// 原rcx先保存到rax
+		a.push(rax);					// 现在原rcx已经在栈上了
+		a.mov(rax, ptr(rcx, 0x80));
+		a.pop(rcx);						// 恢复原rcx
 
-		// push rax     // 现在原rcx已经在栈上了
-		forward_page_temp[i++] = 0x50;
+		auto skip_exec_old_insrt_lab = a.NewLabel();
+		auto next_exec_old_insrt_lab = a.NewLabel();
 
-		// mov rax, [rcx + 0x80]
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x8b;
-		forward_page_temp[i++] = 0x81;
-		*(uint32_t*)&forward_page_temp[i] = 0x80;
-		i += 4;
-
-		// pop rcx      // 恢复原rcx
-		forward_page_temp[i++] = 0x59;
-            
-
-		// je _skip_exec_old_insrt
-		forward_page_temp[i++] = 0x74;
-		forward_page_temp[i++] = 1 + hook.old_instr_.size() + 2;
-
-		forward_page_temp[i++] = 0x9d;      // popfd
+		a.je(skip_exec_old_insrt_lab);
+		a.popfq();
 		// 执行原指令
-		memcpy(&forward_page_temp[i], hook.old_instr_.data(), hook.old_instr_.size());
-		i += hook.old_instr_.size();
-		// jmp _next_exec_old_insrt
-		forward_page_temp[i++] = 0xeb;
-		forward_page_temp[i++] = 0x01;      // +1
+		for (size_t i_ = 0; i_ < hook.old_instr_.size(); ++i_)
+			a.db(hook.old_instr_[i_]);
+		a.jmp(next_exec_old_insrt_lab);
 
-		// _skip_exec_old_insrt:
-		forward_page_temp[i++] = 0x9d;      // popfd
-		// _next_exec_old_insrt:
+		a.bind(skip_exec_old_insrt_lab);
 
+		a.popfq();
 
+		a.bind(next_exec_old_insrt_lab);
 
-		// push rax     // 预留一个栈位置，存放jmp_addr
-		forward_page_temp[i++] = 0x50;
+		a.push(rax);					// 预留一个栈位置，存放jmp_addr
+		a.push(rax);
+		a.push(rcx);
+		a.push(rdx);
+		a.push(rdi);
+		a.push(r8);
+		a.push(r9);
+		a.push(r10);
+		a.push(r11);
 
-		forward_page_temp[i++] = 0x50;      // push rax
-		forward_page_temp[i++] = 0x51;      // push rcx
-		forward_page_temp[i++] = 0x52;      // push rdx
-		forward_page_temp[i++] = 0x57;      // push rdi
-
-		// push r8
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x50;
-		// push r9
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x51;
-		// push r10
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x52;
-		// push r11
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x53;
-            
-		i += MakeStackFrameStart(arch, &forward_page_temp[i], 0x20);
+		MakeStackFrameStart(a, 0x20);
 
 		// 恢复jmp_addr环境
 		// 从Tls中获取jmp_addr
-		i += MakeTlsGetValue(arch, &forward_page_temp[i], hook.tls_id_);
-
-		// mov qword ptr ss:[rsp+rdi+0x60], rax     // 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
-		forward_page_temp[i++] = 0x48;
-		forward_page_temp[i++] = 0x89;
-		forward_page_temp[i++] = 0x44;
-		forward_page_temp[i++] = 0x3c;
-		forward_page_temp[i++] = 0x60;
+		MakeTlsGetValue(a, hook.tls_id_);
+		a.mov(qword_ptr(rsp, rdi, 0, 0x60), rax);	// 刚刚预留的栈位置，放入jmp_addr，即下面ret返回的地址
 
 		// 即将退出
-		{
-			// 设置为0
-			// call TlsSetValue
-			forward_page_temp[i++] = 0x48;
-			forward_page_temp[i++] = 0xc7;
-			forward_page_temp[i++] = 0xc2;
-			*(uint32_t*)&forward_page_temp[i] = 0x0;
-			i += 4;
-			i += MakeTlsSetValue(arch, &forward_page_temp[i], hook.tls_id_);
-		}
-            
-		i += MakeStackFrameEnd(arch, &forward_page_temp[i], 0x20);
+		a.mov(rdx, 0);
+		MakeTlsSetValue(a, hook.tls_id_);
+		MakeStackFrameEnd(a, 0x20);
 
-		// pop r11
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x5b;
-		// pop r10
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x5a;
-		// pop r9
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x59;
-		// pop r8
-		forward_page_temp[i++] = 0x41;
-		forward_page_temp[i++] = 0x58;
+		a.pop(r11);
+		a.pop(r10);
+		a.pop(r9);
+		a.pop(r8);
+		a.pop(rdi);
+		a.pop(rdx);
+		a.pop(rcx);
+		a.pop(rax);
+		a.ret();
 
-		forward_page_temp[i++] = 0x5f;      // pop rdi
-		forward_page_temp[i++] = 0x5a;      // pop rdx
-		forward_page_temp[i++] = 0x59;      // pop rcx
-		forward_page_temp[i++] = 0x58;      // pop rax
-
-		// 转回去继续执行
-		forward_page_temp[i++] = 0xc3;        // ret
+		a.PackCodeTo(forward_page_temp, forward_page_size);
 	}
 
 	hook.process_->WriteMemory(hook.forward_page_, forward_page_temp, forward_page_size);
@@ -1262,11 +760,12 @@ std::optional<InlineHook> InlineHook::InstallEx(
 	// 为目标地址挂hook
 	hook.hook_addr_ = hook_addr;
 
-        
+
+	std::vector<uint8_t> jmp_instr(instr_size);
 	if (hook.process_->IsCurrent() &&
 		(
-			arch == Arch::kX86 && instr_size <= 8 || 
-			arch == Arch::kX64 && instr_size <= 16
+			(arch == Arch::kX86 && instr_size <= 8) ||
+			(arch == Arch::kX64 && instr_size <= 16)
 		)
 	) {
 		DWORD old_protect;
@@ -1275,6 +774,7 @@ std::optional<InlineHook> InlineHook::InstallEx(
 		}
 		// 通过原子指令进行hook，降低错误的概率
 		bool success = true;
+
 		if (arch == Arch::kX86) {
 			MakeJmp(arch, &jmp_instr, hook_addr, hook.forward_page_);
 			if (jmp_instr.size() < 8) {

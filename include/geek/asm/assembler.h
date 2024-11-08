@@ -41,9 +41,12 @@ public:
 	const Config& GetConfig() const;
 	Config& GetConfig();
 
-	asm_op::Label NewLabel() const;
-	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal) const;
-	Error Bind(const asm_op::Label& label) const;
+	asm_op::Label NewLabel();
+	asm_op::Label NewNamedLabel(std::string_view name, asm_op::Label::Type type = asm_op::Label::kGlobal);
+	/**
+	 * 类似指令使用，在当前位置绑定一个标签
+	 */
+	Error bind(const asm_op::Label& label);
 
 	size_t CodeSize() const;
 	const uint8_t* CodeBuffer() const;
@@ -51,7 +54,7 @@ public:
 	template<class Func>
 	auto PackToFunc() const;
 	std::vector<uint8_t> PackCode() const;
-	size_t CopyCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
+	size_t PackCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
 
 	_GEEK_ASM_INST_0X(cbw);                                             // ANY       [IMPLICIT] AX      <- Sign Extend AL
 	_GEEK_ASM_INST_0X(cdq);                                             // ANY       [IMPLICIT] EDX:EAX <- Sign Extend EAX
@@ -355,6 +358,52 @@ public:
 	Error dw(uint16_t x, size_t repeat_count = 1);
 	Error dd(uint32_t x, size_t repeat_count = 1);
 	Error dq(uint64_t x, size_t repeat_count = 1);
+
+	//! \}
+
+	//! \name Embed
+	//! \{
+
+	//! Embeds raw data into the \ref CodeBuffer.
+	Error Embed(const void* data, size_t data_size);
+	//! Embeds int8_t `value` repeated by `repeat_count`.
+	Error EmbedInt8(int8_t value, size_t repeat_count = 1);
+	//! Embeds uint8_t `value` repeated by `repeat_count`.
+	Error EmbedUInt8(uint8_t value, size_t repeat_count = 1);
+	//! Embeds int16_t `value` repeated by `repeat_count`.
+	Error EmbedInt16(int16_t value, size_t repeat_count = 1);
+	//! Embeds uint16_t `value` repeated by `repeat_count`.
+	Error EmbedUInt16(uint16_t value, size_t repeat_count = 1);
+	//! Embeds int32_t `value` repeated by `repeat_count`.
+	Error EmbedInt32(int32_t value, size_t repeat_count = 1);
+	//! Embeds uint32_t `value` repeated by `repeat_count`.
+	Error EmbedUInt32(uint32_t value, size_t repeat_count = 1);
+	//! Embeds int64_t `value` repeated by `repeat_count`.
+	Error EmbedInt64(int64_t value, size_t repeat_count = 1);
+	//! Embeds uint64_t `value` repeated by `repeat_count`.
+	Error EmbedUInt64(uint64_t value, size_t repeat_count = 1);
+	//! Embeds a floating point `value` repeated by `repeat_count`.
+	Error EmbedFloat(float value, size_t repeat_count = 1);
+	//! Embeds a floating point `value` repeated by `repeat_count`.
+	Error EmbedDouble(double value, size_t repeat_count = 1);
+
+	//! Embeds an absolute `label` address as data.
+	//!
+	//! The `data_size` is an optional argument that can be used to specify the size of the address data. If it's zero
+	//! (default) the address size is deduced from the target architecture (either 4 or 8 bytes).
+	Error EmbedLabel(const asm_op::Label& label, size_t data_size = 0);
+
+	//! Embeds a delta (distance) between the `label` and `base` calculating it as `label - base`. This function was
+	//! designed to make it easier to embed lookup tables where each index is a relative distance of two labels.
+	Error EmbedLabelDelta(const asm_op::Label& label, const asm_op::Label& base, size_t data_size = 0);
+
+	//! \}
+
+	//! \name Comment
+	//! \{
+
+	//! Emits a comment stored in `data` with an optional `size` parameter.
+	Error Comment(const char* data, size_t size = SIZE_MAX);
 
 private:
 	std::unique_ptr<void, FuncDeleter> PackToFuncImpl() const;
