@@ -7,10 +7,27 @@
 #include <geek/asm/assembler/asm_op.h>
 
 namespace geek {
+namespace internal {
+template <class T>
+struct FuncTrait {
+	static_assert(std::_Always_false<T>, "function only accepts function types as template arguments.");
+};
+template <class RetT, class... Args>
+struct FuncTrait<RetT(Args...)> {
+	using Ptr = RetT(*)(Args...);
+};
+}
+
 class Assembler {
 public:
 	struct Config {
 		bool assert_every_inst = true;
+	};
+
+	struct FuncDeleter {
+		FuncDeleter() noexcept = default;
+		FuncDeleter(const FuncDeleter&) noexcept = default;
+		void operator()(void* ptr) const;
 	};
 
 	enum ErrorCode : uint32_t;
@@ -31,8 +48,45 @@ public:
 	size_t CodeSize() const;
 	const uint8_t* CodeBuffer() const;
 
+	template<class Func>
+	auto PackToFunc() const;
 	std::vector<uint8_t> PackCode() const;
 	size_t CopyCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
+
+	_GEEK_ASM_INST_0X(cbw);                                             // ANY       [IMPLICIT] AX      <- Sign Extend AL
+	_GEEK_ASM_INST_0X(cdq);                                             // ANY       [IMPLICIT] EDX:EAX <- Sign Extend EAX
+	_GEEK_ASM_INST_0X(cdqe);                                           // X64       [IMPLICIT] RAX     <- Sign Extend EAX
+	_GEEK_ASM_INST_2X(cmpxchg, Gp, Gp);                             // I486      [IMPLICIT]
+	_GEEK_ASM_INST_2X(cmpxchg, Mem, Gp);                            // I486      [IMPLICIT]
+	_GEEK_ASM_INST_1X(cmpxchg16b, Mem);                          // CMPXCHG8B [IMPLICIT] m == RDX:RAX ? m <- RCX:RBX
+	_GEEK_ASM_INST_1X(cmpxchg8b, Mem);                            // CMPXCHG16B[IMPLICIT] m == EDX:EAX ? m <- ECX:EBX
+	_GEEK_ASM_INST_0X(cqo);                                             // X64       [IMPLICIT] RDX:RAX <- Sign Extend RAX
+	_GEEK_ASM_INST_0X(cwd);                                             // ANY       [IMPLICIT] DX:AX   <- Sign Extend AX
+	_GEEK_ASM_INST_0X(cwde);                                           // ANY       [IMPLICIT] EAX     <- Sign Extend AX
+	_GEEK_ASM_INST_1X(div, Gp);                                         // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
+	_GEEK_ASM_INST_1X(div, Mem);                                        // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
+	_GEEK_ASM_INST_1X(idiv, Gp);                                       // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
+	_GEEK_ASM_INST_1X(idiv, Mem);                                      // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
+	_GEEK_ASM_INST_1X(imul, Gp);                                       // ANY       [IMPLICIT] {AX <- AL * r8} {xAX:xDX <- xAX * r16|r32|r64}
+	_GEEK_ASM_INST_1X(imul, Mem);                                      // ANY       [IMPLICIT] {AX <- AL * m8} {xAX:xDX <- xAX * m16|m32|m64}
+	_GEEK_ASM_INST_0X(iret);                                           // ANY       [IMPLICIT]
+	_GEEK_ASM_INST_0X(iretd);                                         // ANY       [IMPLICIT]
+	_GEEK_ASM_INST_0X(iretq);                                         // X64       [IMPLICIT]
+	_GEEK_ASM_INST_1X(jecxz, Label);                                  // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_1X(jecxz, Imm);                                    // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_1X(loop, Label);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_1X(loop, Imm);                                      // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_1X(loope, Label);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_1X(loope, Imm);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_1X(loopne, Label);                                // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_1X(loopne, Imm);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_1X(mul, Gp);                                         // ANY       [IMPLICIT] {AX <- AL * r8} {xDX:xAX <- xAX * r16|r32|r64}
+	_GEEK_ASM_INST_1X(mul, Mem);                                        // ANY       [IMPLICIT] {AX <- AL * m8} {xDX:xAX <- xAX * m16|m32|m64}
+	_GEEK_ASM_INST_0X(ret);
+	_GEEK_ASM_INST_1X(ret, Imm);
+	_GEEK_ASM_INST_0X(retf);
+	_GEEK_ASM_INST_1X(retf, Imm);
+	_GEEK_ASM_INST_0X(xlatb);                                         // ANY       [IMPLICIT]
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY
@@ -302,8 +356,19 @@ public:
 	Error dd(uint32_t x, size_t repeat_count = 1);
 	Error dq(uint64_t x, size_t repeat_count = 1);
 
+private:
+	std::unique_ptr<void, FuncDeleter> PackToFuncImpl() const;
+
 	_GEEK_IMPL
 };
+
+template <class Func>
+auto Assembler::PackToFunc() const {
+	auto p = PackToFuncImpl();
+	auto ret = std::unique_ptr<Func, FuncDeleter>(reinterpret_cast<Func*>(p.get()));
+	p.release();
+	return ret;
+}
 
 class Assembler::Error {
 public:

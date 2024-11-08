@@ -13,35 +13,52 @@
 
 #define _GEEK_ASM_INST_1C(op, t0)	\
   _GEEK_ASM_INST_1X(op##a, t0);		\
-  _GEEK_ASM_INST_1X(op##ae, t0);	\
+  _GEEK_ASM_INST_1X(op##ae, t0);		\
   _GEEK_ASM_INST_1X(op##b, t0);		\
-  _GEEK_ASM_INST_1X(op##be, t0);	\
+  _GEEK_ASM_INST_1X(op##be, t0);		\
   _GEEK_ASM_INST_1X(op##c, t0);		\
   _GEEK_ASM_INST_1X(op##e, t0);		\
   _GEEK_ASM_INST_1X(op##g, t0);		\
-  _GEEK_ASM_INST_1X(op##ge, t0);	\
+  _GEEK_ASM_INST_1X(op##ge, t0);		\
   _GEEK_ASM_INST_1X(op##l, t0);		\
-  _GEEK_ASM_INST_1X(op##le, t0);	\
-  _GEEK_ASM_INST_1X(op##na, t0);	\
-  _GEEK_ASM_INST_1X(op##nae, t0);	\
-  _GEEK_ASM_INST_1X(op##nb, t0);	\
-  _GEEK_ASM_INST_1X(op##nbe, t0);	\
-  _GEEK_ASM_INST_1X(op##nc, t0);	\
-  _GEEK_ASM_INST_1X(op##ne, t0);	\
-  _GEEK_ASM_INST_1X(op##ng, t0);	\
-  _GEEK_ASM_INST_1X(op##nge, t0);	\
-  _GEEK_ASM_INST_1X(op##nl, t0);	\
-  _GEEK_ASM_INST_1X(op##nle, t0);	\
-  _GEEK_ASM_INST_1X(op##no, t0);	\
-  _GEEK_ASM_INST_1X(op##np, t0);	\
-  _GEEK_ASM_INST_1X(op##ns, t0);	\
-  _GEEK_ASM_INST_1X(op##nz, t0);	\
+  _GEEK_ASM_INST_1X(op##le, t0);		\
+  _GEEK_ASM_INST_1X(op##na, t0);		\
+  _GEEK_ASM_INST_1X(op##nae, t0);		\
+  _GEEK_ASM_INST_1X(op##nb, t0);		\
+  _GEEK_ASM_INST_1X(op##nbe, t0);		\
+  _GEEK_ASM_INST_1X(op##nc, t0);		\
+  _GEEK_ASM_INST_1X(op##ne, t0);		\
+  _GEEK_ASM_INST_1X(op##ng, t0);		\
+  _GEEK_ASM_INST_1X(op##nge, t0);		\
+  _GEEK_ASM_INST_1X(op##nl, t0);		\
+  _GEEK_ASM_INST_1X(op##nle, t0);		\
+  _GEEK_ASM_INST_1X(op##no, t0);		\
+  _GEEK_ASM_INST_1X(op##np, t0);		\
+  _GEEK_ASM_INST_1X(op##ns, t0);		\
+  _GEEK_ASM_INST_1X(op##nz, t0);		\
   _GEEK_ASM_INST_1X(op##o, t0);		\
   _GEEK_ASM_INST_1X(op##p, t0);		\
-  _GEEK_ASM_INST_1X(op##pe, t0);	\
-  _GEEK_ASM_INST_1X(op##po, t0);	\
+  _GEEK_ASM_INST_1X(op##pe, t0);		\
+  _GEEK_ASM_INST_1X(op##po, t0);		\
   _GEEK_ASM_INST_1X(op##s, t0);		\
   _GEEK_ASM_INST_1X(op##z, t0)		\
+
+#define _GEEK_ASM_MEM_PTR(op)                                                             \
+  Mem op(const geek::asm_op::Gp& base, int32_t offset = 0);		\
+  Mem op(const geek::asm_op::Gp& base, const geek::asm_op::Gp& index, uint32_t shift = 0, int32_t offset = 0);		\
+  Mem op(const geek::asm_op::Gp& base, const geek::asm_op::Vec& index, uint32_t shift = 0, int32_t offset = 0);		\
+  Mem op(const geek::asm_op::Label& base, int32_t offset = 0);		\
+  Mem op(const geek::asm_op::Label& base, const Gp& index, uint32_t shift = 0, int32_t offset = 0);		\
+  Mem op(const geek::asm_op::Rip& rip_, int32_t offset = 0);		\
+  Mem op(uint64_t base);		\
+  Mem op(uint64_t base, const geek::asm_op::Gp& index, uint32_t shift = 0);		\
+  Mem op(uint64_t base, const geek::asm_op::Vec& index, uint32_t shift = 0);		\
+  Mem op##_abs(uint64_t base);		\
+  Mem op##_abs(uint64_t base, const geek::asm_op::Gp& index, uint32_t shift = 0);		\
+  Mem op##_abs(uint64_t base, const geek::asm_op::Vec& index, uint32_t shift = 0);		\
+  Mem op##_rel(uint64_t base);		\
+  Mem op##_rel(uint64_t base, const geek::asm_op::Gp& index, uint32_t shift = 0);		\
+  Mem op##_rel(uint64_t base, const geek::asm_op::Vec& index, uint32_t shift = 0)
 
 namespace geek {
 namespace asm_op {
@@ -54,7 +71,7 @@ public:
 
 	template<class T, class = typename std::enable_if_t<IsConstexprConstructible<std::decay_t<T>>>>
 	constexpr Imm(const T& val) noexcept {
-		data_.u64 = uint64_t(val);
+		data_.u64 = uint64_t(val);		\
 		index_ = 0;
 	}
 
@@ -81,10 +98,10 @@ private:
 
 class Mem {
 public:
-	Mem();
-	~Mem();
+	Mem();		\
+	~Mem();		\
 
-	Mem(const Mem& right);
+	Mem(const Mem& right);		\
 	Mem(Mem&& right) noexcept;
 
 	_GEEK_PUB_IMPL
@@ -105,10 +122,10 @@ public:
 		kMaxValue = kExternal
 	};
 
-	Label();
-	~Label();
+	Label();		\
+	~Label();		\
 
-	Label(const Label& right);
+	Label(const Label& right);		\
 	Label(Label&& right) noexcept;
 
 	_GEEK_PUB_IMPL
@@ -376,8 +393,8 @@ enum class RegisterId : uint32_t {
 class Reg
 {
 public:
-	explicit Reg(RegisterId id);
-	~Reg();
+	explicit Reg(RegisterId id);		\
+	~Reg();		\
 
 	RegisterId id() const { return id_; }
 
@@ -392,28 +409,28 @@ public: \
 	explicit x(RegisterId id) : inherit(id) {} \
 };
 
-_GEEK_ASM_DEFINE_REG(Gp, Reg);
-_GEEK_ASM_DEFINE_REG(Vec, Reg);
-_GEEK_ASM_DEFINE_REG(Mm, Reg);
-_GEEK_ASM_DEFINE_REG(SReg, Reg);
-_GEEK_ASM_DEFINE_REG(KReg, Reg);
-_GEEK_ASM_DEFINE_REG(CReg, Reg);
-_GEEK_ASM_DEFINE_REG(DReg, Reg);
-_GEEK_ASM_DEFINE_REG(St, Reg);
-_GEEK_ASM_DEFINE_REG(Bnd, Reg);
-_GEEK_ASM_DEFINE_REG(Tmm, Reg);
-_GEEK_ASM_DEFINE_REG(Rip, Reg);
+_GEEK_ASM_DEFINE_REG(Gp, Reg);		\
+_GEEK_ASM_DEFINE_REG(Vec, Reg);		\
+_GEEK_ASM_DEFINE_REG(Mm, Reg);		\
+_GEEK_ASM_DEFINE_REG(SReg, Reg);		\
+_GEEK_ASM_DEFINE_REG(KReg, Reg);		\
+_GEEK_ASM_DEFINE_REG(CReg, Reg);		\
+_GEEK_ASM_DEFINE_REG(DReg, Reg);		\
+_GEEK_ASM_DEFINE_REG(St, Reg);		\
+_GEEK_ASM_DEFINE_REG(Bnd, Reg);		\
+_GEEK_ASM_DEFINE_REG(Tmm, Reg);		\
+_GEEK_ASM_DEFINE_REG(Rip, Reg);		\
 
-_GEEK_ASM_DEFINE_REG(Gpb, Gp);
-_GEEK_ASM_DEFINE_REG(GpbLo, Gpb);
-_GEEK_ASM_DEFINE_REG(GpbHi, Gpb);
-_GEEK_ASM_DEFINE_REG(Gpw, Gp);
-_GEEK_ASM_DEFINE_REG(Gpd, Gp);
-_GEEK_ASM_DEFINE_REG(Gpq, Gp);
+_GEEK_ASM_DEFINE_REG(Gpb, Gp);		\
+_GEEK_ASM_DEFINE_REG(GpbLo, Gpb);		\
+_GEEK_ASM_DEFINE_REG(GpbHi, Gpb);		\
+_GEEK_ASM_DEFINE_REG(Gpw, Gp);		\
+_GEEK_ASM_DEFINE_REG(Gpd, Gp);		\
+_GEEK_ASM_DEFINE_REG(Gpq, Gp);		\
 
-_GEEK_ASM_DEFINE_REG(Xmm, Vec);
-_GEEK_ASM_DEFINE_REG(Ymm, Vec);
-_GEEK_ASM_DEFINE_REG(Zmm, Vec);
+_GEEK_ASM_DEFINE_REG(Xmm, Vec);		\
+_GEEK_ASM_DEFINE_REG(Ymm, Vec);		\
+_GEEK_ASM_DEFINE_REG(Zmm, Vec);		\
 
 
 typedef Gp Gp_AL;

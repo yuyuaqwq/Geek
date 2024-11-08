@@ -7,8 +7,8 @@
 #include "asm/assembler/asm_op_defs_impl.h"
 #include "utils/debug.h"
 
-#define _GEEK_ASM_INST_MAKE_RET(e) \
-	Error err{ FromAsmJit(static_cast<asmjit::ErrorCode>(e)) }; \
+#define MAKE_RET(e) \
+	Error err{ FromAsmJit(static_cast<asmjit::ErrorCode>(impl_->assembler_.e)) }; \
 	if (impl_->config_.assert_every_inst) { \
 		GEEK_ASSERT(err.IsSuccess(), "Assembler make instruction failed:", err.msg()); \
 	} \
@@ -16,22 +16,22 @@
 
 #define _GEEK_ASM_INST_0X_IMPL(op)								\
 	_GEEK_ASM_INST_0X(Assembler::op) {							\
-		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op());		\
+		MAKE_RET(op());		\
 	}
 
 #define _GEEK_ASM_INST_1X_IMPL(op, t0)								\
 	_GEEK_ASM_INST_1X(Assembler::op, t0) {							\
-		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0)));\
+		MAKE_RET(op(ToAsmJit(o0)));\
 	}
 
 #define _GEEK_ASM_INST_2X_IMPL(op, t0, t1)											\
 	_GEEK_ASM_INST_2X(Assembler::op, t0, t1) {										\
-		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1)));	\
+		MAKE_RET(op(ToAsmJit(o0), ToAsmJit(o1)));	\
 	}
 
 #define _GEEK_ASM_INST_3X_IMPL(op, t0, t1, t2)													\
 	_GEEK_ASM_INST_3X(Assembler::op, t0, t1, t2) {												\
-		_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.op(ToAsmJit(o0), ToAsmJit(o1), ToAsmJit(o2)));\
+		MAKE_RET(op(ToAsmJit(o0), ToAsmJit(o1), ToAsmJit(o2)));\
 	}
 
 #define _GEEK_ASM_INST_1C_IMPL(op, t0)	\
@@ -75,6 +75,10 @@ asmjit::JitRuntime* Runtime() {
 }
 Assembler::~Assembler()
 {
+}
+
+void Assembler::FuncDeleter::operator()(void* ptr) const {
+	Runtime()->release(ptr);
 }
 
 Assembler::Assembler(Arch arch)
@@ -134,6 +138,13 @@ size_t Assembler::CopyCodeTo(uint8_t* ptr, size_t size) const {
 	return s;
 }
 
+std::unique_ptr<void, Assembler::FuncDeleter> Assembler::PackToFuncImpl() const
+{
+	void* func;
+	Runtime()->add(&func, &impl_->code_);
+	return std::unique_ptr<void, FuncDeleter>(func);
+}
+
 Assembler::Error::Error(ErrorCode code)
 	: code_(code)
 {
@@ -147,6 +158,42 @@ std::string Assembler::Error::msg() const
 bool Assembler::Error::IsSuccess() const {
 	return code() == kErrorOk;
 }
+
+_GEEK_ASM_INST_0X_IMPL(cbw)
+_GEEK_ASM_INST_0X_IMPL(cdq)
+_GEEK_ASM_INST_0X_IMPL(cdqe)
+_GEEK_ASM_INST_2X_IMPL(cmpxchg, Gp, Gp)
+_GEEK_ASM_INST_2X_IMPL(cmpxchg, Mem, Gp)
+_GEEK_ASM_INST_1X_IMPL(cmpxchg16b, Mem)
+_GEEK_ASM_INST_1X_IMPL(cmpxchg8b, Mem)
+_GEEK_ASM_INST_0X_IMPL(cqo)
+_GEEK_ASM_INST_0X_IMPL(cwd)
+_GEEK_ASM_INST_0X_IMPL(cwde)
+_GEEK_ASM_INST_1X_IMPL(div, Gp)
+_GEEK_ASM_INST_1X_IMPL(div, Mem)
+_GEEK_ASM_INST_1X_IMPL(idiv, Gp)
+_GEEK_ASM_INST_1X_IMPL(idiv, Mem)
+_GEEK_ASM_INST_1X_IMPL(imul, Gp)
+_GEEK_ASM_INST_1X_IMPL(imul, Mem)
+_GEEK_ASM_INST_0X_IMPL(iret)
+_GEEK_ASM_INST_0X_IMPL(iretd)
+_GEEK_ASM_INST_0X_IMPL(iretq)
+_GEEK_ASM_INST_1X_IMPL(jecxz, Label)
+_GEEK_ASM_INST_1X_IMPL(jecxz, Imm)
+_GEEK_ASM_INST_1X_IMPL(loop, Label)
+_GEEK_ASM_INST_1X_IMPL(loop, Imm)
+_GEEK_ASM_INST_1X_IMPL(loope, Label)
+_GEEK_ASM_INST_1X_IMPL(loope, Imm)
+_GEEK_ASM_INST_1X_IMPL(loopne, Label)
+_GEEK_ASM_INST_1X_IMPL(loopne, Imm)
+_GEEK_ASM_INST_1X_IMPL(mul, Gp)
+_GEEK_ASM_INST_1X_IMPL(mul, Mem)
+_GEEK_ASM_INST_0X_IMPL(ret)
+_GEEK_ASM_INST_1X_IMPL(ret, Imm)
+_GEEK_ASM_INST_0X_IMPL(retf)
+_GEEK_ASM_INST_1X_IMPL(retf, Imm)
+_GEEK_ASM_INST_0X_IMPL(xlatb)
+
 
 _GEEK_ASM_INST_2X_IMPL(adc, Gp, Gp)
 _GEEK_ASM_INST_2X_IMPL(adc, Gp, Mem)
@@ -412,18 +459,18 @@ _GEEK_ASM_INST_0X_IMPL(stc)
 _GEEK_ASM_INST_0X_IMPL(std)
 
 Assembler::Error Assembler::db(uint8_t x, size_t repeat_count) {
-	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.db(x, repeat_count));
+	MAKE_RET(db(x, repeat_count));
 }
 
 Assembler::Error Assembler::dw(uint16_t x, size_t repeat_count) {
-	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dw(x, repeat_count));
+	MAKE_RET(dw(x, repeat_count));
 }
 
 Assembler::Error Assembler::dd(uint32_t x, size_t repeat_count) {
-	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dd(x, repeat_count));
+	MAKE_RET(dd(x, repeat_count));
 }
 
 Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) {
-	_GEEK_ASM_INST_MAKE_RET(impl_->assembler_.dq(x, repeat_count));
+	MAKE_RET(dq(x, repeat_count));
 }
 }
