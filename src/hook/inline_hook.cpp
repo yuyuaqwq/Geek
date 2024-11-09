@@ -576,6 +576,8 @@ std::optional<InlineHook> InlineHook::InstallEx(
 		// 判断是否重入
 		a.cmp(rax, 0);
 		a.je(next_lab);
+
+		// 低1位为1，是重入，执行原指令并转回
 		MakeStackFrameEnd(a, 0x20);
 		a.popfq();
 		a.pop(r11);
@@ -591,7 +593,8 @@ std::optional<InlineHook> InlineHook::InstallEx(
 		for (size_t i_ = 0; i_ < hook.old_instr_.size(); ++i_)
 			a.db(hook.old_instr_[i_]);
 
-		a.jmp(hook_addr + instr_size);
+		a.jmp(ptr(rip));
+		a.dq(hook_addr + instr_size);
 
 		a.bind(next_lab);
 		a.mov(rdx, 1);

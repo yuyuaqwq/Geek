@@ -47,6 +47,7 @@ void emm1() {
 
 bool sbsb1(geek::InlineHook::HookContextX64* context) {
 	std::cout << "sbsb1" << std::endl;
+	emm1();
 	return true;
 }
 
@@ -62,49 +63,6 @@ bool sbsb2(geek::InlineHook::HookContextX64* context) {
 	context->jmp_addr = context->stack[0];
 	return false;
 }
-
-//#include <asmjit/asmjit.h>
-//#include <iostream>
-//
-//using namespace asmjit;
-//
-//int main() {
-//	// 创建 JitRuntime 运行时环境
-//	JitRuntime runtime;
-//
-//	// 创建 CodeHolder 并初始化
-//	CodeHolder code;
-//	code.init(runtime.environment());
-//
-//	// 创建汇编器并绑定到 CodeHolder
-//	x86::Assembler assembler(&code);
-//
-//	// 编写汇编代码：int add(int a, int b) { return a + b; }
-//	assembler.mov(x86::eax, x86::ecx);   // 将第一个参数 (ecx) 移动到 eax
-//	assembler.add(x86::eax, x86::edx);   // 将第二个参数 (edx) 加到 eax
-//	assembler.ret();                     // 返回
-//
-//	// 定义函数指针类型
-//	typedef int (*AddFunc)(int, int);
-//	AddFunc addFunc;
-//
-//	// 将生成的代码映射到可执行内存，并获取函数指针
-//	Error err = runtime.add(&addFunc, &code);
-//	if (err) {
-//		std::cerr << "Error: " << DebugUtils::errorAsString(err) << std::endl;
-//		return 1;
-//	}
-//
-//	// 调用生成的函数
-//	int result = addFunc(5, 3);
-//	std::cout << "Result of 5 + 3 = " << result << std::endl;  // 输出：Result of 5 + 3 = 8
-//
-//	// 释放 JIT 生成的函数
-//	runtime.release(addFunc);
-//
-//	return 0;
-//}
-
 
 class MyClass
 {
@@ -139,37 +97,6 @@ void jjjj() {
 int jjjbb = 123;
 
 int main() {
-	auto a = Assembler(Arch::kX64);								// 实例化一个汇编器
-	
-	auto label = a.NewLabel();									// 分配一个标签
-
-	// a.mov(eax, 1234);
-	// a.mov(asm_op::dword_ptr((intptr_t)&jjjbb), eax);
-
-	// a.jmp(asm_op::ptr(rip));
-	// a.dq((intptr_t)jjjj);
-
-
-	// a.jmp(asm_op::ptr(label));
-	// a.bind(label);
-	// a.dq((intptr_t)jjjj);
-	//
-	//
-	// auto c = a.PackCode();					// 打包硬编码
-	//
-	// auto f = a.PackToFunc<void()>();		// 打包成一个函数（unique_ptr）
-	// (*f)();
-	//
-	// // 实例化一个反汇编器，设为64位
-	// auto da = DisAssembler(DisAssembler::MachineMode::kLong64, DisAssembler::StackWidth::k64);
-	// da.SetCodeData(c);						// 设置硬编码缓冲区
-	// da.GetConfig().runtime_address = 0x1000;	// 设置指令初始地址
-	// // 遍历解析的指令
-	// for (auto& inst : da.DecodeInstructions()) {
-	// 	std::cout << inst.SimpleFormat() << std::endl;
-	// }
-
-
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
 	//
 	// hexData[0];
