@@ -125,17 +125,6 @@ const uint8_t* Assembler::CodeBuffer() const {
 	return impl_->code_.sectionById(0)->data();
 }
 
-std::vector<uint8_t> Assembler::PackCode() const
-{
-	std::vector<uint8_t> buf(CodeSize());
-	PackCodeTo(buf.data(), buf.size());
-	return buf;
-}
-
-size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size) const {
-	return PackCodeTo(ptr, reinterpret_cast<uint64_t>(ptr), size);
-}
-
 size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) const {
 	auto ec = impl_->code_.relocateToBase(base_address);
 	Error err = FromAsmJit(static_cast<asmjit::ErrorCode>(ec));
@@ -465,6 +454,64 @@ _GEEK_ASM_INST_0X_IMPL(cld)
 _GEEK_ASM_INST_0X_IMPL(cmc)
 _GEEK_ASM_INST_0X_IMPL(stc)
 _GEEK_ASM_INST_0X_IMPL(std)
+
+
+_GEEK_ASM_INST_2X_IMPL(arpl, Gp, Gp)
+_GEEK_ASM_INST_2X_IMPL(arpl, Mem, Gp)
+_GEEK_ASM_INST_0X_IMPL(cli)
+_GEEK_ASM_INST_0X_IMPL(getsec)
+_GEEK_ASM_INST_1X_IMPL(int_, Imm)
+_GEEK_ASM_INST_0X_IMPL(int3)
+_GEEK_ASM_INST_0X_IMPL(into)
+_GEEK_ASM_INST_2X_IMPL(lar, Gp, Gp)
+_GEEK_ASM_INST_2X_IMPL(lar, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(lds, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(les, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(lfs, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(lgs, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(lsl, Gp, Gp)
+_GEEK_ASM_INST_2X_IMPL(lsl, Gp, Mem)
+_GEEK_ASM_INST_2X_IMPL(lss, Gp, Mem)
+_GEEK_ASM_INST_0X_IMPL(pause)
+_GEEK_ASM_INST_0X_IMPL(rsm)
+_GEEK_ASM_INST_1X_IMPL(sgdt, Mem)
+_GEEK_ASM_INST_1X_IMPL(sidt, Mem)
+_GEEK_ASM_INST_1X_IMPL(sldt, Gp)
+_GEEK_ASM_INST_1X_IMPL(sldt, Mem)
+_GEEK_ASM_INST_1X_IMPL(smsw, Gp)
+_GEEK_ASM_INST_1X_IMPL(smsw, Mem)
+_GEEK_ASM_INST_0X_IMPL(sti)
+_GEEK_ASM_INST_1X_IMPL(str, Gp)
+_GEEK_ASM_INST_1X_IMPL(str, Mem)
+_GEEK_ASM_INST_1X_IMPL(verr, Gp)
+_GEEK_ASM_INST_1X_IMPL(verr, Mem)
+_GEEK_ASM_INST_1X_IMPL(verw, Gp)
+_GEEK_ASM_INST_1X_IMPL(verw, Mem)
+
+//! \name Core Privileged Instructions
+//! \{
+
+_GEEK_ASM_INST_0X_IMPL(clts)
+_GEEK_ASM_INST_0X_IMPL(hlt)
+_GEEK_ASM_INST_0X_IMPL(invd)
+_GEEK_ASM_INST_1X_IMPL(invlpg, Mem)
+_GEEK_ASM_INST_2X_IMPL(invpcid, Gp, Mem)
+_GEEK_ASM_INST_1X_IMPL(lgdt, Mem)
+_GEEK_ASM_INST_1X_IMPL(lidt, Mem)
+_GEEK_ASM_INST_1X_IMPL(lldt, Gp)
+_GEEK_ASM_INST_1X_IMPL(lldt, Mem)
+_GEEK_ASM_INST_1X_IMPL(lmsw, Gp)
+_GEEK_ASM_INST_1X_IMPL(lmsw, Mem)
+_GEEK_ASM_INST_1X_IMPL(ltr, Gp)
+_GEEK_ASM_INST_1X_IMPL(ltr, Mem)
+_GEEK_ASM_INST_3X_IMPL(rdmsr, Gp_EDX, Gp_EAX, Gp_ECX)
+_GEEK_ASM_INST_3X_IMPL(rdpmc, Gp_EDX, Gp_EAX, Gp_ECX)
+_GEEK_ASM_INST_0X_IMPL(swapgs)
+_GEEK_ASM_INST_0X_IMPL(wbinvd)
+_GEEK_ASM_INST_0X_IMPL(wbnoinvd)
+_GEEK_ASM_INST_3X_IMPL(wrmsr, Gp_EDX, Gp_EAX, Gp_ECX)
+_GEEK_ASM_INST_3X_IMPL(xsetbv, Gp_EDX, Gp_EAX, Gp_ECX)
+
 
 Assembler::Error Assembler::db(uint8_t x, size_t repeat_count) {
 	MAKE_RET(db(x, repeat_count));

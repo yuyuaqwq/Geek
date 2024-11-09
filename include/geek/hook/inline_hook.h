@@ -113,23 +113,8 @@ public:
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000
     );
-    static std::optional<InlineHook> InstallX86Ex(
-        const Process* proc,
-        uint32_t hook_addr,
-        HookCallbackX86 callback,
-        size_t instr_size = 0,
-        bool save_volatile_register = true,
-        uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX64Ex(
-        const Process* proc,
-        uint64_t hook_addr,
-        HookCallbackX64 callback,
-        size_t instr_size = 0,
-        bool save_volatile_register = true,
-        uint64_t forward_page_size = 0x1000);
-
-    static std::optional<InlineHook> InstallX86(
+    static std::optional<InlineHook> Install(
         const Process* proc,
         uint32_t hook_addr,
         std::function<bool(HookContextX86* ctx)>&& callback,
@@ -137,7 +122,7 @@ public:
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX64(
+    static std::optional<InlineHook> Install(
         const Process* proc,
         uint64_t hook_addr,
         std::function<bool(HookContextX64* ctx)>&& callback,
@@ -145,14 +130,14 @@ public:
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX86(
+    static std::optional<InlineHook> Install(
         uint32_t hook_addr,
         std::function<bool(HookContextX86* ctx)>&& callback,
         size_t instr_size = 0,
         bool save_volatile_register = true,
         uint64_t forward_page_size = 0x1000);
 
-    static std::optional<InlineHook> InstallX64(
+    static std::optional<InlineHook> Install(
         uint64_t hook_addr,
         std::function<bool(HookContextX64* ctx)>&& callback,
         size_t instr_size = 0,

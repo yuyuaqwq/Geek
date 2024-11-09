@@ -52,45 +52,8 @@ public:
 	const uint8_t* CodeBuffer() const;
 
 	template<class Func>
-	auto PackToFunc() const;
-	std::vector<uint8_t> PackCode() const;
-	size_t PackCodeTo(uint8_t* ptr, size_t size) const;
+	std::unique_ptr<Func, FuncDeleter> PackCodeAsFunctor() const;
 	size_t PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) const;
-
-	_GEEK_ASM_INST_0X(cbw);                                             // ANY       [IMPLICIT] AX      <- Sign Extend AL
-	_GEEK_ASM_INST_0X(cdq);                                             // ANY       [IMPLICIT] EDX:EAX <- Sign Extend EAX
-	_GEEK_ASM_INST_0X(cdqe);                                           // X64       [IMPLICIT] RAX     <- Sign Extend EAX
-	_GEEK_ASM_INST_2X(cmpxchg, Gp, Gp);                             // I486      [IMPLICIT]
-	_GEEK_ASM_INST_2X(cmpxchg, Mem, Gp);                            // I486      [IMPLICIT]
-	_GEEK_ASM_INST_1X(cmpxchg16b, Mem);                          // CMPXCHG8B [IMPLICIT] m == RDX:RAX ? m <- RCX:RBX
-	_GEEK_ASM_INST_1X(cmpxchg8b, Mem);                            // CMPXCHG16B[IMPLICIT] m == EDX:EAX ? m <- ECX:EBX
-	_GEEK_ASM_INST_0X(cqo);                                             // X64       [IMPLICIT] RDX:RAX <- Sign Extend RAX
-	_GEEK_ASM_INST_0X(cwd);                                             // ANY       [IMPLICIT] DX:AX   <- Sign Extend AX
-	_GEEK_ASM_INST_0X(cwde);                                           // ANY       [IMPLICIT] EAX     <- Sign Extend AX
-	_GEEK_ASM_INST_1X(div, Gp);                                         // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
-	_GEEK_ASM_INST_1X(div, Mem);                                        // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
-	_GEEK_ASM_INST_1X(idiv, Gp);                                       // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
-	_GEEK_ASM_INST_1X(idiv, Mem);                                      // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
-	_GEEK_ASM_INST_1X(imul, Gp);                                       // ANY       [IMPLICIT] {AX <- AL * r8} {xAX:xDX <- xAX * r16|r32|r64}
-	_GEEK_ASM_INST_1X(imul, Mem);                                      // ANY       [IMPLICIT] {AX <- AL * m8} {xAX:xDX <- xAX * m16|m32|m64}
-	_GEEK_ASM_INST_0X(iret);                                           // ANY       [IMPLICIT]
-	_GEEK_ASM_INST_0X(iretd);                                         // ANY       [IMPLICIT]
-	_GEEK_ASM_INST_0X(iretq);                                         // X64       [IMPLICIT]
-	_GEEK_ASM_INST_1X(jecxz, Label);                                  // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
-	_GEEK_ASM_INST_1X(jecxz, Imm);                                    // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
-	_GEEK_ASM_INST_1X(loop, Label);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
-	_GEEK_ASM_INST_1X(loop, Imm);                                      // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
-	_GEEK_ASM_INST_1X(loope, Label);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
-	_GEEK_ASM_INST_1X(loope, Imm);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
-	_GEEK_ASM_INST_1X(loopne, Label);                                // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
-	_GEEK_ASM_INST_1X(loopne, Imm);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
-	_GEEK_ASM_INST_1X(mul, Gp);                                         // ANY       [IMPLICIT] {AX <- AL * r8} {xDX:xAX <- xAX * r16|r32|r64}
-	_GEEK_ASM_INST_1X(mul, Mem);                                        // ANY       [IMPLICIT] {AX <- AL * m8} {xDX:xAX <- xAX * m16|m32|m64}
-	_GEEK_ASM_INST_0X(ret);
-	_GEEK_ASM_INST_1X(ret, Imm);
-	_GEEK_ASM_INST_0X(retf);
-	_GEEK_ASM_INST_1X(retf, Imm);
-	_GEEK_ASM_INST_0X(xlatb);                                         // ANY       [IMPLICIT]
 
 	_GEEK_ASM_INST_2X(adc, Gp, Gp);                                     // ANY
 	_GEEK_ASM_INST_2X(adc, Gp, Mem);                                    // ANY
@@ -354,6 +317,101 @@ public:
 	_GEEK_ASM_INST_0X(cmc);                                             // ANY
 	_GEEK_ASM_INST_0X(stc);                                             // ANY
 	_GEEK_ASM_INST_0X(std);                                             // ANY
+	//! \name Other User-Mode Instructions
+//! \{
+
+	_GEEK_ASM_INST_2X(arpl, Gp, Gp);                                   // X86
+	_GEEK_ASM_INST_2X(arpl, Mem, Gp);                                  // X86
+	_GEEK_ASM_INST_0X(cli);                                             // ANY
+	_GEEK_ASM_INST_0X(getsec);                                       // SMX
+	_GEEK_ASM_INST_1X(int_, Imm);                                       // ANY
+	_GEEK_ASM_INST_0X(int3);                                           // ANY
+	_GEEK_ASM_INST_0X(into);                                           // ANY
+	_GEEK_ASM_INST_2X(lar, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(lar, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(lds, Gp, Mem);                                    // X86
+	_GEEK_ASM_INST_2X(les, Gp, Mem);                                    // X86
+	_GEEK_ASM_INST_2X(lfs, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(lgs, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(lsl, Gp, Gp);                                     // ANY
+	_GEEK_ASM_INST_2X(lsl, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_2X(lss, Gp, Mem);                                    // ANY
+	_GEEK_ASM_INST_0X(pause);                                         // SSE2
+	_GEEK_ASM_INST_0X(rsm);                                             // X86
+	_GEEK_ASM_INST_1X(sgdt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(sidt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(sldt, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(sldt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(smsw, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(smsw, Mem);                                      // ANY
+	_GEEK_ASM_INST_0X(sti);                                             // ANY
+	_GEEK_ASM_INST_1X(str, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(str, Mem);                                        // ANY
+	_GEEK_ASM_INST_1X(verr, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(verr, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(verw, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(verw, Mem);                                      // ANY
+
+	//! \name Core Privileged Instructions
+	//! \{
+
+	_GEEK_ASM_INST_0X(clts);                                           // ANY
+	_GEEK_ASM_INST_0X(hlt);                                             // ANY
+	_GEEK_ASM_INST_0X(invd);                                           // ANY
+	_GEEK_ASM_INST_1X(invlpg, Mem);                                  // ANY
+	_GEEK_ASM_INST_2X(invpcid, Gp, Mem);                            // ANY
+	_GEEK_ASM_INST_1X(lgdt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(lidt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(lldt, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(lldt, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(lmsw, Gp);                                       // ANY
+	_GEEK_ASM_INST_1X(lmsw, Mem);                                      // ANY
+	_GEEK_ASM_INST_1X(ltr, Gp);                                         // ANY
+	_GEEK_ASM_INST_1X(ltr, Mem);                                        // ANY
+	_GEEK_ASM_INST_3X(rdmsr, Gp_EDX, Gp_EAX, Gp_ECX);                 // MSR       [EXPLICIT] RDX:EAX <- MSR[ECX]
+	_GEEK_ASM_INST_3X(rdpmc, Gp_EDX, Gp_EAX, Gp_ECX);                 // ANY       [EXPLICIT] RDX:EAX <- PMC[ECX]
+	_GEEK_ASM_INST_0X(swapgs);                                       // X64
+	_GEEK_ASM_INST_0X(wbinvd);                                       // ANY
+	_GEEK_ASM_INST_0X(wbnoinvd);                                   // WBNOINVD
+	_GEEK_ASM_INST_3X(wrmsr, Gp_EDX, Gp_EAX, Gp_ECX);                 // MSR       [EXPLICIT] RDX:EAX  -> MSR[ECX]
+	_GEEK_ASM_INST_3X(xsetbv, Gp_EDX, Gp_EAX, Gp_ECX);               // XSAVE     [EXPLICIT] XCR[ECX] <- EDX:EAX
+
+
+	_GEEK_ASM_INST_0X(cbw);                                             // ANY       [IMPLICIT] AX      <- Sign Extend AL
+	_GEEK_ASM_INST_0X(cdq);                                             // ANY       [IMPLICIT] EDX:EAX <- Sign Extend EAX
+	_GEEK_ASM_INST_0X(cdqe);                                           // X64       [IMPLICIT] RAX     <- Sign Extend EAX
+	_GEEK_ASM_INST_2X(cmpxchg, Gp, Gp);                             // I486      [IMPLICIT]
+	_GEEK_ASM_INST_2X(cmpxchg, Mem, Gp);                            // I486      [IMPLICIT]
+	_GEEK_ASM_INST_1X(cmpxchg16b, Mem);                          // CMPXCHG8B [IMPLICIT] m == RDX:RAX ? m <- RCX:RBX
+	_GEEK_ASM_INST_1X(cmpxchg8b, Mem);                            // CMPXCHG16B[IMPLICIT] m == EDX:EAX ? m <- ECX:EBX
+	_GEEK_ASM_INST_0X(cqo);                                             // X64       [IMPLICIT] RDX:RAX <- Sign Extend RAX
+	_GEEK_ASM_INST_0X(cwd);                                             // ANY       [IMPLICIT] DX:AX   <- Sign Extend AX
+	_GEEK_ASM_INST_0X(cwde);                                           // ANY       [IMPLICIT] EAX     <- Sign Extend AX
+	_GEEK_ASM_INST_1X(div, Gp);                                         // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
+	_GEEK_ASM_INST_1X(div, Mem);                                        // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
+	_GEEK_ASM_INST_1X(idiv, Gp);                                       // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / r8} {xDX[Rem]:xAX[Quot] <- DX:AX / r16|r32|r64}
+	_GEEK_ASM_INST_1X(idiv, Mem);                                      // ANY       [IMPLICIT] {AH[Rem]: AL[Quot] <- AX / m8} {xDX[Rem]:xAX[Quot] <- DX:AX / m16|m32|m64}
+	_GEEK_ASM_INST_1X(imul, Gp);                                       // ANY       [IMPLICIT] {AX <- AL * r8} {xAX:xDX <- xAX * r16|r32|r64}
+	_GEEK_ASM_INST_1X(imul, Mem);                                      // ANY       [IMPLICIT] {AX <- AL * m8} {xAX:xDX <- xAX * m16|m32|m64}
+	_GEEK_ASM_INST_0X(iret);                                           // ANY       [IMPLICIT]
+	_GEEK_ASM_INST_0X(iretd);                                         // ANY       [IMPLICIT]
+	_GEEK_ASM_INST_0X(iretq);                                         // X64       [IMPLICIT]
+	_GEEK_ASM_INST_1X(jecxz, Label);                                  // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_1X(jecxz, Imm);                                    // ANY       [IMPLICIT] Short jump if CX/ECX/RCX is zero.
+	_GEEK_ASM_INST_1X(loop, Label);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_1X(loop, Imm);                                      // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0.
+	_GEEK_ASM_INST_1X(loope, Label);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_1X(loope, Imm);                                    // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 1.
+	_GEEK_ASM_INST_1X(loopne, Label);                                // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_1X(loopne, Imm);                                  // ANY       [IMPLICIT] Decrement xCX; short jump if xCX != 0 && ZF == 0.
+	_GEEK_ASM_INST_1X(mul, Gp);                                         // ANY       [IMPLICIT] {AX <- AL * r8} {xDX:xAX <- xAX * r16|r32|r64}
+	_GEEK_ASM_INST_1X(mul, Mem);                                        // ANY       [IMPLICIT] {AX <- AL * m8} {xDX:xAX <- xAX * m16|m32|m64}
+	_GEEK_ASM_INST_0X(ret);
+	_GEEK_ASM_INST_1X(ret, Imm);
+	_GEEK_ASM_INST_0X(retf);
+	_GEEK_ASM_INST_1X(retf, Imm);
+	_GEEK_ASM_INST_0X(xlatb);                                         // ANY       [IMPLICIT]
+
 
 	Error db(uint8_t x, size_t repeat_count = 1);
 	Error dw(uint16_t x, size_t repeat_count = 1);
@@ -413,7 +471,7 @@ private:
 };
 
 template <class Func>
-auto Assembler::PackToFunc() const {
+std::unique_ptr<Func, Assembler::FuncDeleter> Assembler::PackCodeAsFunctor() const {
 	auto p = PackToFuncImpl();
 	auto ret = std::unique_ptr<Func, FuncDeleter>(reinterpret_cast<Func*>(p.get()));
 	p.release();

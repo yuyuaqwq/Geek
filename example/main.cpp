@@ -52,17 +52,17 @@ bool sbsb1(geek::InlineHook::HookContextX64* context) {
 }
 
 
-// 接管hook
-void emm2() {
-	std::cout << "emm2" << std::endl;
-}
-
-bool sbsb2(geek::InlineHook::HookContextX64* context) {
-	std::cout << "sbsb2" << std::endl;
-	context->rsp += 4;
-	context->jmp_addr = context->stack[0];
-	return false;
-}
+// // 接管hook
+// void emm2() {
+// 	std::cout << "emm2" << std::endl;
+// }
+//
+// bool sbsb2(geek::InlineHook::HookContextX64* context) {
+// 	std::cout << "sbsb2" << std::endl;
+// 	context->rsp += 8;
+// 	context->jmp_addr = context->stack[0];
+// 	return false;
+// }
 
 class MyClass
 {
@@ -118,8 +118,12 @@ int main() {
 	// }
 
 	emm1();
-	InlineHook::InstallX64((size_t)emm1, sbsb1);
+	InlineHook::Install((size_t)emm1, sbsb1);
 	emm1();
+
+	// emm2();
+	// InlineHook::InstallX64((size_t)emm2, sbsb2);
+	// emm2();
 }
 
 // auto dir = geek::File::GetAppDirectory();
