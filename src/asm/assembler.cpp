@@ -133,6 +133,14 @@ std::vector<uint8_t> Assembler::PackCode() const
 }
 
 size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size) const {
+	return PackCodeTo(ptr, reinterpret_cast<uint64_t>(ptr), size);
+}
+
+size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) const {
+	auto ec = impl_->code_.relocateToBase(base_address);
+	Error err = FromAsmJit(static_cast<asmjit::ErrorCode>(ec));
+	GEEK_ASSERT(err.IsSuccess(), "Assembler relocate code to base failed:", err.msg());
+
 	auto s = std::min(size, CodeSize());
 	memcpy(ptr, CodeBuffer(), s);
 	return s;

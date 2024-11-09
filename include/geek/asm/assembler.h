@@ -54,7 +54,8 @@ public:
 	template<class Func>
 	auto PackToFunc() const;
 	std::vector<uint8_t> PackCode() const;
-	size_t PackCodeTo(uint8_t* ptr, size_t size = static_cast<size_t>(-1)) const;
+	size_t PackCodeTo(uint8_t* ptr, size_t size) const;
+	size_t PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) const;
 
 	_GEEK_ASM_INST_0X(cbw);                                             // ANY       [IMPLICIT] AX      <- Sign Extend AL
 	_GEEK_ASM_INST_0X(cdq);                                             // ANY       [IMPLICIT] EDX:EAX <- Sign Extend EAX

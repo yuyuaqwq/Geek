@@ -97,6 +97,15 @@ void jjjj() {
 int jjjbb = 123;
 
 int main() {
+	// auto a = Assembler(Arch::kX86);
+	// auto l = a.NewLabel();
+	// a.je(l);
+	// a.jmp(emm1);
+	// a.bind(l);
+	//
+	// auto f = a.PackToFunc<void()>();
+	// (*f)();
+
 	// auto m = geek::ThisProc().Modules().FindByModuleName(L"example.exe");
 	//
 	// hexData[0];
