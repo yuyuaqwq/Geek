@@ -529,7 +529,49 @@ Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) {
 	MAKE_RET(dq(x, repeat_count));
 }
 
+Assembler::Error Assembler::Embed(const void* data, size_t data_size) {
+	MAKE_RET(embed(data, data_size));
+}
+
+Assembler::Error Assembler::EmbedInt8(int8_t value, size_t repeat_count) {
+	MAKE_RET(embedInt8(value, repeat_count));
+}
+
+Assembler::Error Assembler::EmbedUInt8(uint8_t value, size_t repeat_count) {
+	MAKE_RET(embedUInt8(value, repeat_count));
+}
+
+Assembler::Error Assembler::EmbedInt16(int16_t value, size_t repeat_count) {
+	MAKE_RET(embedInt16(value, repeat_count));
+}
+Assembler::Error Assembler::EmbedUInt16(uint16_t value, size_t repeat_count) {
+	MAKE_RET(embedUInt16(value, repeat_count));
+}
+Assembler::Error Assembler::EmbedInt32(int32_t value, size_t repeat_count) {
+	MAKE_RET(embedInt32(value, repeat_count));
+}
+
 Assembler::Error Assembler::EmbedUInt32(uint32_t value, size_t repeat_count) {
 	MAKE_RET(embedUInt32(value, repeat_count));
+}
+
+Assembler::Error Assembler::EmbedInt64(int64_t value, size_t repeat_count) {
+	MAKE_RET(embedInt64(value, repeat_count));
+}
+
+Assembler::Error Assembler::EmbedUInt64(uint64_t value, size_t repeat_count) {
+	MAKE_RET(embedUInt64(value, repeat_count));
+}
+Assembler::Error Assembler::EmbedFloat(float value, size_t repeat_count) {
+	MAKE_RET(embedFloat(value, repeat_count));
+}
+Assembler::Error Assembler::EmbedDouble(double value, size_t repeat_count) {
+	MAKE_RET(embedDouble(value, repeat_count));
+}
+Assembler::Error Assembler::EmbedLabel(const asm_op::Label& label, size_t data_size) {
+	MAKE_RET(embedLabel(ToAsmJit(label), data_size));
+}
+Assembler::Error Assembler::EmbedLabelDelta(const asm_op::Label& label, const asm_op::Label& base, size_t data_size) {
+	MAKE_RET(embedLabelDelta(ToAsmJit(label), ToAsmJit(base), data_size));
 }
 }

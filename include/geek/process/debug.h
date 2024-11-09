@@ -1,6 +1,4 @@
-#ifndef GEEK_PROCESS_DEBUG_H_
-#define GEEK_PROCESS_DEBUG_H_
-
+#pragma once
 #include <functional>
 #include <unordered_map>
 
@@ -117,5 +115,3 @@ private:
 };
 
 } // geek
-
-#endif // GEEK_PROCESS_PROCESS_INFO_H_

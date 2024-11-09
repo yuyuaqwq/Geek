@@ -1,6 +1,4 @@
-#ifndef GEEK_HOOK_PAGE_HOOK_H_
-#define GEEK_HOOK_PAGE_HOOK_H_
-
+#pragma once
 #include <type_traits>
 #include <unordered_map>
 
@@ -56,5 +54,3 @@ private:
 };
 
 } // namespace PageHook
-
-#endif // GEEK_HOOK_PAGE_HOOK_H_

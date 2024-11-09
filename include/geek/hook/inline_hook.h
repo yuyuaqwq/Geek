@@ -1,6 +1,4 @@
-#ifndef GEEK_HOOK_INLINE_HOOK_H_
-#define GEEK_HOOK_INLINE_HOOK_H_
-
+#pragma once
 #include <Windows.h>
 
 #include <vector>
@@ -163,5 +161,3 @@ private:
 };
 
 } // namespace geek
-
-#endif // GEEK_HOOK_INLINE_HOOK_H_

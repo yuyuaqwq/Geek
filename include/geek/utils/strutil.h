@@ -1,6 +1,4 @@
-#ifndef GEEK_UTILS_CONVERTER_H_
-#define GEEK_UTILS_CONVERTER_H_
-
+#pragma once
 #include <sstream>
 #include <vector>
 
@@ -46,5 +44,3 @@ public:
 };
 
 } // namespace geek
-
-#endif // GEEK_UTILS_CONVERTER_H_

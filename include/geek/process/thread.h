@@ -1,6 +1,4 @@
-#ifndef GEEK_THREAD_THREAD_HPP_
-#define GEEK_THREAD_THREAD_HPP_
-
+#pragma once
 #include <string>
 #include <vector>
 #include <optional>
@@ -32,5 +30,3 @@ private:
 
 
 } // namespace geek
-
-#endif // GEEK_THREAD_THREAD_HPP_

@@ -1,6 +1,4 @@
-#ifndef GEEK_PE_IMAGE_HPP_
-#define GEEK_PE_IMAGE_HPP_
-
+#pragma once
 #include <string>
 #include <vector>
 #include <optional>
@@ -73,5 +71,3 @@ private:
 };
 
 } // namespace geek
-
-#endif // GEEK_PE_IMAGE_HPP_

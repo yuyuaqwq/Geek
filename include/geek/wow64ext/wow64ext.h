@@ -1,6 +1,4 @@
-#ifndef GEEK_Wow64EXT_Wow64EXT_H_
-#define GEEK_Wow64EXT_Wow64EXT_H_
-
+#pragma once
 #include <memory>
 
 #include <Windows.h>
@@ -49,5 +47,3 @@ private:
 };
 
 }
-
-#endif // GEEK_Wow64EXT_Wow64EXT_H_

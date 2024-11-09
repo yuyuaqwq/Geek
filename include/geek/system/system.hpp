@@ -1,18 +1,12 @@
-#ifndef GEEK_SYSTEM_SYSTEM_H_
-#define GEEK_SYSTEM_SYSTEM_H_
-
+#pragma once
 #include <string>
 #include <vector>
 
 #include <Windows.h>
 
-#include <Geek/file/file.hpp>
+#include <geek/file/file.hpp>
 
-#ifndef GEEK_STD
-#define GEEK_STD std::
-#endif // GEEK_STD
-
-namespace Geek {
+namespace geek {
 
 class System {
 public:
@@ -27,5 +21,3 @@ public:
 };
 
 } // namespace Geek
-
-#endif // GEEK_SYSTEM_SYSTEM_H_

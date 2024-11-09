@@ -1,6 +1,4 @@
-#ifndef GEEK_HANDLE_HANDLE_H_
-#define GEEK_HANDLE_HANDLE_H_
-
+#pragma once
 #include <Windows.h>
 
 namespace geek {
@@ -32,5 +30,3 @@ private:
 };
 
 } // namespace geek
-
-#endif // GEEK_HANDLE_HANDLE_H_

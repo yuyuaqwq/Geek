@@ -1,6 +1,4 @@
-#ifndef GEEK_PROCESS_MODULE_INFO_H_
-#define GEEK_PROCESS_MODULE_INFO_H_
-
+#pragma once
 #include <optional>
 #include <string>
 
@@ -75,5 +73,3 @@ private:
     mutable std::optional<PEB_LDR_DATA64> ldr64_;
 };
 };
-
-#endif // GEEK_PROCESS_MODULE_INFO_H_

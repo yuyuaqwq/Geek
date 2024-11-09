@@ -1,6 +1,4 @@
-#ifndef GEEK_PROCESS_NTINC_H_
-#define GEEK_PROCESS_NTINC_H_
-
+#pragma once
 #define NT_SUCCESS(x) ((x) >= 0)
 #define ProcessBasicInformation 0
 
@@ -59,6 +57,3 @@ typedef struct _PROCESS_BASIC_INFORMATION64 {
 } PROCESS_BASIC_INFORMATION64;
 
 //#undef NTSTATUS
-
-
-#endif // GEEK_PROCESS_NTINC_H_
