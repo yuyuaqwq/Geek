@@ -537,4 +537,8 @@ Assembler::Error Assembler::EmbedLabel(const asm_op::Label& label, size_t data_s
 Assembler::Error Assembler::EmbedLabelDelta(const asm_op::Label& label, const asm_op::Label& base, size_t data_size) {
 	MAKE_RET(embedLabelDelta(ToAsmJit(label), ToAsmJit(base), data_size));
 }
+
+Assembler::Error Assembler::Comment(const char* data, size_t size) {
+	MAKE_RET(comment(data, size));
+}
 }
