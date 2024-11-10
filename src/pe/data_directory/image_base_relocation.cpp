@@ -1,6 +1,7 @@
-﻿#include <cassert>
-#include <geek/pe/data_directory/image_base_relocation.h>
+﻿#include <geek/pe/data_directory/image_base_relocation.h>
 #include <geek/pe/image.h>
+
+#include "utils/debug.h"
 
 namespace geek {
 ImageBaseRelocationList::ImageBaseRelocationList(Image* image)
@@ -17,7 +18,7 @@ ImageBaseRelocationList::ImageBaseRelocationList(Image* image)
 
 	while (end_raw_->VirtualAddress != 0)
 	{
-		assert(size_ < 256);
+		GEEK_ASSERT_X(size_ < 256);
 		end_raw_ = reinterpret_cast<IMAGE_BASE_RELOCATION*>(reinterpret_cast<char*>(begin_raw_) + begin_raw_->SizeOfBlock);
 		++size_;
 	}
@@ -114,7 +115,7 @@ size_t ImageBaseRelocationFieldList::size() const
 
 ImageBaseRelocationFieldListNode ImageBaseRelocationFieldList::operator[](size_t index) const
 {
-	assert(index < size());
+	GEEK_ASSERT_X(index < size());
 	return { const_cast<ImageBaseRelocationFieldList*>(this), RawFields() + index };
 }
 

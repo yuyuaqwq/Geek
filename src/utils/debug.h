@@ -1,5 +1,6 @@
 #pragma once
 #include <geek/utils/strutil.h>
+#include <geek/global.h>
 
 namespace geek {
 void DebugOutput(std::string_view str) noexcept;
@@ -20,13 +21,15 @@ std::wstring WMsgOfThrow(std::wstring_view file, std::wstring_view func, int lin
 }
 }
 
+#if defined(GEEK_BUILD_DEBUG) || defined(GEEK_ALWAYS_ASSERT)
+
 #define _GEEK_ASSERT(cond, msg)								\
 	do {													\
 		if (!!(cond)) break;								\
 			geek::internal::AssertionFailed(__FILE__, __FUNCTION__, __LINE__, msg); \
 	} while (0)
 
-#define _GEEK_WASSERT(cond, msg)								\
+#define _GEEK_WASSERT(cond, msg)							\
 	do {													\
 		if (!!(cond)) break;								\
 			geek::internal::WAssertionFailed(_GEEK_WIDE_STR(__FILE__), _GEEK_WIDE_STR(__FUNCTION__), _GEEK_WIDE_STR(__LINE__), msg); \
@@ -38,9 +41,18 @@ std::wstring WMsgOfThrow(std::wstring_view file, std::wstring_view func, int lin
 #define GEEK_ASSERT_X(cond)		_GEEK_ASSERT(cond, #cond)
 #define GEEK_ASSERT(cond, ...)	_GEEK_ASSERT(cond, geek::StrUtil::Combine(__VA_ARGS__))
 
-#define GEEK_THROW(...)			throw std::exception(geek::internal::MsgOfThrow(__FILE__, __FUNCTION__, __LINE__, geek::StrUtil::Combine(__VA_ARGS__)).c_str())
-
 #define GEEK_WASSERT_X(cond)	_GEEK_WASSERT(cond, #cond)
 #define GEEK_WASSERT(cond, ...)	_GEEK_WASSERT(cond, geek::StrUtil::WCombine(__VA_ARGS__))
 
+#else
+
+#define GEEK_ASSERT_X(cond)
+#define GEEK_ASSERT(cond, ...)
+
+#define GEEK_WASSERT_X(cond)
+#define GEEK_WASSERT(cond, ...)
+
+#endif
+
+#define GEEK_THROW(...)			throw std::exception(geek::internal::MsgOfThrow(__FILE__, __FUNCTION__, __LINE__, geek::StrUtil::Combine(__VA_ARGS__)).c_str())
 #define GEEK_WTHROW(...)		throw std::exception(geek::internal::WMsgOfThrow(_GEEK_WIDE_STR(__FILE__), _GEEK_WIDE_STR(__FUNCTION__), _GEEK_WIDE_STR(__LINE__), geek::StrUtil::WCombine(__VA_ARGS__)).c_str())

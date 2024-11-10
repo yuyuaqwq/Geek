@@ -1,5 +1,4 @@
-﻿#include <assert.h>
-#include <geek/pe/image_data_directory.h>
+﻿#include <geek/pe/image_data_directory.h>
 
 #include "image_impl.h"
 

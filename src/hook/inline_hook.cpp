@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <geek/hook/inline_hook.h>
 
 #include <unordered_map>
@@ -594,10 +593,10 @@ std::unordered_map<uint32_t, std::unordered_map<uint64_t, CallbackX64>> callback
 bool __fastcall InstallX32Callback(InlineHook::HookContextX86* ctx) {
 	// 查找进程对应的回调列表
 	auto cbs = callbacks_x32.find(GetCurrentProcessId());
-	assert(cbs != callbacks_x32.end());
+	GEEK_ASSERT_X(cbs != callbacks_x32.end());
 	// 根据hook地址找到对应的function
 	auto c = cbs->second.find(ctx->hook_addr);
-	assert(c != cbs->second.end());
+	GEEK_ASSERT_X(c != cbs->second.end());
 	// 调用function
 	return c->second(ctx);
 }
@@ -605,10 +604,10 @@ bool __fastcall InstallX32Callback(InlineHook::HookContextX86* ctx) {
 bool InstallX64Callback(InlineHook::HookContextX64* ctx) {
 	// 查找进程对应的回调列表
 	auto cbs = callbacks_x64.find(GetCurrentProcessId());
-	assert(cbs != callbacks_x64.end());
+	GEEK_ASSERT_X(cbs != callbacks_x64.end());
 	// 根据hook地址找到对应的function
 	auto c = cbs->second.find(ctx->hook_addr);
-	assert(c != cbs->second.end());
+	GEEK_ASSERT_X(c != cbs->second.end());
 	// 调用function
 	return c->second(ctx);
 }

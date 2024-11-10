@@ -1,10 +1,10 @@
 ﻿#include <geek/process/module_list.h>
 
-#include <cassert>
-
 #include "list_entry.h"
 #include <geek/process/process.h>
 #include <geek/utils/strutil.h>
+
+#include "utils/debug.h"
 
 namespace geek {
 ModuleList::ModuleList(Process* proc)
@@ -73,13 +73,13 @@ bool ModuleList::IsValid() const
 
 ModuleListNode ModuleList::begin() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	return { const_cast<ModuleList*>(this), AddressOfFirstLink() };
 }
 
 ModuleListNode ModuleList::end() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	return { const_cast<ModuleList*>(this), AddressOfLastLink() };
 }
 
@@ -153,7 +153,7 @@ std::optional<LDR_DATA_TABLE_ENTRY64> ModuleListNode::LdrDataTableEntry64() cons
 
 uint32_t ModuleListNode::SizeOfImage() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	if (IsX32())
 	{
 		auto ldt = LdrDataTableEntry32();
@@ -168,7 +168,7 @@ uint32_t ModuleListNode::SizeOfImage() const
 
 uint64_t ModuleListNode::DllBase() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	if (IsX32())
 	{
 		auto ldt = LdrDataTableEntry32();
@@ -183,7 +183,7 @@ uint64_t ModuleListNode::DllBase() const
 
 std::wstring ModuleListNode::FullDllName() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	std::vector<wchar_t> name;
 	uint64_t buffer_addr;
 	if (IsX32())
@@ -206,7 +206,7 @@ std::wstring ModuleListNode::FullDllName() const
 
 std::wstring ModuleListNode::BaseDllName() const
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 	std::vector<wchar_t> name;
 	uint64_t buffer_addr;
 	if (IsX32())
@@ -229,7 +229,7 @@ std::wstring ModuleListNode::BaseDllName() const
 
 ModuleListNode& ModuleListNode::operator++()
 {
-	assert(IsValid());
+	GEEK_ASSERT_X(IsValid());
 
 	auto f = ListEntry(owner_->proc_, entry_).Flink();
 	entry_ = f.addr();

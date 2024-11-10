@@ -3,7 +3,6 @@
 #include <regex>
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <mutex>
 #include <cstddef>
 #include <psapi.h>
@@ -12,6 +11,7 @@
 #include <geek/utils/searcher.h>
 
 #include "errordefs.h"
+#include "utils/debug.h"
 
 namespace geek {
 namespace {
@@ -2096,7 +2096,7 @@ bool Process::CallEntryPoint(Image* image, uint64_t image_base, uint64_t init_pa
 
 std::optional<PROCESS_BASIC_INFORMATION32> Process::Pbi32() const
 {
-	assert(IsX32());
+	GEEK_ASSERT_X(IsX32());
 	PROCESS_BASIC_INFORMATION32 pbi32{};
 	if (auto e = NtQueryInformationProcess(Handle(), ProcessBasicInformation, &pbi32, sizeof(pbi32), NULL);
 		!NT_SUCCESS(e))
@@ -2131,7 +2131,7 @@ std::optional<PROCESS_BASIC_INFORMATION64> Process::Pbi64() const
 
 std::optional<PEB32> Process::Peb32() const
 {
-	assert(IsX32());
+	GEEK_ASSERT_X(IsX32());
 
 	auto pbi = Pbi32();
 	if (!pbi)
@@ -2141,7 +2141,7 @@ std::optional<PEB32> Process::Peb32() const
 
 std::optional<PEB64> Process::Peb64() const
 {
-	assert(!IsX32());
+	GEEK_ASSERT_X(!IsX32());
 
 	auto pbi = Pbi64();
 	if (!pbi)

@@ -7,17 +7,6 @@
 #include <geek/asm/assembler/asm_op.h>
 
 namespace geek {
-namespace internal {
-template <class T>
-struct FuncTrait {
-	static_assert(std::_Always_false<T>, "function only accepts function types as template arguments.");
-};
-template <class RetT, class... Args>
-struct FuncTrait<RetT(Args...)> {
-	using Ptr = RetT(*)(Args...);
-};
-}
-
 class Assembler {
 public:
 	struct Config {

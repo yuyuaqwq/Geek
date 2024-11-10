@@ -1,7 +1,5 @@
 #include "assembler_impl.h"
 
-#include <cassert>
-
 #include <mutex>
 
 #include "asm/assembler/asm_op_defs_impl.h"
@@ -12,8 +10,7 @@
 	if (impl_->config_.assert_every_inst) { \
 		GEEK_ASSERT(err.IsSuccess(), "Assembler make instruction failed:", err.msg()); \
 	} \
-	return err \
-
+	return err
 #define _GEEK_ASM_INST_0X_IMPL(op)								\
 	_GEEK_ASM_INST_0X(Assembler::op) {							\
 		MAKE_RET(op());		\
@@ -64,7 +61,7 @@
   _GEEK_ASM_INST_1X_IMPL(op##pe, t0);	\
   _GEEK_ASM_INST_1X_IMPL(op##po, t0);	\
   _GEEK_ASM_INST_1X_IMPL(op##s, t0);		\
-  _GEEK_ASM_INST_1X_IMPL(op##z, t0)		\
+  _GEEK_ASM_INST_1X_IMPL(op##z, t0)
 
 namespace geek {
 namespace {
@@ -73,42 +70,28 @@ asmjit::JitRuntime* Runtime() {
 	return &inst;
 }
 }
-Assembler::~Assembler()
-{
-}
 
-void Assembler::FuncDeleter::operator()(void* ptr) const {
-	Runtime()->release(ptr);
-}
+Assembler::~Assembler() {}
 
-Assembler::Assembler(Arch arch)
-{
-	impl_ = std::make_unique<Impl>(this, arch, Runtime());
-}
+void Assembler::FuncDeleter::operator()(void* ptr) const { Runtime()->release(ptr); }
 
-Arch Assembler::GetArch() const {
-	return impl_->arch_;
-}
+Assembler::Assembler(Arch arch) { impl_ = std::make_unique<Impl>(this, arch, Runtime()); }
 
+Arch Assembler::GetArch() const { return impl_->arch_; }
 
-const Assembler::Config& Assembler::GetConfig() const {
-	return impl_->config_;
-}
-Assembler::Config& Assembler::GetConfig() {
-	return impl_->config_;
-}
+const Assembler::Config& Assembler::GetConfig() const { return impl_->config_; }
+Assembler::Config& Assembler::GetConfig() { return impl_->config_; }
 
-asm_op::Label Assembler::NewLabel()
-{
+asm_op::Label Assembler::NewLabel() {
 	asm_op::Label ret;
 	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newLabel());
 	return ret;
 }
 
-asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Type type)
-{
+asm_op::Label Assembler::NewNamedLabel(std::string_view name, asm_op::Label::Type type) {
 	asm_op::Label ret;
-	ret.impl_ = std::make_unique<asm_op::Label::Impl>(impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
+	ret.impl_ = std::make_unique<asm_op::Label::Impl>(
+		impl_->assembler_.newNamedLabel(name.data(), name.size(), ToAsmJit(type)));
 	return ret;
 }
 
@@ -117,13 +100,9 @@ Assembler::Error Assembler::bind(const asm_op::Label& label) {
 	return FromAsmJit(static_cast<asmjit::ErrorCode>(e));
 }
 
-size_t Assembler::CodeSize() const {
-	return impl_->code_.codeSize();
-}
+size_t Assembler::CodeSize() const { return impl_->code_.codeSize(); }
 
-const uint8_t* Assembler::CodeBuffer() const {
-	return impl_->code_.sectionById(0)->data();
-}
+const uint8_t* Assembler::CodeBuffer() const { return impl_->code_.sectionById(0)->data(); }
 
 size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) const {
 	auto ec = impl_->code_.relocateToBase(base_address);
@@ -135,26 +114,18 @@ size_t Assembler::PackCodeTo(uint8_t* ptr, size_t size, uint64_t base_address) c
 	return s;
 }
 
-std::unique_ptr<void, Assembler::FuncDeleter> Assembler::PackToFuncImpl() const
-{
+std::unique_ptr<void, Assembler::FuncDeleter> Assembler::PackToFuncImpl() const {
 	void* func;
 	Runtime()->add(&func, &impl_->code_);
 	return std::unique_ptr<void, FuncDeleter>(func);
 }
 
 Assembler::Error::Error(ErrorCode code)
-	: code_(code)
-{
-}
+	: code_(code) {}
 
-std::string Assembler::Error::msg() const
-{
-	return asmjit::DebugUtils::errorAsString(ToAsmJit(code_));
-}
+std::string Assembler::Error::msg() const { return asmjit::DebugUtils::errorAsString(ToAsmJit(code_)); }
 
-bool Assembler::Error::IsSuccess() const {
-	return code() == kErrorOk;
-}
+bool Assembler::Error::IsSuccess() const { return code() == kErrorOk; }
 
 _GEEK_ASM_INST_0X_IMPL(cbw)
 _GEEK_ASM_INST_0X_IMPL(cdq)
@@ -513,29 +484,17 @@ _GEEK_ASM_INST_3X_IMPL(wrmsr, Gp_EDX, Gp_EAX, Gp_ECX)
 _GEEK_ASM_INST_3X_IMPL(xsetbv, Gp_EDX, Gp_EAX, Gp_ECX)
 
 
-Assembler::Error Assembler::db(uint8_t x, size_t repeat_count) {
-	MAKE_RET(db(x, repeat_count));
-}
+Assembler::Error Assembler::db(uint8_t x, size_t repeat_count) { MAKE_RET(db(x, repeat_count)); }
 
-Assembler::Error Assembler::dw(uint16_t x, size_t repeat_count) {
-	MAKE_RET(dw(x, repeat_count));
-}
+Assembler::Error Assembler::dw(uint16_t x, size_t repeat_count) { MAKE_RET(dw(x, repeat_count)); }
 
-Assembler::Error Assembler::dd(uint32_t x, size_t repeat_count) {
-	MAKE_RET(dd(x, repeat_count));
-}
+Assembler::Error Assembler::dd(uint32_t x, size_t repeat_count) { MAKE_RET(dd(x, repeat_count)); }
 
-Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) {
-	MAKE_RET(dq(x, repeat_count));
-}
+Assembler::Error Assembler::dq(uint64_t x, size_t repeat_count) { MAKE_RET(dq(x, repeat_count)); }
 
-Assembler::Error Assembler::Embed(const void* data, size_t data_size) {
-	MAKE_RET(embed(data, data_size));
-}
+Assembler::Error Assembler::Embed(const void* data, size_t data_size) { MAKE_RET(embed(data, data_size)); }
 
-Assembler::Error Assembler::EmbedInt8(int8_t value, size_t repeat_count) {
-	MAKE_RET(embedInt8(value, repeat_count));
-}
+Assembler::Error Assembler::EmbedInt8(int8_t value, size_t repeat_count) { MAKE_RET(embedInt8(value, repeat_count)); }
 
 Assembler::Error Assembler::EmbedUInt8(uint8_t value, size_t repeat_count) {
 	MAKE_RET(embedUInt8(value, repeat_count));
@@ -544,9 +503,11 @@ Assembler::Error Assembler::EmbedUInt8(uint8_t value, size_t repeat_count) {
 Assembler::Error Assembler::EmbedInt16(int16_t value, size_t repeat_count) {
 	MAKE_RET(embedInt16(value, repeat_count));
 }
+
 Assembler::Error Assembler::EmbedUInt16(uint16_t value, size_t repeat_count) {
 	MAKE_RET(embedUInt16(value, repeat_count));
 }
+
 Assembler::Error Assembler::EmbedInt32(int32_t value, size_t repeat_count) {
 	MAKE_RET(embedInt32(value, repeat_count));
 }
@@ -562,15 +523,17 @@ Assembler::Error Assembler::EmbedInt64(int64_t value, size_t repeat_count) {
 Assembler::Error Assembler::EmbedUInt64(uint64_t value, size_t repeat_count) {
 	MAKE_RET(embedUInt64(value, repeat_count));
 }
-Assembler::Error Assembler::EmbedFloat(float value, size_t repeat_count) {
-	MAKE_RET(embedFloat(value, repeat_count));
-}
+
+Assembler::Error Assembler::EmbedFloat(float value, size_t repeat_count) { MAKE_RET(embedFloat(value, repeat_count)); }
+
 Assembler::Error Assembler::EmbedDouble(double value, size_t repeat_count) {
 	MAKE_RET(embedDouble(value, repeat_count));
 }
+
 Assembler::Error Assembler::EmbedLabel(const asm_op::Label& label, size_t data_size) {
 	MAKE_RET(embedLabel(ToAsmJit(label), data_size));
 }
+
 Assembler::Error Assembler::EmbedLabelDelta(const asm_op::Label& label, const asm_op::Label& base, size_t data_size) {
 	MAKE_RET(embedLabelDelta(ToAsmJit(label), ToAsmJit(base), data_size));
 }

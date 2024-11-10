@@ -1,5 +1,3 @@
-#include <cassert>
-
 #include <geek/pe/image_section_header_table.h>
 
 #include "image_impl.h"
