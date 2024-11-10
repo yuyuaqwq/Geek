@@ -22,6 +22,7 @@ add_library(${GEEK_LIB} STATIC ${SRC})
 
 target_link_libraries(${GEEK_LIB} PRIVATE asmjit::asmjit Zydis::Zydis)
 
+add_library(geek::geek ALIAS ${GEEK_LIB})
 
 include(GNUInstallDirs)
 

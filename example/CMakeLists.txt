@@ -18,4 +18,4 @@ set_property(
 )
 
 link_directories(${LIB_PATH})
-target_link_libraries(geek_example PRIVATE ${GEEK_LIB})
+target_link_libraries(geek_example PRIVATE geek::geek)
